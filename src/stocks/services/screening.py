@@ -1,18 +1,18 @@
-import datetime
-from typing import Optional, List
-from sqlalchemy import select, delete, func
-from sqlalchemy.orm import Session
 from loguru import logger
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
+
 from stocks.config import Config
 from stocks.db.models import (
-    Symbol,
-    DailyPrice,
-    DailyIndicator,
     DailyHeikinAshi,
-    RenkoBrick,
+    DailyIndicator,
+    DailyPrice,
     LineBreakLine,
-    ScreeningSnapshot
+    RenkoBrick,
+    ScreeningSnapshot,
+    Symbol,
 )
+
 
 class ScreeningService:
     """Service to maintain the screening_snapshots table for high-performance stock sweeps."""
@@ -31,10 +31,7 @@ class ScreeningService:
 
             # 2. Fetch latest 2 EOD prices to compute close and percentage change
             prices = self.db.scalars(
-                select(DailyPrice)
-                .filter_by(symbol_id=symbol_id)
-                .order_by(DailyPrice.trading_date.desc())
-                .limit(2)
+                select(DailyPrice).filter_by(symbol_id=symbol_id).order_by(DailyPrice.trading_date.desc()).limit(2)
             ).all()
 
             if not prices:
@@ -81,32 +78,26 @@ class ScreeningService:
 
             if ind:
                 rsi_14 = ind.rsi_14
-                
+
                 if ind.sma_20 is not None:
                     sma_20_cross = "ABOVE" if close_price >= float(ind.sma_20) else "BELOW"
                 if ind.sma_50 is not None:
                     sma_50_cross = "ABOVE" if close_price >= float(ind.sma_50) else "BELOW"
                 if ind.sma_200 is not None:
                     sma_200_cross = "ABOVE" if close_price >= float(ind.sma_200) else "BELOW"
-                
+
                 if ind.macd_line is not None and ind.macd_signal is not None:
                     macd_trend = "BULLISH" if float(ind.macd_line) >= float(ind.macd_signal) else "BEARISH"
 
             # 5. Fetch latest Renko Brick
             brick = self.db.scalar(
-                select(RenkoBrick)
-                .filter_by(symbol_id=symbol_id)
-                .order_by(RenkoBrick.brick_index.desc())
-                .limit(1)
+                select(RenkoBrick).filter_by(symbol_id=symbol_id).order_by(RenkoBrick.brick_index.desc()).limit(1)
             )
             renko_direction = brick.direction if brick else None
 
             # 6. Fetch latest Line Break line
             lb = self.db.scalar(
-                select(LineBreakLine)
-                .filter_by(symbol_id=symbol_id)
-                .order_by(LineBreakLine.line_index.desc())
-                .limit(1)
+                select(LineBreakLine).filter_by(symbol_id=symbol_id).order_by(LineBreakLine.line_index.desc()).limit(1)
             )
             line_break_direction = lb.direction if lb else None
 
@@ -129,7 +120,7 @@ class ScreeningService:
                     sma_200_cross_direction=sma_200_cross,
                     macd_trend=macd_trend,
                     renko_direction=renko_direction,
-                    line_break_direction=line_break_direction
+                    line_break_direction=line_break_direction,
                 )
                 self.db.add(snapshot)
             else:
@@ -158,12 +149,12 @@ class ScreeningService:
         try:
             active_symbols = self.db.scalars(select(Symbol).filter_by(is_active=True)).all()
             logger.info(f"Refreshing screening snapshots for {len(active_symbols)} active symbols...")
-            
+
             refreshed_count = 0
             for sym in active_symbols:
                 self.refresh_snapshot_for_symbol(sym.id)
                 refreshed_count += 1
-                
+
             logger.info(f"Successfully refreshed {refreshed_count} screening snapshots.")
             return refreshed_count
         except Exception as e:
@@ -172,22 +163,22 @@ class ScreeningService:
 
     def query_screener(
         self,
-        min_rsi: Optional[float] = None,
-        max_rsi: Optional[float] = None,
-        sma_20_cross: Optional[str] = None,
-        sma_50_cross: Optional[str] = None,
-        sma_200_cross: Optional[str] = None,
-        macd_trend: Optional[str] = None,
-        ha_dir: Optional[str] = None,
-        renko_dir: Optional[str] = None,
-        lb_dir: Optional[str] = None,
-        min_weekly_avg_volume: Optional[float] = None,
-        volume_breakout: Optional[str] = None,
-        limit: int = 100
-    ) -> List[ScreeningSnapshot]:
+        min_rsi: float | None = None,
+        max_rsi: float | None = None,
+        sma_20_cross: str | None = None,
+        sma_50_cross: str | None = None,
+        sma_200_cross: str | None = None,
+        macd_trend: str | None = None,
+        ha_dir: str | None = None,
+        renko_dir: str | None = None,
+        lb_dir: str | None = None,
+        min_weekly_avg_volume: float | None = None,
+        volume_breakout: str | None = None,
+        limit: int = 100,
+    ) -> list[ScreeningSnapshot]:
         """Runs high-speed query sweeps directly against the narrow screening_snapshots table."""
         stmt = select(ScreeningSnapshot)
-        
+
         if min_rsi is not None:
             stmt = stmt.where(ScreeningSnapshot.rsi_14 >= min_rsi)
         if max_rsi is not None:
@@ -206,20 +197,20 @@ class ScreeningService:
             stmt = stmt.where(ScreeningSnapshot.renko_direction == renko_dir.upper())
         if lb_dir is not None:
             stmt = stmt.where(ScreeningSnapshot.line_break_direction == lb_dir.upper())
-            
+
         stmt = stmt.order_by(ScreeningSnapshot.symbol.asc())
-        
+
         # Optimize: if no volume filters are applied, we can apply SQL limit immediately
         has_volume_filters = min_weekly_avg_volume is not None or (
             volume_breakout is not None and volume_breakout.upper() != "ANY"
         )
         if not has_volume_filters:
             stmt = stmt.limit(limit)
-            
+
         base_results = list(self.db.scalars(stmt).all())
         if not base_results:
             return []
-            
+
         # 1. Fetch volumes of the last 6 days for the matched symbol IDs in a single batch.
         # We use a nested subquery on ScreeningSnapshot to avoid SQL Server parameter limits (max 2100).
         symbol_ids_subq = select(ScreeningSnapshot.symbol_id)
@@ -241,55 +232,56 @@ class ScreeningService:
             symbol_ids_subq = symbol_ids_subq.where(ScreeningSnapshot.renko_direction == renko_dir.upper())
         if lb_dir is not None:
             symbol_ids_subq = symbol_ids_subq.where(ScreeningSnapshot.line_break_direction == lb_dir.upper())
-            
-        subq = select(
-            DailyPrice.symbol_id,
-            DailyPrice.volume,
-            func.row_number().over(
-                partition_by=DailyPrice.symbol_id,
-                order_by=DailyPrice.trading_date.desc()
-            ).label("rn")
-        ).where(DailyPrice.symbol_id.in_(symbol_ids_subq)).subquery()
-        
-        stmt_volumes = select(
-            subq.c.symbol_id,
-            subq.c.volume
-        ).where(subq.c.rn <= 6)
-        
+
+        subq = (
+            select(
+                DailyPrice.symbol_id,
+                DailyPrice.volume,
+                func.row_number()
+                .over(partition_by=DailyPrice.symbol_id, order_by=DailyPrice.trading_date.desc())
+                .label("rn"),
+            )
+            .where(DailyPrice.symbol_id.in_(symbol_ids_subq))
+            .subquery()
+        )
+
+        stmt_volumes = select(subq.c.symbol_id, subq.c.volume).where(subq.c.rn <= 6)
+
         volume_rows = self.db.execute(stmt_volumes).all()
-        
+
         # 2. Group by symbol_id
         from collections import defaultdict
+
         volumes_by_symbol = defaultdict(list)
         for sym_id, vol in volume_rows:
             volumes_by_symbol[sym_id].append(int(vol))
-            
+
         # 3. Calculate weekly avg volume and breakout ratio, then apply memory filters
         filtered_results = []
         for snapshot in base_results:
             sym_id = snapshot.symbol_id
             vols = volumes_by_symbol.get(sym_id, [])
-            
+
             latest_volume = vols[0] if len(vols) >= 1 else int(snapshot.volume)
             preceding_vols = vols[1:6] if len(vols) > 1 else []
-            
+
             if preceding_vols:
                 weekly_avg_volume = sum(preceding_vols) / len(preceding_vols)
             else:
                 weekly_avg_volume = float(latest_volume)
-                
+
             breakout_ratio = (latest_volume / weekly_avg_volume) if weekly_avg_volume > 0 else 1.0
-            
+
             # Attach dynamic calculated attributes
             snapshot.weekly_avg_volume = weekly_avg_volume
             snapshot.volume_breakout_ratio = breakout_ratio
-            
+
             # Apply memory filtering criteria
             keep = True
             if min_weekly_avg_volume is not None:
                 if weekly_avg_volume < min_weekly_avg_volume:
                     keep = False
-                    
+
             if keep and volume_breakout is not None:
                 bo_upper = volume_breakout.upper()
                 if bo_upper == "1.5X":
@@ -301,12 +293,12 @@ class ScreeningService:
                 elif bo_upper == "3.0X":
                     if breakout_ratio < 3.0:
                         keep = False
-                        
+
             if keep:
                 filtered_results.append(snapshot)
-                
+
         # 4. Limit results if volume filters were applied
         if has_volume_filters:
             filtered_results = filtered_results[:limit]
-            
+
         return filtered_results

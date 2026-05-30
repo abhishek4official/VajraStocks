@@ -1,12 +1,15 @@
 import datetime
-from typing import List, Dict, Any, Optional
+from typing import Any
+
 from loguru import logger
+
 from stocks.config import Config
 from stocks.db.connection import DatabaseManager
 from stocks.services.database import DatabaseService
 from stocks.services.downloader import DownloaderService
 from stocks.services.symbol import SymbolService
 from stocks.services.validation import ValidationService
+
 
 class SyncEngine:
     """Orchestrator to run, monitor, and resume stock data sync jobs using distinct sub-services."""
@@ -17,26 +20,26 @@ class SyncEngine:
         self.downloader = DownloaderService(config)
         self.validator = ValidationService(config)
 
-    def run_sync(self, specific_symbols: List[str] = None) -> Dict[str, Any]:
+    def run_sync(self, specific_symbols: list[str] = None) -> dict[str, Any]:
         """Runs a complete historical download sync, with resumable incremental updates."""
         session = self.db_manager.get_session()
         db_service = DatabaseService(self.config, session)
-        
+
         # 1. Prune existing zero-volume (holiday/halt) records and clean up orphaned indicators/HA candles
         db_service.prune_zero_volume_records()
-        
+
         symbol_service = SymbolService(self.config, session)
-        
+
         # 2. Initialize Sync Job in database
         job = db_service.create_sync_job()
         logger.info(f"Started synchronization job. Run ID: {job.run_id}")
-        
+
         total_symbols = 0
         processed_symbols = 0
         failed_symbols = 0
         records_inserted = 0
         err_summary_list = []
-        
+
         try:
             # 2. Bootstrap Symbol Universe if database is empty
             active_symbols = db_service.get_active_symbols()
@@ -46,7 +49,7 @@ class SyncEngine:
                 symbol_service.sync_symbols(parsed_nse_symbols)
                 # Re-query active symbols
                 active_symbols = db_service.get_active_symbols()
-                
+
             # Filter by specific symbols if provided (useful for manual runs/testing/CLI arguments)
             if specific_symbols:
                 # Standardize symbols to append .NS if they are raw (e.g. RELIANCE -> RELIANCE.NS)
@@ -66,19 +69,19 @@ class SyncEngine:
                 return {"status": "SUCCESS", "job_id": job.run_id}
 
             logger.info(f"Beginning sync process for {total_symbols} active symbols...")
-            
+
             # Query ground truth latest global trading date before incremental update logic
             global_max_date = db_service.get_global_latest_price_date()
             logger.info(f"Verified global market database benchmark trading date: {global_max_date}")
-            
+
             # 3. Determine dynamic date ranges and collect symbols requiring updates
             symbols_to_sync = []  # List of tuples: (Symbol, start_date, end_date)
             today = datetime.date.today()
             history_start = today - datetime.timedelta(days=365 * self.config.downloader.history_years)
-            
+
             for symbol_obj in active_symbols:
                 latest_price_date = db_service.get_latest_price_date(symbol_obj.id)
-                
+
                 # Check for existing prices in the database
                 if latest_price_date:
                     # Warm Sync (Incremental) - start from the last price date (inclusive)
@@ -87,9 +90,9 @@ class SyncEngine:
                 else:
                     # Cold Start - full history backfill
                     start_date = history_start
-                
+
                 end_date = today
-                
+
                 # If already up to date, skip downloading
                 if start_date >= end_date:
                     logger.debug(
@@ -98,7 +101,7 @@ class SyncEngine:
                     )
                     processed_symbols += 1
                     continue
-                    
+
                 symbols_to_sync.append((symbol_obj, start_date, end_date))
 
             total_pending = len(symbols_to_sync)
@@ -106,7 +109,7 @@ class SyncEngine:
                 f"Incremental Sync Check: {total_symbols - total_pending} symbols already up-to-date. "
                 f"{total_pending} symbols require sync."
             )
-            
+
             if total_pending == 0:
                 logger.info("All active symbols are fully up-to-date. Sync process completed.")
                 db_service.finalize_sync_job(job.id, total_symbols, processed_symbols, 0, "SUCCESS")
@@ -116,7 +119,7 @@ class SyncEngine:
                     "total_symbols": total_symbols,
                     "processed_symbols": processed_symbols,
                     "failed_symbols": 0,
-                    "records_inserted": 0
+                    "records_inserted": 0,
                 }
 
             # 4. Group symbols requiring sync by their target date bounds to optimize batching.
@@ -129,64 +132,68 @@ class SyncEngine:
 
             # 5. Process each date range group in batches
             batch_size = self.config.downloader.batch_size
-            
+
             for (start_date, end_date), symbols_list in range_groups.items():
                 logger.info(
                     f"Processing group with date window {start_date} to {end_date} "
                     f"containing {len(symbols_list)} symbols..."
                 )
-                
+
                 # Split this group's symbols into downloader batches
                 for chunk_idx in range(0, len(symbols_list), batch_size):
-                    chunk = symbols_list[chunk_idx:chunk_idx + batch_size]
+                    chunk = symbols_list[chunk_idx : chunk_idx + batch_size]
                     tickers_chunk = [s.symbol for s in chunk]
                     symbols_by_ticker = {s.symbol: s for s in chunk}
-                    
+
                     try:
                         # Attempt bulk batch download
                         batch_df = self.downloader.fetch_batch_data(tickers_chunk, start_date, end_date)
                         batch_results = self.downloader.parse_downloaded_data(batch_df, tickers_chunk)
-                        
+
                         # Process individual ticker data from the batch response
                         for ticker, (prices, actions) in batch_results.items():
                             symbol_obj = symbols_by_ticker[ticker]
-                            
+
                             try:
                                 # Data quality validation
                                 clean_prices = self.validator.validate_prices(ticker, prices, actions)
-                                
+
                                 # Ingestion within isolated transaction
                                 inserted = db_service.save_stock_data(symbol_obj.id, clean_prices, actions, end_date)
-                                
+
                                 # Post-sync resilient downloader verification
                                 is_valid = self._verify_and_update_symbol_sync_state(
                                     db_service, symbol_obj, ticker, global_max_date
                                 )
-                                
+
                                 if is_valid:
                                     records_inserted += inserted
                                     processed_symbols += 1
                                     logger.info(f"[{ticker}] Synced successfully. {inserted} rows added.")
-                                    
+
                                     # Post-sync hook: Incremental Indicator & Market Structure recalculations
                                     try:
                                         self.calculate_and_save_derived_data(db_service, symbol_obj, clean_prices)
                                     except Exception as derived_err:
-                                        logger.error(f"[{ticker}] Failed to calculate or save derived data: {derived_err}")
+                                        logger.error(
+                                            f"[{ticker}] Failed to calculate or save derived data: {derived_err}"
+                                        )
                                 else:
                                     failed_symbols += 1
-                                    err_summary_list.append(f"[{ticker}] Yahoo Finance returned no data (behind global market date).")
-                                    
+                                    err_summary_list.append(
+                                        f"[{ticker}] Yahoo Finance returned no data (behind global market date)."
+                                    )
+
                             except Exception as e:
                                 failed_symbols += 1
                                 err_summary_list.append(f"[{ticker}] Ingestion failed: {e}")
-                                
+
                     except Exception as batch_err:
                         logger.error(
                             f"Bulk batch download failed for tickers {tickers_chunk}: {batch_err}. "
                             f"Falling back to individual downloads..."
                         )
-                        
+
                         # Resilient Fallback: Download each ticker in the chunk individually
                         for symbol_obj in chunk:
                             ticker = symbol_obj.symbol
@@ -195,40 +202,47 @@ class SyncEngine:
                                 single_df = self.downloader.fetch_batch_data([ticker], start_date, end_date)
                                 single_results = self.downloader.parse_downloaded_data(single_df, [ticker])
                                 prices, actions = single_results.get(ticker, ([], []))
-                                
+
                                 # Validate & Save
                                 clean_prices = self.validator.validate_prices(ticker, prices, actions)
                                 inserted = db_service.save_stock_data(symbol_obj.id, clean_prices, actions, end_date)
-                                
+
                                 # Post-sync resilient downloader verification
                                 is_valid = self._verify_and_update_symbol_sync_state(
                                     db_service, symbol_obj, ticker, global_max_date
                                 )
-                                
+
                                 if is_valid:
                                     records_inserted += inserted
                                     processed_symbols += 1
-                                    logger.info(f"[{ticker}] Synced successfully (via fallback). {inserted} rows added.")
-                                    
+                                    logger.info(
+                                        f"[{ticker}] Synced successfully (via fallback). {inserted} rows added."
+                                    )
+
                                     # Post-sync hook: Incremental Indicator & Market Structure recalculations
                                     try:
                                         self.calculate_and_save_derived_data(db_service, symbol_obj, clean_prices)
                                     except Exception as derived_err:
-                                        logger.error(f"[{ticker}] Failed to calculate or save derived data: {derived_err}")
+                                        logger.error(
+                                            f"[{ticker}] Failed to calculate or save derived data: {derived_err}"
+                                        )
                                 else:
                                     failed_symbols += 1
-                                    err_summary_list.append(f"[{ticker}] Fallback failed: Yahoo Finance returned no data (behind global market date).")
+                                    err_summary_list.append(
+                                        f"[{ticker}] Fallback failed: Yahoo Finance returned no data (behind global market date)."
+                                    )
                             except Exception as single_err:
                                 failed_symbols += 1
                                 err_summary_list.append(f"[{ticker}] Individual fallback failed: {single_err}")
                                 logger.error(f"[{ticker}] Fallback sync failed: {single_err}")
-                                
+
                     # Update progress in database after each batch
                     db_service.update_sync_job_progress(job.id, processed_symbols, failed_symbols, records_inserted)
 
             # Post-Sync Hook: Refresh Screening Snapshots for high-speed dashboards/screening
             try:
                 from stocks.services.screening import ScreeningService
+
                 screening_service = ScreeningService(self.config, session)
                 screening_service.refresh_all_snapshots()
             except Exception as snap_err:
@@ -238,28 +252,28 @@ class SyncEngine:
             final_status = "SUCCESS"
             if failed_symbols > 0:
                 final_status = "PARTIAL" if processed_symbols > 0 else "FAILED"
-                
+
             error_summary = "\n".join(err_summary_list[:20])  # Cap summary size in database
             if len(err_summary_list) > 20:
                 error_summary += f"\n... and {len(err_summary_list) - 20} more errors."
-                
+
             db_service.finalize_sync_job(
                 job.id, total_symbols, processed_symbols, failed_symbols, final_status, error_summary or None
             )
-            
+
             logger.info(
                 f"Sync Job finalized. Status: {final_status}. "
                 f"Total active symbols: {total_symbols}, Synced/Skipped: {processed_symbols}, Failed: {failed_symbols}, "
                 f"Total Rows Inserted: {records_inserted}."
             )
-            
+
             return {
                 "status": final_status,
                 "job_id": job.run_id,
                 "total_symbols": total_symbols,
                 "processed_symbols": processed_symbols,
                 "failed_symbols": failed_symbols,
-                "records_inserted": records_inserted
+                "records_inserted": records_inserted,
             }
 
         except Exception as e:
@@ -272,15 +286,16 @@ class SyncEngine:
             session.close()
 
     def calculate_and_save_derived_data(
-        self, db_service: DatabaseService, symbol_obj: Any, clean_prices: List[Dict[str, Any]]
+        self, db_service: DatabaseService, symbol_obj: Any, clean_prices: list[dict[str, Any]]
     ) -> None:
         """Calculates indicators and market structures incrementally and saves them in isolated transactions."""
         if not clean_prices:
             return
 
+        import pandas as pd
+
         from stocks.services.indicator_engine import IndicatorEngine
         from stocks.services.market_structure import MarketStructureEngine
-        import pandas as pd
 
         # Initialize engines
         indicator_engine = IndicatorEngine(self.config)
@@ -289,11 +304,11 @@ class SyncEngine:
         # 1. Determine date boundaries for sliding window
         new_dates = [p["trading_date"] for p in clean_prices]
         min_date = min(new_dates)
-        
+
         # Load sliding window from DB: min_date - 300 days
         sliding_start = min_date - datetime.timedelta(days=300)
         db_prices = db_service.get_prices_for_window(symbol_obj.id, sliding_start)
-        
+
         if not db_prices:
             logger.warning(f"[{symbol_obj.symbol}] No prices found in sliding window to calculate derived data.")
             return
@@ -305,7 +320,7 @@ class SyncEngine:
 
         # 2. Technical Indicators
         df_indicators = indicator_engine.calculate_indicators(df_prices)
-        
+
         # Slice only the newly synced dates to save
         df_new_indicators = df_indicators[df_indicators.index.date >= min_date]
         indicators_to_save = []
@@ -325,7 +340,7 @@ class SyncEngine:
                 "macd_histogram": None if pd.isna(row.get("macd_histogram")) else float(row["macd_histogram"]),
                 "bb_upper": None if pd.isna(row.get("bb_upper")) else float(row["bb_upper"]),
                 "bb_middle": None if pd.isna(row.get("bb_middle")) else float(row["bb_middle"]),
-                "bb_lower": None if pd.isna(row.get("bb_lower")) else float(row["bb_lower"])
+                "bb_lower": None if pd.isna(row.get("bb_lower")) else float(row["bb_lower"]),
             }
             indicators_to_save.append(ind_dict)
 
@@ -365,7 +380,7 @@ class SyncEngine:
             indicators=indicators_to_save,
             ha_candles=ha_candles_to_save,
             renko_bricks=renko_bricks_to_save,
-            line_breaks=line_breaks_to_save
+            line_breaks=line_breaks_to_save,
         )
         logger.info(
             f"[{symbol_obj.symbol}] Calculated and saved derived data: "
@@ -374,24 +389,24 @@ class SyncEngine:
         )
 
     def _verify_and_update_symbol_sync_state(
-        self, db_service: DatabaseService, symbol_obj: Any, ticker: str, global_max_date: Optional[datetime.date]
+        self, db_service: DatabaseService, symbol_obj: Any, ticker: str, global_max_date: datetime.date | None
     ) -> bool:
         """Verifies if the sync successfully fetched data up to the global market date.
-        
+
         If the symbol remains behind the global benchmark date (or has no price data at all),
         it updates the SymbolSyncState to FAILED with a clear warning/audit triage message.
-        
+
         Returns True if successful/valid, False if failed.
         """
         post_sync_latest = db_service.get_latest_price_date(symbol_obj.id)
-        
+
         # 1. Cold Start failure (No data fetched at all)
         if post_sync_latest is None:
-            err_msg = f"Yahoo Finance returned absolutely no pricing data for history setup."
+            err_msg = "Yahoo Finance returned absolutely no pricing data for history setup."
             logger.warning(f"[{ticker}] Sync verification failed: {err_msg}")
             db_service.update_symbol_sync_failure(symbol_obj.id, err_msg)
             return False
-            
+
         # 2. Gap/Lag failure (Stock is behind the global market latest trading date)
         if global_max_date is not None and post_sync_latest < global_max_date:
             err_msg = (
@@ -401,5 +416,5 @@ class SyncEngine:
             logger.warning(f"[{ticker}] Sync verification failed: {err_msg}")
             db_service.update_symbol_sync_failure(symbol_obj.id, err_msg)
             return False
-            
+
         return True

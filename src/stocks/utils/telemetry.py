@@ -1,6 +1,5 @@
-import time
 from loguru import logger
-from typing import Dict, Any
+
 
 class AgentTelemetry:
     """Quantitative observability module monitoring agent latency, SQL executions, and token metrics."""
@@ -22,7 +21,7 @@ class AgentTelemetry:
         query_preview = " ".join(query.strip().split())[:60]
         logger.info(
             f"[Telemetry] SQL Execution | "
-            f"Query: \"{query_preview}...\" | "
+            f'Query: "{query_preview}..." | '
             f"Latency: {duration_seconds:.3f}s | "
             f"Rows Fetched: {row_count}"
         )
