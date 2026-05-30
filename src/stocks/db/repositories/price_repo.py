@@ -1,9 +1,12 @@
 # src/stocks/db/repositories/price_repo.py
 import datetime
-from typing import List, Dict, Any, Set
+from typing import Any
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-from stocks.db.models import DailyPrice, CorporateAction, SymbolSyncState
+
+from stocks.db.models import CorporateAction, DailyPrice, SymbolSyncState
+
 
 class PriceRepository:
     """Repository handling database operations for DailyPrice and CorporateAction tables."""
@@ -11,22 +14,21 @@ class PriceRepository:
     def __init__(self, db: Session):
         self.db = db
 
-    def get_existing_dates(self, symbol_id: int, start_date: datetime.date) -> Set[datetime.date]:
+    def get_existing_dates(self, symbol_id: int, start_date: datetime.date) -> set[datetime.date]:
         """Pre-fetches all existing dates for a symbol to resolve N+1 query loops.
-        
+
         Runs a single optimized SELECT statement instead of looping inside write transactions.
         """
         stmt = select(DailyPrice.trading_date).where(
-            DailyPrice.symbol_id == symbol_id,
-            DailyPrice.trading_date >= start_date
+            DailyPrice.symbol_id == symbol_id, DailyPrice.trading_date >= start_date
         )
         return set(self.db.scalars(stmt).all())
 
     def bulk_save_stock_data(
-        self, symbol_id: int, prices: List[Dict[str, Any]], actions: List[Dict[str, Any]], sync_date: datetime.date
+        self, symbol_id: int, prices: list[dict[str, Any]], actions: list[dict[str, Any]], sync_date: datetime.date
     ) -> int:
         """Saves stock daily prices and corporate actions using bulk database operations.
-        
+
         Ensures atomic transactions and high-speed bulk insertions.
         """
         try:
@@ -35,6 +37,7 @@ class PriceRepository:
 
             # Overwrite existing price records for the dates being synced to ensure EOD finalization
             from sqlalchemy import delete
+
             dates_to_delete = []
             for p in prices:
                 t_date = p["trading_date"]
@@ -45,8 +48,7 @@ class PriceRepository:
             if dates_to_delete:
                 self.db.execute(
                     delete(DailyPrice).where(
-                        DailyPrice.symbol_id == symbol_id,
-                        DailyPrice.trading_date.in_(dates_to_delete)
+                        DailyPrice.symbol_id == symbol_id, DailyPrice.trading_date.in_(dates_to_delete)
                     )
                 )
                 self.db.flush()
@@ -65,17 +67,19 @@ class PriceRepository:
                     t_date = datetime.datetime.strptime(t_date, "%Y-%m-%d").date()
                 if t_date in existing_dates:
                     continue
-                new_prices.append({
-                    "symbol_id": symbol_id,
-                    "trading_date": t_date,
-                    "open": p["open"],
-                    "high": p["high"],
-                    "low": p["low"],
-                    "close": p["close"],
-                    "adj_close": p["adj_close"],
-                    "volume": p["volume"],
-                    "granularity": p.get("granularity", "1d")
-                })
+                new_prices.append(
+                    {
+                        "symbol_id": symbol_id,
+                        "trading_date": t_date,
+                        "open": p["open"],
+                        "high": p["high"],
+                        "low": p["low"],
+                        "close": p["close"],
+                        "adj_close": p["adj_close"],
+                        "volume": p["volume"],
+                        "granularity": p.get("granularity", "1d"),
+                    }
+                )
 
             inserted_count = 0
             if new_prices:
@@ -98,12 +102,14 @@ class PriceRepository:
                     act_key = (a_date, a["action_type"])
                     if act_key in existing_actions:
                         continue
-                    new_actions.append({
-                        "symbol_id": symbol_id,
-                        "action_date": a_date,
-                        "action_type": a["action_type"],
-                        "value": a["value"]
-                    })
+                    new_actions.append(
+                        {
+                            "symbol_id": symbol_id,
+                            "action_date": a_date,
+                            "action_type": a["action_type"],
+                            "value": a["value"],
+                        }
+                    )
 
                 if new_actions:
                     self.db.bulk_insert_mappings(CorporateAction, new_actions)
@@ -113,9 +119,7 @@ class PriceRepository:
             state = self.db.scalar(state_stmt)
             if state is None:
                 state = SymbolSyncState(
-                    symbol_id=symbol_id,
-                    last_successful_sync_date=sync_date,
-                    last_attempt_status="SUCCESS"
+                    symbol_id=symbol_id, last_successful_sync_date=sync_date, last_attempt_status="SUCCESS"
                 )
                 self.db.add(state)
             else:

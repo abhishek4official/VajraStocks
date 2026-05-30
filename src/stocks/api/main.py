@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from loguru import logger
+
 from stocks.config import Config
 
 # Load config statically
@@ -11,7 +11,7 @@ config = Config.load()
 app = FastAPI(
     title="NSE Stock Analysis Platform API",
     description="Production-grade FastAPI back-end providing stock explorer, multi-pane financial charts, technical indicators, screening snapshot sweeps, and dynamic data synchronizations.",
-    version="1.0.0"
+    version="1.0.0",
 )
 
 # 1. CORS Middleware Configuration
@@ -28,15 +28,14 @@ app.add_middleware(
 # Mandatory to speed up large historical EOD pricing JSON arrays (740+ candles) over the wire
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
+
 @app.get("/health")
 def health_check():
     """Simple check to verify the API service status and configuration loading."""
-    return {
-        "status": "HEALTHY",
-        "app_name": config.app.name,
-        "environment": config.app.env
-    }
+    return {"status": "HEALTHY", "app_name": config.app.name, "environment": config.app.env}
+
 
 # 3. Dynamic route registration
 from stocks.api.v1.router import api_router
+
 app.include_router(api_router)

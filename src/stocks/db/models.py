@@ -1,16 +1,17 @@
 import datetime
-from typing import List, Optional
+from typing import Optional
+
 from sqlalchemy import (
     BIGINT,
-    Boolean,
     DECIMAL,
+    NVARCHAR,
+    Boolean,
     Date,
     DateTime,
     Float,
     ForeignKey,
     Index,
     Integer,
-    NVARCHAR,
     String,
     Text,
     UniqueConstraint,
@@ -18,12 +19,16 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
+
 class Base(DeclarativeBase):
     """Base class for all SQLAlchemy declarative models."""
+
     pass
+
 
 class Symbol(Base):
     """Model representing an NSE Equity Symbol."""
+
     __tablename__ = "symbols"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -36,33 +41,35 @@ class Symbol(Base):
     updated_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now())
 
     # Relationships
-    prices: Mapped[List["DailyPrice"]] = relationship(
+    prices: Mapped[list["DailyPrice"]] = relationship(
         "DailyPrice", back_populates="symbol_obj", cascade="all, delete-orphan"
     )
-    actions: Mapped[List["CorporateAction"]] = relationship(
+    actions: Mapped[list["CorporateAction"]] = relationship(
         "CorporateAction", back_populates="symbol_obj", cascade="all, delete-orphan"
     )
     sync_state: Mapped[Optional["SymbolSyncState"]] = relationship(
         "SymbolSyncState", back_populates="symbol_obj", uselist=False, cascade="all, delete-orphan"
     )
-    indicators: Mapped[List["DailyIndicator"]] = relationship(
+    indicators: Mapped[list["DailyIndicator"]] = relationship(
         "DailyIndicator", back_populates="symbol_obj", cascade="all, delete-orphan"
     )
-    heikin_ashi: Mapped[List["DailyHeikinAshi"]] = relationship(
+    heikin_ashi: Mapped[list["DailyHeikinAshi"]] = relationship(
         "DailyHeikinAshi", back_populates="symbol_obj", cascade="all, delete-orphan"
     )
-    renko_bricks: Mapped[List["RenkoBrick"]] = relationship(
+    renko_bricks: Mapped[list["RenkoBrick"]] = relationship(
         "RenkoBrick", back_populates="symbol_obj", cascade="all, delete-orphan"
     )
-    line_break_lines: Mapped[List["LineBreakLine"]] = relationship(
+    line_break_lines: Mapped[list["LineBreakLine"]] = relationship(
         "LineBreakLine", back_populates="symbol_obj", cascade="all, delete-orphan"
     )
     screening_snapshot: Mapped[Optional["ScreeningSnapshot"]] = relationship(
         "ScreeningSnapshot", back_populates="symbol_obj", uselist=False, cascade="all, delete-orphan"
     )
 
+
 class DailyPrice(Base):
     """Model representing Daily EOD Stock Prices."""
+
     __tablename__ = "daily_prices"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -85,47 +92,51 @@ class DailyPrice(Base):
         Index("ix_daily_prices_symbol_date", "symbol_id", "trading_date"),
     )
 
+
 class CorporateAction(Base):
     """Model representing historical corporate actions (splits, dividends)."""
+
     __tablename__ = "corporate_actions"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     symbol_id: Mapped[int] = mapped_column(Integer, ForeignKey("symbols.id", ondelete="CASCADE"), nullable=False)
     action_date: Mapped[datetime.date] = mapped_column(Date, nullable=False)
     action_type: Mapped[str] = mapped_column(NVARCHAR(50), nullable=False)  # 'DIVIDEND', 'SPLIT'
-    value: Mapped[float] = mapped_column(DECIMAL(18, 4), nullable=False)     # Dividend amount or split ratio
+    value: Mapped[float] = mapped_column(DECIMAL(18, 4), nullable=False)  # Dividend amount or split ratio
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=func.now())
 
     # Relationships
     symbol_obj: Mapped["Symbol"] = relationship("Symbol", back_populates="actions")
 
-    __table_args__ = (
-        UniqueConstraint("symbol_id", "action_date", "action_type", name="UQ_Symbol_ActionDate_Type"),
-    )
+    __table_args__ = (UniqueConstraint("symbol_id", "action_date", "action_type", name="UQ_Symbol_ActionDate_Type"),)
+
 
 class SyncJob(Base):
     """Model logging execution sync runs for auditability and recovery."""
+
     __tablename__ = "sync_jobs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     run_id: Mapped[str] = mapped_column(String(50), nullable=False, index=True)  # UUID
     start_time: Mapped[datetime.datetime] = mapped_column(DateTime, nullable=False, default=func.now())
-    end_time: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, nullable=True)
+    end_time: Mapped[datetime.datetime | None] = mapped_column(DateTime, nullable=True)
     status: Mapped[str] = mapped_column(NVARCHAR(50), nullable=False)  # 'RUNNING', 'SUCCESS', 'FAILED', 'PARTIAL'
     total_symbols: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     processed_symbols: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     failed_symbols: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     records_inserted: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    error_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    error_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+
 
 class SymbolSyncState(Base):
     """Model storing last successful sync timestamp per symbol for incremental updates."""
+
     __tablename__ = "symbol_sync_state"
 
     symbol_id: Mapped[int] = mapped_column(Integer, ForeignKey("symbols.id", ondelete="CASCADE"), primary_key=True)
     last_successful_sync_date: Mapped[datetime.date] = mapped_column(Date, nullable=False)
     last_attempt_status: Mapped[str] = mapped_column(NVARCHAR(50), nullable=False)  # 'SUCCESS', 'FAILED'
-    last_error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    last_error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     updated_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now())
 
     # Relationships
@@ -134,6 +145,7 @@ class SymbolSyncState(Base):
 
 class DailyIndicator(Base):
     """Model representing historical daily technical indicators."""
+
     __tablename__ = "daily_indicators"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -142,19 +154,19 @@ class DailyIndicator(Base):
     granularity: Mapped[str] = mapped_column(String(10), nullable=False, default="1d")
 
     # Technical Indicators
-    rsi_14: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    atr_14: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    sma_20: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    sma_50: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    sma_200: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    ema_9: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    ema_21: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    macd_line: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    macd_signal: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    macd_histogram: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    bb_upper: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    bb_middle: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    bb_lower: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    rsi_14: Mapped[float | None] = mapped_column(Float, nullable=True)
+    atr_14: Mapped[float | None] = mapped_column(Float, nullable=True)
+    sma_20: Mapped[float | None] = mapped_column(Float, nullable=True)
+    sma_50: Mapped[float | None] = mapped_column(Float, nullable=True)
+    sma_200: Mapped[float | None] = mapped_column(Float, nullable=True)
+    ema_9: Mapped[float | None] = mapped_column(Float, nullable=True)
+    ema_21: Mapped[float | None] = mapped_column(Float, nullable=True)
+    macd_line: Mapped[float | None] = mapped_column(Float, nullable=True)
+    macd_signal: Mapped[float | None] = mapped_column(Float, nullable=True)
+    macd_histogram: Mapped[float | None] = mapped_column(Float, nullable=True)
+    bb_upper: Mapped[float | None] = mapped_column(Float, nullable=True)
+    bb_middle: Mapped[float | None] = mapped_column(Float, nullable=True)
+    bb_lower: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     # Relationships
     symbol_obj: Mapped["Symbol"] = relationship("Symbol", back_populates="indicators")
@@ -167,6 +179,7 @@ class DailyIndicator(Base):
 
 class DailyHeikinAshi(Base):
     """Model representing historical daily Heikin-Ashi candles."""
+
     __tablename__ = "daily_heikin_ashi"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -189,6 +202,7 @@ class DailyHeikinAshi(Base):
 
 class RenkoBrick(Base):
     """Model representing path-dependent, asynchronous Renko bricks."""
+
     __tablename__ = "renko_bricks"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -212,6 +226,7 @@ class RenkoBrick(Base):
 
 class LineBreakLine(Base):
     """Model representing path-dependent, asynchronous Line Break lines."""
+
     __tablename__ = "line_break_lines"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -234,6 +249,7 @@ class LineBreakLine(Base):
 
 class ScreeningSnapshot(Base):
     """Model representing optimized, rapid-query latest metrics snapshot for screening."""
+
     __tablename__ = "screening_snapshots"
 
     symbol_id: Mapped[int] = mapped_column(Integer, ForeignKey("symbols.id", ondelete="CASCADE"), primary_key=True)
@@ -243,7 +259,7 @@ class ScreeningSnapshot(Base):
 
     # Prices
     close_price: Mapped[float] = mapped_column(DECIMAL(12, 4), nullable=False)
-    price_pct_change: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    price_pct_change: Mapped[float | None] = mapped_column(Float, nullable=True)
     volume: Mapped[int] = mapped_column(BIGINT, nullable=False)
 
     # Heikin-Ashi Latest
@@ -251,17 +267,17 @@ class ScreeningSnapshot(Base):
     ha_direction: Mapped[str] = mapped_column(String(10), nullable=False)
 
     # Indicators Latest
-    rsi_14: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    sma_20_cross_direction: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
-    sma_50_cross_direction: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
-    sma_200_cross_direction: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
-    macd_trend: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
+    rsi_14: Mapped[float | None] = mapped_column(Float, nullable=True)
+    sma_20_cross_direction: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    sma_50_cross_direction: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    sma_200_cross_direction: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    macd_trend: Mapped[str | None] = mapped_column(String(10), nullable=True)
 
     # Latest Renko Brick Direction
-    renko_direction: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
+    renko_direction: Mapped[str | None] = mapped_column(String(10), nullable=True)
 
     # Latest Line Break Direction
-    line_break_direction: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
+    line_break_direction: Mapped[str | None] = mapped_column(String(10), nullable=True)
 
     updated_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now())
 

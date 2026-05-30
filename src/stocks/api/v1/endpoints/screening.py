@@ -1,28 +1,28 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-from typing import List, Optional
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
-from datetime import date
+from sqlalchemy.orm import Session
 
 from stocks.api.deps import get_db
 from stocks.services.screening import ScreeningService
 
 router = APIRouter(prefix="/screeners", tags=["Stock Screening"])
 
+
 # Pydantic Request & Response Schemas
 class ScreeningParams(BaseModel):
-    min_rsi: Optional[float] = None
-    max_rsi: Optional[float] = None
-    sma_20_cross: Optional[str] = None   # 'ABOVE', 'BELOW'
-    sma_50_cross: Optional[str] = None   # 'ABOVE', 'BELOW'
-    sma_200_cross: Optional[str] = None  # 'ABOVE', 'BELOW'
-    macd_trend: Optional[str] = None     # 'BULLISH', 'BEARISH'
-    ha_dir: Optional[str] = None        # 'UP', 'DOWN'
-    renko_dir: Optional[str] = None     # 'UP', 'DOWN'
-    lb_dir: Optional[str] = None        # 'UP', 'DOWN'
-    min_weekly_avg_volume: Optional[float] = None
-    volume_breakout: Optional[str] = None  # 'ANY', '1.5X', '2.0X', '3.0X'
+    min_rsi: float | None = None
+    max_rsi: float | None = None
+    sma_20_cross: str | None = None  # 'ABOVE', 'BELOW'
+    sma_50_cross: str | None = None  # 'ABOVE', 'BELOW'
+    sma_200_cross: str | None = None  # 'ABOVE', 'BELOW'
+    macd_trend: str | None = None  # 'BULLISH', 'BEARISH'
+    ha_dir: str | None = None  # 'UP', 'DOWN'
+    renko_dir: str | None = None  # 'UP', 'DOWN'
+    lb_dir: str | None = None  # 'UP', 'DOWN'
+    min_weekly_avg_volume: float | None = None
+    volume_breakout: str | None = None  # 'ANY', '1.5X', '2.0X', '3.0X'
     limit: int = 100
+
 
 class ScreenerRowResponse(BaseModel):
     symbol_id: int
@@ -30,43 +30,45 @@ class ScreenerRowResponse(BaseModel):
     company_name: str
     last_trading_date: str
     close_price: float
-    price_pct_change: Optional[float] = None
+    price_pct_change: float | None = None
     volume: int
     ha_close: float
     ha_direction: str
-    rsi_14: Optional[float] = None
-    sma_20_cross_direction: Optional[str] = None
-    sma_50_cross_direction: Optional[str] = None
-    sma_200_cross_direction: Optional[str] = None
-    macd_trend: Optional[str] = None
-    renko_direction: Optional[str] = None
-    line_break_direction: Optional[str] = None
-    weekly_avg_volume: Optional[float] = None
-    volume_breakout_ratio: Optional[float] = None
+    rsi_14: float | None = None
+    sma_20_cross_direction: str | None = None
+    sma_50_cross_direction: str | None = None
+    sma_200_cross_direction: str | None = None
+    macd_trend: str | None = None
+    renko_direction: str | None = None
+    line_break_direction: str | None = None
+    weekly_avg_volume: float | None = None
+    volume_breakout_ratio: float | None = None
 
     class Config:
         from_attributes = True
 
-@router.get("", response_model=List[ScreenerRowResponse])
+
+@router.get("", response_model=list[ScreenerRowResponse])
 def get_screening_results_get(
-    min_rsi: Optional[float] = None,
-    max_rsi: Optional[float] = None,
-    sma_20_cross: Optional[str] = None,
-    sma_50_cross: Optional[str] = None,
-    sma_200_cross: Optional[str] = None,
-    macd_trend: Optional[str] = None,
-    ha_dir: Optional[str] = None,
-    renko_dir: Optional[str] = None,
-    lb_dir: Optional[str] = None,
-    min_weekly_avg_volume: Optional[float] = None,
-    volume_breakout: Optional[str] = None,
+    min_rsi: float | None = None,
+    max_rsi: float | None = None,
+    sma_20_cross: str | None = None,
+    sma_50_cross: str | None = None,
+    sma_200_cross: str | None = None,
+    macd_trend: str | None = None,
+    ha_dir: str | None = None,
+    renko_dir: str | None = None,
+    lb_dir: str | None = None,
+    min_weekly_avg_volume: float | None = None,
+    volume_breakout: str | None = None,
     limit: int = 100,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """Executes a high-speed screening sweep using query parameters directly against the narrow snapshot layer."""
     from stocks.config import Config
+
     config = Config.load()
-    
+
     screening_service = ScreeningService(config, db)
     results = screening_service.query_screener(
         min_rsi=min_rsi,
@@ -80,9 +82,9 @@ def get_screening_results_get(
         lb_dir=lb_dir,
         min_weekly_avg_volume=min_weekly_avg_volume,
         volume_breakout=volume_breakout,
-        limit=limit
+        limit=limit,
     )
-    
+
     return [
         {
             "symbol_id": r.symbol_id,
@@ -102,20 +104,19 @@ def get_screening_results_get(
             "renko_direction": r.renko_direction,
             "line_break_direction": r.line_break_direction,
             "weekly_avg_volume": getattr(r, "weekly_avg_volume", None),
-            "volume_breakout_ratio": getattr(r, "volume_breakout_ratio", None)
+            "volume_breakout_ratio": getattr(r, "volume_breakout_ratio", None),
         }
         for r in results
     ]
 
-@router.post("/run", response_model=List[ScreenerRowResponse])
-def get_screening_results_post(
-    params: ScreeningParams,
-    db: Session = Depends(get_db)
-):
+
+@router.post("/run", response_model=list[ScreenerRowResponse])
+def get_screening_results_post(params: ScreeningParams, db: Session = Depends(get_db)):
     """Executes a high-speed screening sweep using a POST body request directly against the snapshot layer."""
     from stocks.config import Config
+
     config = Config.load()
-    
+
     screening_service = ScreeningService(config, db)
     results = screening_service.query_screener(
         min_rsi=params.min_rsi,
@@ -129,9 +130,9 @@ def get_screening_results_post(
         lb_dir=params.lb_dir,
         min_weekly_avg_volume=params.min_weekly_avg_volume,
         volume_breakout=params.volume_breakout,
-        limit=params.limit
+        limit=params.limit,
     )
-    
+
     return [
         {
             "symbol_id": r.symbol_id,
@@ -151,7 +152,7 @@ def get_screening_results_post(
             "renko_direction": r.renko_direction,
             "line_break_direction": r.line_break_direction,
             "weekly_avg_volume": getattr(r, "weekly_avg_volume", None),
-            "volume_breakout_ratio": getattr(r, "volume_breakout_ratio", None)
+            "volume_breakout_ratio": getattr(r, "volume_breakout_ratio", None),
         }
         for r in results
     ]

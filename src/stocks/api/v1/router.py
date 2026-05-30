@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 
 # Import endpoints routers
-from stocks.api.v1.endpoints import symbols, charts, indicators, screening, actions, sync, agents
+from stocks.api.v1.endpoints import actions, agents, charts, indicators, screening, symbols, sync
 
 api_router = APIRouter(prefix="/api/v1")
 
