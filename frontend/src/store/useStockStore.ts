@@ -328,8 +328,12 @@ export const useStockStore = create<StockState>((set, get) => ({
               aiReport: data.report || null,
               aiRecommendation: data.recommendation || null,
               aiConfidence: data.confidence || null,
+              screenerResults: data.screener_results || get().screenerResults,
               aiIsLoading: false
             });
+            if (data.screener_results && data.screener_results.length > 0) {
+              get().setActiveTab('screener');
+            }
             eventSource.close();
           } 
           else if (eventType === 'error') {

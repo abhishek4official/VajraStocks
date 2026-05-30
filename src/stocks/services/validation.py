@@ -41,8 +41,8 @@ class ValidationService:
                 if any(x < 0.0 for x in [o, h, l, c, ac]):
                     logger.warning(f"[{ticker}] Row on {t_date} skipped: Price cannot be negative.")
                     continue
-                if v < 0:
-                    logger.warning(f"[{ticker}] Row on {t_date} skipped: Volume cannot be negative.")
+                if v <= 0:
+                    logger.warning(f"[{ticker}] Row on {t_date} skipped: Volume is zero or negative (market holiday or halt).")
                     continue
 
                 # 3. Logical Bounds Check

@@ -33,8 +33,28 @@ class PriceRepository:
             if not prices:
                 return 0
 
+            # Overwrite existing price records for the dates being synced to ensure EOD finalization
+            from sqlalchemy import delete
+            dates_to_delete = []
+            for p in prices:
+                t_date = p["trading_date"]
+                if isinstance(t_date, str):
+                    t_date = datetime.datetime.strptime(t_date, "%Y-%m-%d").date()
+                dates_to_delete.append(t_date)
+
+            if dates_to_delete:
+                self.db.execute(
+                    delete(DailyPrice).where(
+                        DailyPrice.symbol_id == symbol_id,
+                        DailyPrice.trading_date.in_(dates_to_delete)
+                    )
+                )
+                self.db.flush()
+
             # 1. Pre-fetch existing dates in a single SELECT query
             min_date = min(p["trading_date"] for p in prices)
+            if isinstance(min_date, str):
+                min_date = datetime.datetime.strptime(min_date, "%Y-%m-%d").date()
             existing_dates = self.get_existing_dates(symbol_id, min_date)
 
             # 2. Filter duplicate dates in Python memory in O(1) time

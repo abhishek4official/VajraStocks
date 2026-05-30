@@ -22,6 +22,78 @@ class DatabaseService:
         """Queries the synchronization state record for a symbol."""
         return self.db.scalar(select(SymbolSyncState).filter_by(symbol_id=symbol_id))
 
+    def get_latest_price_date(self, symbol_id: int) -> Optional[datetime.date]:
+        """Queries the latest trading date available in daily_prices for a symbol."""
+        return self.db.scalar(
+            select(func.max(DailyPrice.trading_date)).filter_by(symbol_id=symbol_id)
+        )
+
+    def get_global_latest_price_date(self) -> Optional[datetime.date]:
+        """Queries the maximum trading date available in daily_prices across all symbols."""
+        return self.db.scalar(select(func.max(DailyPrice.trading_date)))
+
+    def prune_zero_volume_records(self) -> int:
+        """Prunes price records with zero or negative volume and cleans up orphaned indicators/Heikin-Ashi candles."""
+        from sqlalchemy import delete, exists
+        try:
+            # 1. Count rows to prune
+            count_query = select(func.count(DailyPrice.id)).where(DailyPrice.volume <= 0)
+            pruned_count = self.db.scalar(count_query) or 0
+            
+            if pruned_count > 0:
+                logger.info(f"Pruning {pruned_count} zero/negative volume records from daily_prices.")
+                
+                # 2. Delete zero/negative volume daily prices
+                self.db.execute(delete(DailyPrice).where(DailyPrice.volume <= 0))
+                
+                # 3. Clean up orphaned indicators
+                stmt_ind = delete(DailyIndicator).where(
+                    ~exists().where(
+                        (DailyPrice.symbol_id == DailyIndicator.symbol_id) &
+                        (DailyPrice.trading_date == DailyIndicator.trading_date) &
+                        (DailyPrice.granularity == DailyIndicator.granularity)
+                    )
+                )
+                self.db.execute(stmt_ind)
+                
+                # 4. Clean up orphaned Heikin-Ashi candles
+                stmt_ha = delete(DailyHeikinAshi).where(
+                    ~exists().where(
+                        (DailyPrice.symbol_id == DailyHeikinAshi.symbol_id) &
+                        (DailyPrice.trading_date == DailyHeikinAshi.trading_date) &
+                        (DailyPrice.granularity == DailyHeikinAshi.granularity)
+                    )
+                )
+                self.db.execute(stmt_ha)
+                
+                self.db.commit()
+                logger.info("Database pruning and orphaned records cleanup completed successfully.")
+            return pruned_count
+        except Exception as e:
+            self.db.rollback()
+            logger.error(f"Failed to prune zero-volume records: {e}")
+            return 0
+
+    def update_symbol_sync_failure(self, symbol_id: int, error_message: str) -> None:
+        """Explicitly updates the synchronization state for a symbol to FAILED with an error message."""
+        try:
+            state = self.get_sync_state(symbol_id)
+            if state is None:
+                state = SymbolSyncState(
+                    symbol_id=symbol_id,
+                    last_successful_sync_date=datetime.date(1970, 1, 1),
+                    last_attempt_status="FAILED",
+                    last_error_message=error_message[:500]
+                )
+                self.db.add(state)
+            else:
+                state.last_attempt_status = "FAILED"
+                state.last_error_message = error_message[:500]
+            self.db.commit()
+        except Exception as e:
+            self.db.rollback()
+            logger.error(f"Failed to update sync failure state for symbol_id {symbol_id}: {e}")
+
     def save_stock_data(
         self, symbol_id: int, prices: List[Dict[str, Any]], actions: List[Dict[str, Any]], sync_date: datetime.date
     ) -> int:

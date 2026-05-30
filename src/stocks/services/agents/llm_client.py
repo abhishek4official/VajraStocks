@@ -23,9 +23,12 @@ class LLMClient:
     ) -> str:
         """Sends generation request using Microsoft Agent Framework ChatClient and Agent."""
         try:
+            import httpx
             from ollama import AsyncClient
-            # Keep Ollama timeout to 20 minutes (1200 seconds) by passing configured AsyncClient
-            ollama_client = AsyncClient(host=self.base_url, timeout=1200.0)
+            # Keep Ollama timeout to 20 minutes (1200 seconds) by passing configured AsyncClient with robust retries and keepalive
+            limits = httpx.Limits(max_connections=100, max_keepalive_connections=20, keepalive_expiry=60.0)
+            transport = httpx.AsyncHTTPTransport(retries=3, limits=limits)
+            ollama_client = AsyncClient(host=self.base_url, timeout=1200.0, transport=transport)
             client = OllamaChatClient(host=self.base_url, model=model, client=ollama_client)
             agent = Agent(
                 client=client,

@@ -1,5 +1,5 @@
 import datetime
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from loguru import logger
 from stocks.config import Config
 from stocks.db.connection import DatabaseManager
@@ -21,9 +21,13 @@ class SyncEngine:
         """Runs a complete historical download sync, with resumable incremental updates."""
         session = self.db_manager.get_session()
         db_service = DatabaseService(self.config, session)
+        
+        # 1. Prune existing zero-volume (holiday/halt) records and clean up orphaned indicators/HA candles
+        db_service.prune_zero_volume_records()
+        
         symbol_service = SymbolService(self.config, session)
         
-        # 1. Initialize Sync Job in database
+        # 2. Initialize Sync Job in database
         job = db_service.create_sync_job()
         logger.info(f"Started synchronization job. Run ID: {job.run_id}")
         
@@ -63,18 +67,23 @@ class SyncEngine:
 
             logger.info(f"Beginning sync process for {total_symbols} active symbols...")
             
+            # Query ground truth latest global trading date before incremental update logic
+            global_max_date = db_service.get_global_latest_price_date()
+            logger.info(f"Verified global market database benchmark trading date: {global_max_date}")
+            
             # 3. Determine dynamic date ranges and collect symbols requiring updates
             symbols_to_sync = []  # List of tuples: (Symbol, start_date, end_date)
             today = datetime.date.today()
             history_start = today - datetime.timedelta(days=365 * self.config.downloader.history_years)
             
             for symbol_obj in active_symbols:
-                state = db_service.get_sync_state(symbol_obj.id)
+                latest_price_date = db_service.get_latest_price_date(symbol_obj.id)
                 
-                # Check for successful sync state
-                if state and state.last_successful_sync_date:
-                    # Warm Sync (Incremental) - start from the day after the last sync date
-                    start_date = state.last_successful_sync_date + datetime.timedelta(days=1)
+                # Check for existing prices in the database
+                if latest_price_date:
+                    # Warm Sync (Incremental) - start from the last price date (inclusive)
+                    # to force overwrite and fill in missing/partial EOD prices
+                    start_date = latest_price_date
                 else:
                     # Cold Start - full history backfill
                     start_date = history_start
@@ -84,8 +93,8 @@ class SyncEngine:
                 # If already up to date, skip downloading
                 if start_date >= end_date:
                     logger.debug(
-                        f"[{symbol_obj.symbol}] Already up to date (last sync date: "
-                        f"{state.last_successful_sync_date}). Skipping download."
+                        f"[{symbol_obj.symbol}] Already up to date (latest price date: "
+                        f"{latest_price_date}). Skipping download."
                     )
                     processed_symbols += 1
                     continue
@@ -149,15 +158,25 @@ class SyncEngine:
                                 # Ingestion within isolated transaction
                                 inserted = db_service.save_stock_data(symbol_obj.id, clean_prices, actions, end_date)
                                 
-                                records_inserted += inserted
-                                processed_symbols += 1
-                                logger.info(f"[{ticker}] Synced successfully. {inserted} rows added.")
-
-                                # Post-sync hook: Incremental Indicator & Market Structure recalculations
-                                try:
-                                    self.calculate_and_save_derived_data(db_service, symbol_obj, clean_prices)
-                                except Exception as derived_err:
-                                    logger.error(f"[{ticker}] Failed to calculate or save derived data: {derived_err}")
+                                # Post-sync resilient downloader verification
+                                is_valid = self._verify_and_update_symbol_sync_state(
+                                    db_service, symbol_obj, ticker, global_max_date
+                                )
+                                
+                                if is_valid:
+                                    records_inserted += inserted
+                                    processed_symbols += 1
+                                    logger.info(f"[{ticker}] Synced successfully. {inserted} rows added.")
+                                    
+                                    # Post-sync hook: Incremental Indicator & Market Structure recalculations
+                                    try:
+                                        self.calculate_and_save_derived_data(db_service, symbol_obj, clean_prices)
+                                    except Exception as derived_err:
+                                        logger.error(f"[{ticker}] Failed to calculate or save derived data: {derived_err}")
+                                else:
+                                    failed_symbols += 1
+                                    err_summary_list.append(f"[{ticker}] Yahoo Finance returned no data (behind global market date).")
+                                    
                             except Exception as e:
                                 failed_symbols += 1
                                 err_summary_list.append(f"[{ticker}] Ingestion failed: {e}")
@@ -181,15 +200,24 @@ class SyncEngine:
                                 clean_prices = self.validator.validate_prices(ticker, prices, actions)
                                 inserted = db_service.save_stock_data(symbol_obj.id, clean_prices, actions, end_date)
                                 
-                                records_inserted += inserted
-                                processed_symbols += 1
-                                logger.info(f"[{ticker}] Synced successfully (via fallback). {inserted} rows added.")
-
-                                # Post-sync hook: Incremental Indicator & Market Structure recalculations
-                                try:
-                                    self.calculate_and_save_derived_data(db_service, symbol_obj, clean_prices)
-                                except Exception as derived_err:
-                                    logger.error(f"[{ticker}] Failed to calculate or save derived data: {derived_err}")
+                                # Post-sync resilient downloader verification
+                                is_valid = self._verify_and_update_symbol_sync_state(
+                                    db_service, symbol_obj, ticker, global_max_date
+                                )
+                                
+                                if is_valid:
+                                    records_inserted += inserted
+                                    processed_symbols += 1
+                                    logger.info(f"[{ticker}] Synced successfully (via fallback). {inserted} rows added.")
+                                    
+                                    # Post-sync hook: Incremental Indicator & Market Structure recalculations
+                                    try:
+                                        self.calculate_and_save_derived_data(db_service, symbol_obj, clean_prices)
+                                    except Exception as derived_err:
+                                        logger.error(f"[{ticker}] Failed to calculate or save derived data: {derived_err}")
+                                else:
+                                    failed_symbols += 1
+                                    err_summary_list.append(f"[{ticker}] Fallback failed: Yahoo Finance returned no data (behind global market date).")
                             except Exception as single_err:
                                 failed_symbols += 1
                                 err_summary_list.append(f"[{ticker}] Individual fallback failed: {single_err}")
@@ -344,3 +372,34 @@ class SyncEngine:
             f"{len(indicators_to_save)} indicators, {len(ha_candles_to_save)} HA candles, "
             f"{len(renko_bricks_to_save)} Renko bricks, {len(line_breaks_to_save)} Line Break lines."
         )
+
+    def _verify_and_update_symbol_sync_state(
+        self, db_service: DatabaseService, symbol_obj: Any, ticker: str, global_max_date: Optional[datetime.date]
+    ) -> bool:
+        """Verifies if the sync successfully fetched data up to the global market date.
+        
+        If the symbol remains behind the global benchmark date (or has no price data at all),
+        it updates the SymbolSyncState to FAILED with a clear warning/audit triage message.
+        
+        Returns True if successful/valid, False if failed.
+        """
+        post_sync_latest = db_service.get_latest_price_date(symbol_obj.id)
+        
+        # 1. Cold Start failure (No data fetched at all)
+        if post_sync_latest is None:
+            err_msg = f"Yahoo Finance returned absolutely no pricing data for history setup."
+            logger.warning(f"[{ticker}] Sync verification failed: {err_msg}")
+            db_service.update_symbol_sync_failure(symbol_obj.id, err_msg)
+            return False
+            
+        # 2. Gap/Lag failure (Stock is behind the global market latest trading date)
+        if global_max_date is not None and post_sync_latest < global_max_date:
+            err_msg = (
+                f"Yahoo Finance returned no new data. Ticker remains at {post_sync_latest}, "
+                f"which is behind the global benchmark date {global_max_date}."
+            )
+            logger.warning(f"[{ticker}] Sync verification failed: {err_msg}")
+            db_service.update_symbol_sync_failure(symbol_obj.id, err_msg)
+            return False
+            
+        return True
