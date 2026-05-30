@@ -9,8 +9,6 @@ export const ScreenerPanel: React.FC = () => {
     screenerResults, 
     setScreenerFilters, 
     runScreener, 
-    setSelectedSymbol, 
-    setActiveTab, 
     isLoading 
   } = useStockStore();
 
