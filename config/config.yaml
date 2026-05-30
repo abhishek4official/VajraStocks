@@ -1,0 +1,46 @@
+app:
+  env: "production"
+  name: "nse-historical-downloader"
+
+database:
+  # Connection string for Microsoft SQL Server LocalDB.
+  # The system will automatically ensure the LocalDB instance is running and the database is bootstrapped.
+  connection_string: "mssql+pyodbc://(localdb)\\MSSQLLocalDB/NSEStockData?driver=ODBC+Driver+17+for+SQL+Server&Trusted_Connection=yes&MultipleActiveResultSets=True"
+  pool_size: 10
+  max_overflow: 20
+  pool_recycle: 1800
+
+downloader:
+  history_years: 3
+  batch_size: 50
+  rate_limit_per_second: 5
+  max_retries: 5
+  backoff_factor: 2.0
+  timeout_seconds: 30
+
+symbols:
+  # Official NSE active equities list URL
+  active_equities_url: "https://archives.nseindia.com/content/equities/EQUITY_L_ACTIVE.csv"
+  fallback_csv_path: "config/EQUITY_L_ACTIVE.csv"
+  default_indices:
+    - "^NSEI"      # Nifty 50 Index
+    - "^NSEBANK"   # Nifty Bank Index
+  include_indices: true
+
+validation:
+  # Limit for daily price percentage movement without corporate action warning
+  max_price_pct_change_limit: 0.50
+  enable_volume_check: true
+  enable_empty_row_check: true
+
+logging:
+  console_level: "INFO"
+  file_level: "DEBUG"
+  file_path: "logs/nse_downloader.log"
+  rotation: "10 MB"
+  retention: "30 days"
+
+ai:
+  provider: "ollama"
+  base_url: "http://192.168.31.27:11434"
+  model: "gemma4:e4b"

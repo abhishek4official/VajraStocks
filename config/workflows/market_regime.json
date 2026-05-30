@@ -1,0 +1,18 @@
+{
+  "name": "market_regime",
+  "description": "Analyzes broad indices and snap-caches to report the overall market trend and volatility environment.",
+  "steps": [
+    {
+      "step_index": 1,
+      "agent": "market_regime_agent",
+      "action": "assess_broad_market",
+      "required_inputs": []
+    },
+    {
+      "step_index": 2,
+      "agent": "report_agent",
+      "action": "generate_macro_report",
+      "required_inputs": ["market_regime"]
+    }
+  ]
+}
