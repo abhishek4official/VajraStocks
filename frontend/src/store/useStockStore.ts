@@ -159,9 +159,25 @@ export const useStockStore = create<StockState>((set, get) => ({
       const symbols = await apiService.getAllSymbols(activeOnly);
       set({ symbols, isLoading: false });
       
-      // Auto-select first active symbol if none is active
-      if (symbols.length > 0 && !get().activeSymbol) {
-        await get().setSelectedSymbol(symbols[0].symbol);
+      // Check if a symbol is specified in the URL query parameters
+      const urlParams = new URLSearchParams(window.location.search);
+      const urlSymbol = urlParams.get('symbol');
+      
+      let symbolToSelect = symbols.length > 0 ? symbols[0].symbol : null;
+      if (urlSymbol && symbols.length > 0) {
+        const cleanUrlSymbol = urlSymbol.toUpperCase().trim();
+        const found = symbols.find(s => 
+          s.symbol.toUpperCase() === cleanUrlSymbol || 
+          s.symbol.toUpperCase().replace('.NS', '') === cleanUrlSymbol
+        );
+        if (found) {
+          symbolToSelect = found.symbol;
+        }
+      }
+      
+      // Auto-select the target symbol if none is active
+      if (symbolToSelect && !get().activeSymbol) {
+        await get().setSelectedSymbol(symbolToSelect);
       }
     } catch (err: any) {
       set({ error: err.message || 'Failed to fetch symbols', isLoading: false });
