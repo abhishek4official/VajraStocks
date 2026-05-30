@@ -9,8 +9,6 @@ export const ScreenerPanel: React.FC = () => {
     screenerResults, 
     setScreenerFilters, 
     runScreener, 
-    setSelectedSymbol, 
-    setActiveTab, 
     isLoading 
   } = useStockStore();
 
@@ -27,9 +25,9 @@ export const ScreenerPanel: React.FC = () => {
     runScreener();
   };
 
-  const handleSelectScreenerMatch = async (symbol: string) => {
-    await setSelectedSymbol(symbol);
-    setActiveTab('explorer');
+  const handleSelectScreenerMatch = (symbol: string) => {
+    // Open in a new tab/window pointing to the stock details
+    window.open(`/?symbol=${symbol}`, '_blank');
   };
 
   const formatNumber = (val: number | null | undefined, decimals = 2) => {
