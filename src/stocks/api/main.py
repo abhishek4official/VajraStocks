@@ -66,10 +66,12 @@ async def lifespan(app: FastAPI):
     db_manager = DatabaseManager(connection_string)
     db_manager.initialize()
 
-    # On first run (SQLite): create all tables via metadata (no Alembic needed for fresh installs)
-    if first_run:
-        logger.info("First run detected — creating tables from metadata...")
+    # Ensure all tables exist (idempotent — create_all only creates missing tables).
+    # This covers: fresh SQLite installs AND existing MSSQL DBs missing the new app_settings table.
+    try:
         db_manager.create_tables_directly()
+    except Exception as e:
+        logger.warning(f"Table creation check skipped: {e}")
 
     # Seed settings if table is empty
     session = db_manager.get_session()
@@ -90,6 +92,8 @@ async def lifespan(app: FastAPI):
                     svc.import_from_config(cfg)
                 except Exception as e:
                     logger.warning(f"Could not import config.yaml: {e}")
+    except Exception as e:
+        logger.warning(f"Settings seed skipped: {e}")
     finally:
         session.close()
 
@@ -154,8 +158,25 @@ def _find_frontend_dist() -> Path | None:
 
 _frontend_dist = _find_frontend_dist()
 if _frontend_dist:
+    from fastapi.responses import FileResponse
     from fastapi.staticfiles import StaticFiles
-    app.mount("/", StaticFiles(directory=str(_frontend_dist), html=True), name="static")
+
+    # Mount /assets and other static asset directories explicitly
+    _assets_dir = _frontend_dist / "assets"
+    if _assets_dir.exists():
+        app.mount("/assets", StaticFiles(directory=str(_assets_dir)), name="assets")
+
+    # Catch-all: serve index.html for any unknown path (SPA routing)
+    # This must be registered LAST so API routes take priority
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def serve_spa(full_path: str):
+        # Try to serve a real file first (favicon, icons, etc.)
+        candidate = _frontend_dist / full_path
+        if candidate.is_file():
+            return FileResponse(str(candidate))
+        # Fall back to index.html for all SPA routes
+        return FileResponse(str(_frontend_dist / "index.html"))
+
     logger.info(f"Serving frontend from: {_frontend_dist}")
 else:
     logger.warning("frontend/dist not found — run 'npm run build' in the frontend directory")
