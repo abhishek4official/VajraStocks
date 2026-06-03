@@ -25,10 +25,11 @@ import {
 } from 'lucide-react';
 import './App.css';
 
+// Thin wrapper: decides between loading / setup wizard / dashboard.
+// Keeping this separate guarantees a stable hook order in Dashboard.
 function App() {
   const [setupNeeded, setSetupNeeded] = React.useState<boolean | null>(null);
 
-  // Check if first-run wizard is needed
   React.useEffect(() => {
     fetch(`${import.meta.env.VITE_API_BASE_URL}/api/v1/setup/status`)
       .then(r => r.json())
@@ -43,6 +44,11 @@ function App() {
   );
 
   if (setupNeeded) return <SetupWizard onComplete={() => setSetupNeeded(false)} />;
+
+  return <Dashboard />;
+}
+
+function Dashboard() {
   const {
     activeTab,
     setActiveTab,
