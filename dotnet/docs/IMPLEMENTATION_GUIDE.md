@@ -1,8 +1,8 @@
-# VajraStocks — .NET Core Implementation Guide
+# VajraStocks — .NET Core Implementation Guide (REST)
 
-_Concrete project structure, `.proto` contracts, EF Core models, gRPC services, MAF agents, and frontend wiring._
+_Concrete project structure, REST controllers, DTOs (snake_case), EF Core, MAF agents (SSE), Yahoo Finance, Hangfire, and frontend wiring._
 
-Companion to **MIGRATION_GUIDE.md**. Target: **.NET 9**, ASP.NET Core, gRPC, EF Core, Microsoft Agent Framework.
+Companion to **MIGRATION_GUIDE.md**. Target: **.NET 9**, ASP.NET Core Web API, EF Core, Microsoft Agent Framework.
 
 ---
 
@@ -14,231 +14,114 @@ dotnet/
 ├── docs/
 │   ├── MIGRATION_GUIDE.md
 │   └── IMPLEMENTATION_GUIDE.md
-├── protos/                         # contract-first .proto files (shared)
-│   ├── common.proto
-│   ├── symbols.proto
-│   ├── charts.proto
-│   ├── indicators.proto
-│   ├── screener.proto
-│   ├── sync.proto
-│   ├── settings.proto
-│   ├── setup.proto
-│   └── agents.proto
 └── src/
-    ├── Vajra.Api/                  # ASP.NET Core gRPC host (entry point)
+    ├── Vajra.Api/                  # ASP.NET Core Web API host (entry point)
     │   ├── Program.cs
-    │   ├── Services/               # gRPC service implementations
-    │   │   ├── SymbolGrpcService.cs
-    │   │   ├── ChartGrpcService.cs
-    │   │   ├── ScreenerGrpcService.cs
-    │   │   ├── SyncGrpcService.cs
-    │   │   ├── SettingsGrpcService.cs
-    │   │   ├── SetupGrpcService.cs
-    │   │   └── AgentGrpcService.cs
+    │   ├── Controllers/
+    │   │   ├── SymbolsController.cs
+    │   │   ├── ChartsController.cs
+    │   │   ├── IndicatorsController.cs
+    │   │   ├── ScreenersController.cs
+    │   │   ├── SyncController.cs
+    │   │   ├── SettingsController.cs
+    │   │   ├── SetupController.cs
+    │   │   └── AgentsController.cs      # SSE streaming
+    │   ├── Dtos/                        # snake_case response/request models
     │   ├── appsettings.json
-    │   └── wwwroot/                # React build output (Phase E)
-    ├── Vajra.Domain/               # pure domain logic (no I/O)
-    │   ├── Indicators/             # RSI, MACD, ATR, SMA, EMA, BB
-    │   ├── MarketStructure/        # Heikin-Ashi, Renko, Line Break
-    │   ├── Screening/              # filters, RS score, pattern flags
-    │   └── TradePlanning/          # ATR-based entry/stop/target
-    ├── Vajra.Data/                 # EF Core
+    │   └── wwwroot/                     # React build output (Phase E)
+    ├── Vajra.Domain/                    # pure domain logic (no I/O)
+    │   ├── Indicators/                  # RSI, MACD, ATR, SMA, EMA, BB
+    │   ├── MarketStructure/             # Heikin-Ashi, Renko, Line Break
+    │   ├── Screening/                   # filters, RS score, pattern flags
+    │   └── TradePlanning/               # ATR-based entry/stop/target
+    ├── Vajra.Data/                      # EF Core
     │   ├── VajraDbContext.cs
     │   ├── Entities/
     │   └── Migrations/
-    ├── Vajra.MarketData/           # Yahoo Finance client
+    ├── Vajra.MarketData/                # Yahoo Finance client
     │   ├── IMarketDataProvider.cs
     │   └── YahooFinanceProvider.cs
-    ├── Vajra.Agents/               # Microsoft Agent Framework orchestration
+    ├── Vajra.Agents/                    # Microsoft Agent Framework orchestration
     │   ├── IAgentOrchestrator.cs
     │   ├── AgentOrchestrator.cs
-    │   └── Tools/                  # AIFunction tools
-    └── Vajra.Jobs/                 # Hangfire job definitions
+    │   └── Tools/
+    └── Vajra.Jobs/                      # Hangfire jobs
         ├── SyncJob.cs
         └── SectorEnrichmentJob.cs
 ```
 
 ---
 
-## 2. Proto contracts
-
-### `protos/common.proto`
-```protobuf
-syntax = "proto3";
-option csharp_namespace = "Vajra.Grpc";
-package vajra;
-
-message Empty {}
-
-enum Direction { DIRECTION_UNSPECIFIED = 0; UP = 1; DOWN = 2; }
-enum CrossPosition { CROSS_UNSPECIFIED = 0; ABOVE = 1; BELOW = 2; }
-```
-
-### `protos/symbols.proto`
-```protobuf
-syntax = "proto3";
-option csharp_namespace = "Vajra.Grpc";
-package vajra;
-
-service SymbolService {
-  rpc ListSymbols(ListSymbolsRequest) returns (ListSymbolsResponse);
-  rpc GetSymbol(GetSymbolRequest) returns (SymbolDetail);
-}
-
-message ListSymbolsRequest { bool active_only = 1; }
-message ListSymbolsResponse { repeated SymbolDetail symbols = 1; }
-message GetSymbolRequest { string symbol = 1; }
-
-message SymbolDetail {
-  int32 id = 1;
-  string symbol = 2;
-  string company_name = 3;
-  string isin = 4;
-  string series = 5;
-  bool is_active = 6;
-  string last_successful_sync_date = 7;
-  string last_attempt_status = 8;
-}
-```
-
-### `protos/screener.proto`
-```protobuf
-syntax = "proto3";
-option csharp_namespace = "Vajra.Grpc";
-package vajra;
-import "common.proto";
-
-service ScreenerService {
-  rpc RunScreener(ScreenerRequest) returns (ScreenerResponse);
-}
-
-message ScreenerRequest {
-  optional double min_rsi = 1;
-  optional double max_rsi = 2;
-  optional double min_price = 3;
-  optional double max_price = 4;
-  optional CrossPosition sma_200_cross = 5;
-  optional Direction renko_dir = 6;
-  optional string volume_breakout = 7;     // "1.5X" | "2.0X" | "3.0X"
-  optional bool only_nr7 = 8;
-  optional bool only_inside_bar = 9;
-  optional bool only_gap_up = 10;
-  optional bool only_gap_down = 11;
-  optional double min_rs_1m = 12;
-  int32 limit = 13;
-}
-
-message ScreenerResponse { repeated ScreenerRow rows = 1; }
-
-message ScreenerRow {
-  int32 symbol_id = 1;
-  string symbol = 2;
-  string company_name = 3;
-  double close_price = 4;
-  optional double price_pct_change = 5;
-  int64 volume = 6;
-  optional double rsi_14 = 7;
-  optional string renko_direction = 8;
-  optional bool is_gap_up = 9;
-  optional bool is_gap_down = 10;
-  optional double rs_score_1m = 11;
-  // ... remaining snapshot fields
-}
-```
-
-### `protos/agents.proto` (server-streaming — replaces SSE)
-```protobuf
-syntax = "proto3";
-option csharp_namespace = "Vajra.Grpc";
-package vajra;
-
-service AgentService {
-  rpc ChatStream(ChatRequest) returns (stream AgentEvent);
-}
-
-message ChatRequest { string prompt = 1; }
-
-message AgentEvent {
-  string event_type = 1;   // "started" | "agent_active" | "complete" | "error"
-  string agent = 2;
-  string status = 3;
-  string report = 4;       // markdown, on "complete"
-  string recommendation = 5;
-  string confidence = 6;
-}
-```
-
----
-
-## 3. Host bootstrap — `Program.cs`
+## 2. Host bootstrap — `Program.cs`
 
 ```csharp
+using System.Text.Json;
 using Hangfire;
 using Microsoft.EntityFrameworkCore;
-using Vajra.Api.Services;
 using Vajra.Data;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// 1. Configuration: appsettings.json + DB-backed settings (DB wins at runtime)
-var connString = builder.Configuration.GetConnectionString("Default")
-    ?? "Data Source=../../data/vajra.db";
+// 1. Connection string: env var -> appsettings -> SQLite default
+var conn = Environment.GetEnvironmentVariable("VAJRA_DB_URL")
+    ?? builder.Configuration.GetConnectionString("Default")
+    ?? "Data Source=../../python/data/vajra.db";
 
 // 2. EF Core — SQLite default, SQL Server optional
 builder.Services.AddDbContext<VajraDbContext>(opt =>
 {
-    if (connString.Contains("Server=", StringComparison.OrdinalIgnoreCase))
-        opt.UseSqlServer(connString);
+    if (conn.Contains("Server=", StringComparison.OrdinalIgnoreCase))
+        opt.UseSqlServer(conn);
     else
-        opt.UseSqlite(connString);
+        opt.UseSqlite(conn.StartsWith("Data Source") ? conn : $"Data Source={conn}");
 });
 
-// 3. gRPC + gRPC-Web
-builder.Services.AddGrpc();
-builder.Services.AddCors(o => o.AddPolicy("web", p =>
-    p.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader()
-     .WithExposedHeaders("Grpc-Status", "Grpc-Message", "Grpc-Encoding", "Grpc-Accept-Encoding")));
+// 3. Controllers + snake_case JSON (matches the React types exactly)
+builder.Services.AddControllers().AddJsonOptions(o =>
+{
+    o.JsonSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower;
+    o.JsonSerializerOptions.DictionaryKeyPolicy = JsonNamingPolicy.SnakeCaseLower;
+    o.JsonSerializerOptions.DefaultIgnoreCondition =
+        System.Text.Json.Serialization.JsonIgnoreCondition.Never; // keep nulls like Pydantic
+});
 
-// 4. Domain & infrastructure services
-builder.Services.AddScoped<IMarketDataProvider, YahooFinanceProvider>();
+// 4. CORS (local dev; tighten later)
+builder.Services.AddCors(o => o.AddPolicy("web", p =>
+    p.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader()));
+
+// 5. Domain & infrastructure
+builder.Services.AddHttpClient<IMarketDataProvider, YahooFinanceProvider>();
 builder.Services.AddScoped<IIndicatorService, IndicatorService>();
 builder.Services.AddScoped<IScreeningService, ScreeningService>();
 builder.Services.AddScoped<ISettingsService, SettingsService>();
+builder.Services.AddScoped<ISyncService, SyncService>();
 builder.Services.AddScoped<IAgentOrchestrator, AgentOrchestrator>();
 
-// 5. Hangfire (jobs persisted to the same DB)
-builder.Services.AddHangfire(cfg => cfg.UseSqliteStorage(connString));
+// 6. Ollama chat client (local LLM, no paid API)
+builder.Services.AddSingleton<Microsoft.Extensions.AI.IChatClient>(_ =>
+    new OllamaChatClient(new Uri("http://localhost:11434"), "qwen2.5-coder:7b"));
+
+// 7. Hangfire (jobs persisted to the same DB)
+builder.Services.AddHangfire(c => c.UseSQLiteStorage(conn));
 builder.Services.AddHangfireServer();
 
 var app = builder.Build();
 
-// Ensure schema exists (idempotent — mirrors the Python lifespan behavior)
+// Ensure schema + seed settings (mirrors the Python lifespan, idempotent)
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<VajraDbContext>();
-    db.Database.EnsureCreated();           // or db.Database.Migrate();
-    SettingsSeeder.SeedDefaults(db);       // seed app_settings if empty
+    db.Database.EnsureCreated();              // or db.Database.Migrate();
+    SettingsSeeder.SeedDefaults(db);          // seed app_settings if empty
 }
 
-app.UseRouting();
 app.UseCors("web");
-app.UseGrpcWeb(new GrpcWebOptions { DefaultEnabled = true });
+app.MapControllers();
 
-// Map gRPC services
-app.MapGrpcService<SymbolGrpcService>().EnableGrpcWeb();
-app.MapGrpcService<ChartGrpcService>().EnableGrpcWeb();
-app.MapGrpcService<ScreenerGrpcService>().EnableGrpcWeb();
-app.MapGrpcService<SyncGrpcService>().EnableGrpcWeb();
-app.MapGrpcService<SettingsGrpcService>().EnableGrpcWeb();
-app.MapGrpcService<SetupGrpcService>().EnableGrpcWeb();
-app.MapGrpcService<AgentGrpcService>().EnableGrpcWeb();
-
-// Hangfire dashboard
+// Hangfire dashboard + recurring jobs
 app.UseHangfireDashboard("/hangfire");
-
-// Recurring jobs
-RecurringJob.AddOrUpdate<SyncJob>("nightly-sync",
-    j => j.RunFullAsync(null), "0 18 * * 1-5");
+RecurringJob.AddOrUpdate<Vajra.Jobs.SyncJob>(
+    "nightly-sync", j => j.RunFullAsync(null), "0 18 * * 1-5");
 
 // Serve React build (Phase E)
 app.UseDefaultFiles();
@@ -250,7 +133,121 @@ app.Run();
 
 ---
 
-## 4. EF Core — entity + DbContext sample
+## 3. DTOs — snake_case (must match React types)
+
+```csharp
+// Vajra.Api/Dtos/ScreenerRowDto.cs
+// Property names are PascalCase in C#; the SnakeCaseLower policy emits
+// "close_price", "rs_score_1m", "is_gap_up", ... matching frontend/src/services/api.ts
+public record ScreenerRowDto
+{
+    public int SymbolId { get; init; }
+    public string Symbol { get; init; } = "";
+    public string CompanyName { get; init; } = "";
+    public string LastTradingDate { get; init; } = "";   // "yyyy-MM-dd"
+    public double ClosePrice { get; init; }
+    public double? PricePctChange { get; init; }
+    public long Volume { get; init; }
+    public double HaClose { get; init; }
+    public string HaDirection { get; init; } = "UP";
+    public double? Rsi14 { get; init; }
+    public string? Sma20CrossDirection { get; init; }
+    public string? Sma50CrossDirection { get; init; }
+    public string? Sma200CrossDirection { get; init; }
+    public string? MacdTrend { get; init; }
+    public string? RenkoDirection { get; init; }
+    public string? LineBreakDirection { get; init; }
+    public bool? IsNr7 { get; init; }
+    public bool? IsInsideBar { get; init; }
+    public bool? IsGapUp { get; init; }
+    public bool? IsGapDown { get; init; }
+    public double? RsScore1m { get; init; }
+    public double? WeeklyAvgVolume { get; init; }
+    public double? VolumeBreakoutRatio { get; init; }
+}
+
+// Request body for POST /api/v1/screeners/run (snake_case in -> bound here)
+public record ScreenerRequestDto
+{
+    public double? MinRsi { get; init; }
+    public double? MaxRsi { get; init; }
+    public double? MinPrice { get; init; }
+    public double? MaxPrice { get; init; }
+    public string? Sma200Cross { get; init; }     // "ABOVE" | "BELOW"
+    public string? RenkoDir { get; init; }         // "UP" | "DOWN"
+    public string? VolumeBreakout { get; init; }   // "1.5X" | "2.0X" | "3.0X"
+    public bool OnlyNr7 { get; init; }
+    public bool OnlyInsideBar { get; init; }
+    public bool OnlyGapUp { get; init; }
+    public bool OnlyGapDown { get; init; }
+    public double? MinRs1m { get; init; }
+    public int Limit { get; init; } = 2500;
+}
+```
+
+> Tip: a contract test deserializes a recorded Python response and asserts the
+> .NET DTO serializes to the same JSON keys — catches casing drift immediately.
+
+---
+
+## 4. Controllers — REST, same paths
+
+```csharp
+// Vajra.Api/Controllers/SymbolsController.cs
+[ApiController]
+[Route("api/v1/symbols")]
+public class SymbolsController : ControllerBase
+{
+    private readonly VajraDbContext _db;
+    public SymbolsController(VajraDbContext db) => _db = db;
+
+    [HttpGet]
+    public async Task<IEnumerable<SymbolDetailDto>> List([FromQuery] bool active_only = true)
+    {
+        var q = _db.Symbols.AsQueryable();
+        if (active_only) q = q.Where(s => s.IsActive);
+        return await q.OrderBy(s => s.Symbol).Select(s => new SymbolDetailDto { /* map */ }).ToListAsync();
+    }
+
+    [HttpGet("{symbol}")]
+    public async Task<ActionResult<SymbolDetailDto>> Get(string symbol)
+    {
+        var clean = symbol.ToUpper().EndsWith(".NS") || symbol.StartsWith("^")
+            ? symbol.ToUpper() : $"{symbol.ToUpper()}.NS";
+        var s = await _db.Symbols.FirstOrDefaultAsync(x => x.Symbol == clean);
+        return s is null ? NotFound(new { detail = $"Symbol '{symbol}' not found." })
+                         : new SymbolDetailDto { /* map */ };
+    }
+}
+```
+
+```csharp
+// Vajra.Api/Controllers/ScreenersController.cs
+[ApiController]
+[Route("api/v1/screeners")]
+public class ScreenersController : ControllerBase
+{
+    private readonly IScreeningService _screening;
+    public ScreenersController(IScreeningService s) => _screening = s;
+
+    [HttpPost("run")]
+    public async Task<IEnumerable<ScreenerRowDto>> Run([FromBody] ScreenerRequestDto req)
+        => await _screening.QueryAsync(req);
+
+    [HttpGet]                                  // GET variant with query params
+    public async Task<IEnumerable<ScreenerRowDto>> RunQuery(
+        [FromQuery] double? min_rsi, [FromQuery] double? max_rsi,
+        [FromQuery] bool only_gap_up = false, [FromQuery] double? min_rs_1m = null,
+        [FromQuery] int limit = 2500)
+        => await _screening.QueryAsync(new ScreenerRequestDto {
+               MinRsi = min_rsi, MaxRsi = max_rsi, OnlyGapUp = only_gap_up,
+               MinRs1m = min_rs_1m, Limit = limit });
+}
+```
+
+---
+
+## 5. EF Core — entity + DbContext
 
 ```csharp
 // Vajra.Data/Entities/ScreeningSnapshot.cs
@@ -281,21 +278,11 @@ public class VajraDbContext : DbContext
     public DbSet<DailyIndicator> DailyIndicators => Set<DailyIndicator>();
     public DbSet<ScreeningSnapshot> ScreeningSnapshots => Set<ScreeningSnapshot>();
     public DbSet<AppSetting> AppSettings => Set<AppSetting>();
-    // ... other tables
 
     public VajraDbContext(DbContextOptions<VajraDbContext> o) : base(o) { }
 
     protected override void OnModelCreating(ModelBuilder b)
     {
-        b.Entity<ScreeningSnapshot>(e =>
-        {
-            e.ToTable("screening_snapshots");
-            e.HasKey(x => x.SymbolId);
-            e.Property(x => x.ClosePrice).HasPrecision(12, 4);
-            e.Property(x => x.Symbol).HasColumnName("symbol").HasMaxLength(50);
-            // map snake_case columns explicitly to match existing schema
-        });
-
         b.Entity<DailyPrice>(e =>
         {
             e.ToTable("daily_prices");
@@ -304,79 +291,49 @@ public class VajraDbContext : DbContext
             e.Property(x => x.Low).HasPrecision(18, 4);
             e.Property(x => x.Close).HasPrecision(18, 4);
         });
-    }
-}
-```
-
-> Use a snake_case naming convention helper (e.g. `EFCore.NamingConventions` → `.UseSnakeCaseNamingConvention()`) so you don't hand-map every column.
-
----
-
-## 5. gRPC service — Screener example
-
-```csharp
-public class ScreenerGrpcService : ScreenerService.ScreenerServiceBase
-{
-    private readonly IScreeningService _screening;
-    public ScreenerGrpcService(IScreeningService screening) => _screening = screening;
-
-    public override async Task<ScreenerResponse> RunScreener(
-        ScreenerRequest req, ServerCallContext context)
-    {
-        var results = await _screening.QueryAsync(new ScreenerFilters
+        b.Entity<ScreeningSnapshot>(e =>
         {
-            MinRsi = req.HasMinRsi ? req.MinRsi : null,
-            MaxRsi = req.HasMaxRsi ? req.MaxRsi : null,
-            MinPrice = req.HasMinPrice ? req.MinPrice : null,
-            OnlyGapUp = req.OnlyGapUp,
-            MinRs1m = req.HasMinRs1M ? req.MinRs1M : null,
-            Limit = req.Limit == 0 ? 2500 : req.Limit,
+            e.ToTable("screening_snapshots");
+            e.HasKey(x => x.SymbolId);
+            e.Property(x => x.ClosePrice).HasPrecision(12, 4);
         });
-
-        var resp = new ScreenerResponse();
-        resp.Rows.AddRange(results.Select(r => new ScreenerRow
-        {
-            SymbolId = r.SymbolId,
-            Symbol = r.Symbol,
-            CompanyName = r.CompanyName,
-            ClosePrice = (double)r.ClosePrice,
-            Volume = r.Volume,
-            Rsi14 = r.Rsi14 ?? 0,
-            IsGapUp = r.IsGapUp ?? false,
-            RsScore1m = r.RsScore1m ?? 0,
-        }));
-        return resp;
     }
 }
 ```
 
+Add `EFCore.NamingConventions` and call `.UseSnakeCaseNamingConvention()` in
+`AddDbContext` so PascalCase properties map to the existing snake_case columns
+without per-column `HasColumnName`.
+
 ---
 
-## 6. Agent service — MAF .NET + server streaming
+## 6. Agents — MAF .NET over SSE (same event shape React already parses)
+
+The React store parses events like `{ "event": "agent_active", "data": {...} }`.
+Emit the **same** envelope from an SSE controller.
 
 ```csharp
-public class AgentGrpcService : AgentService.AgentServiceBase
+// Vajra.Api/Controllers/AgentsController.cs
+[ApiController]
+[Route("api/v1/agents")]
+public class AgentsController : ControllerBase
 {
     private readonly IAgentOrchestrator _orchestrator;
-    public AgentGrpcService(IAgentOrchestrator o) => _orchestrator = o;
+    public AgentsController(IAgentOrchestrator o) => _orchestrator = o;
 
-    public override async Task ChatStream(
-        ChatRequest request,
-        IServerStreamWriter<AgentEvent> responseStream,
-        ServerCallContext context)
+    [HttpGet("chat-stream")]
+    public async Task ChatStream([FromQuery] string prompt, CancellationToken ct)
     {
-        await foreach (var ev in _orchestrator.ExecuteWorkflowAsync(
-                           request.Prompt, context.CancellationToken))
+        Response.Headers.CacheControl = "no-cache, no-transform";
+        Response.Headers["X-Accel-Buffering"] = "no";
+        Response.ContentType = "text/event-stream";
+
+        await foreach (var ev in _orchestrator.ExecuteWorkflowAsync(prompt, ct))
         {
-            await responseStream.WriteAsync(new AgentEvent
-            {
-                EventType = ev.Type,
-                Agent = ev.Agent ?? "",
-                Status = ev.Status ?? "",
-                Report = ev.Report ?? "",
-                Recommendation = ev.Recommendation ?? "",
-                Confidence = ev.Confidence ?? "",
-            });
+            var payload = JsonSerializer.Serialize(new { @event = ev.Type, data = ev.Data },
+                new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower });
+            await Response.WriteAsync($"data: {payload}\n\n", ct);
+            await Response.Body.FlushAsync(ct);
         }
     }
 }
@@ -389,42 +346,30 @@ using Microsoft.Extensions.AI;
 
 public class AgentOrchestrator : IAgentOrchestrator
 {
-    private readonly IChatClient _chat;   // OllamaChatClient registered in DI
-
+    private readonly IChatClient _chat;
     public AgentOrchestrator(IChatClient chat) => _chat = chat;
 
     public async IAsyncEnumerable<WorkflowEvent> ExecuteWorkflowAsync(
         string prompt, [EnumeratorCancellation] CancellationToken ct)
     {
-        yield return new WorkflowEvent { Type = "started", Status = "Parsing query..." };
+        yield return new("started", new { status = "Parsing query..." });
 
         var orchestrator = new ChatClientAgent(_chat, new()
         {
-            Instructions = "Classify the user's stock query into an intent and symbol.",
-            // structured JSON output
+            Instructions = "Classify the stock query into intent + symbol. Reply JSON.",
         });
+        var intentResult = await orchestrator.RunAsync(prompt, cancellationToken: ct);
+        // route: analyze_stock / breakout_scan / market_regime / swing_trade_scan
+        // call deterministic C# services (trade planner, backtester) between steps
+        // yield "agent_active" events per step
 
-        var intent = await orchestrator.RunAsync(prompt, cancellationToken: ct);
-        // ... route to analyze_stock / breakout_scan / market_regime / swing
-        // call deterministic C# services (trade planner, backtester) between agent steps
-        // yield agent_active events per step
-
-        yield return new WorkflowEvent
-        {
-            Type = "complete",
-            Report = "# RELIANCE.NS Report\n...",
-            Recommendation = "BULLISH",
-            Confidence = "HIGH",
-        };
+        yield return new("complete", new {
+            report = "# RELIANCE.NS Report\n...", recommendation = "BULLISH", confidence = "HIGH" });
     }
 }
 ```
 
-Register the Ollama client (local, no paid API):
-```csharp
-builder.Services.AddSingleton<IChatClient>(_ =>
-    new OllamaChatClient(new Uri("http://localhost:11434"), "qwen2.5-coder:7b"));
-```
+The React `EventSource` + the store's event handling stay **exactly as they are**.
 
 ---
 
@@ -457,16 +402,16 @@ public class YahooFinanceProvider : IMarketDataProvider
 Indicators via `Skender.Stock.Indicators`:
 ```csharp
 using Skender.Stock.Indicators;
-var rsi = quotes.GetRsi(14).Last().Rsi;
+var rsi  = quotes.GetRsi(14).Last().Rsi;
 var macd = quotes.GetMacd(12, 26, 9).Last();
-var atr = quotes.GetAtr(14).Last().Atr;
-var bb  = quotes.GetBollingerBands(20, 2).Last();
+var atr  = quotes.GetAtr(14).Last().Atr;
+var bb   = quotes.GetBollingerBands(20, 2).Last();
 ```
-(Validate against the Python pandas-ta outputs — see migration §11 golden-master test.)
+Validate against Python pandas-ta outputs (golden-master test, tolerance < 0.01).
 
 ---
 
-## 8. Hangfire jobs
+## 8. Hangfire job
 
 ```csharp
 public class SyncJob
@@ -482,8 +427,8 @@ public class SyncJob
         foreach (var sym in active)
         {
             var candles = await _market.GetDailyAsync(sym.Symbol, 3, default);
-            // validate → upsert daily_prices
-            // compute indicators + market structures → upsert
+            // validate -> upsert daily_prices
+            // compute indicators + market structures -> upsert
         }
         await _screening.RefreshAllSnapshotsAsync();
     }
@@ -492,36 +437,21 @@ public class SyncJob
 
 ---
 
-## 9. Frontend wiring (gRPC-Web)
+## 9. Frontend wiring — essentially zero change
 
-Generate TS stubs with **`buf` + `protoc-gen-es`** (Connect) or `ts-proto`:
+The React app keeps `fetch()` and `EventSource`. The only change is the base URL:
 
-```bash
-# buf.gen.yaml drives generation into frontend/src/gen
-buf generate ../dotnet/protos
+```
+# frontend/.env
+VITE_API_BASE_URL=http://localhost:8000     # now the .NET host
 ```
 
-Replace the `apiService` fetch calls with typed gRPC clients:
-```typescript
-import { createConnectTransport } from "@connectrpc/connect-web";
-import { createClient } from "@connectrpc/connect";
-import { ScreenerService } from "./gen/screener_connect";
-
-const transport = createConnectTransport({ baseUrl: import.meta.env.VITE_API_BASE_URL });
-const screener = createClient(ScreenerService, transport);
-
-const res = await screener.runScreener({ minRsi: 55, onlyGapUp: true, limit: 2500 });
-```
-
-The agent console consumes the server stream:
-```typescript
-for await (const ev of agentClient.chatStream({ prompt })) {
-  if (ev.eventType === "complete") setReport(ev.report);
-  else appendEvent(ev);
-}
-```
-
-The Zustand store and React components stay the same — only the transport layer (`services/api.ts`) is swapped for generated gRPC clients.
+`services/api.ts`, the Zustand store, the AI console, and all components are
+**unchanged**. The contract (paths + snake_case JSON + SSE event envelope) is
+preserved by:
+- `JsonNamingPolicy.SnakeCaseLower` (responses)
+- controllers mapped to the same `/api/v1/...` routes
+- the SSE controller emitting `data: {"event": "...", "data": {...}}\n\n`
 
 ---
 
@@ -529,14 +459,15 @@ The Zustand store and React components stay the same — only the transport laye
 
 ```bash
 # Dev
-dotnet run --project src/Vajra.Api          # serves gRPC-Web on :8000
+dotnet run --project src/Vajra.Api          # REST on :8000, serves wwwroot
 
 # Publish self-contained single-file (Windows, no .NET install needed)
 dotnet publish src/Vajra.Api -c Release -r win-x64 \
   --self-contained -p:PublishSingleFile=true -o ../dist/win
 ```
 
-`install.ps1` / `start.ps1` adapt to launch the published `Vajra.Api.exe` instead of uvicorn. SQLite file stays at `data/vajra.db`, shared with (or migrated from) the Python build.
+`install.ps1` / `start.ps1` adapt to launch `Vajra.Api.exe` instead of uvicorn.
+SQLite stays at `data/vajra.db` (shared with, or migrated from, the Python build).
 
 ---
 
@@ -544,29 +475,29 @@ dotnet publish src/Vajra.Api -c Release -r win-x64 \
 
 | Package | Purpose |
 |---|---|
-| `Grpc.AspNetCore` | gRPC server |
-| `Grpc.AspNetCore.Web` | gRPC-Web for browsers |
+| `Microsoft.AspNetCore.OpenApi` | REST API + Swagger |
 | `Microsoft.EntityFrameworkCore.Sqlite` | SQLite provider |
 | `Microsoft.EntityFrameworkCore.SqlServer` | SQL Server option |
-| `EFCore.NamingConventions` | snake_case mapping |
+| `EFCore.NamingConventions` | snake_case column mapping |
 | `Hangfire.AspNetCore` + `Hangfire.Storage.SQLite` | jobs + dashboard |
 | `Microsoft.Agents.AI` | Microsoft Agent Framework (.NET) |
 | `Microsoft.Extensions.AI` | `IChatClient` abstraction |
 | `OllamaSharp` | Ollama client (local LLM) |
 | `Skender.Stock.Indicators` | RSI/MACD/ATR/BB/SMA/EMA |
 | `Serilog.AspNetCore` | logging |
-| `FluentValidation` | request validation |
+| `FluentValidation.AspNetCore` | request validation |
 
 ---
 
-## 12. Parity checklist (per service)
+## 12. Parity checklist (per controller)
 
-- [ ] `SymbolService` — list/detail match Python JSON
-- [ ] `ChartService` — candles/HA/renko/line-break identical ordering & values
-- [ ] `IndicatorService` — RSI/MACD/ATR/SMA/EMA/BB within tolerance vs pandas-ta
-- [ ] `ScreenerService` — all filters incl. NR7/InsideBar/Gap/RS produce same rows
-- [ ] `SyncService` + `YahooFinanceProvider` — full sync yields identical snapshots
-- [ ] `AgentService` — four workflows stream equivalent reports via MAF .NET
-- [ ] `SettingsService` / `SetupService` — DB-backed settings parity
+- [ ] `SymbolsController` — list/detail JSON byte-identical to Python
+- [ ] `ChartsController` — candles/HA/renko/line-break same ordering & values
+- [ ] `IndicatorsController` — RSI/MACD/ATR/SMA/EMA/BB within tolerance vs pandas-ta
+- [ ] `ScreenersController` — all filters incl. NR7/InsideBar/Gap/RS produce same rows
+- [ ] `SyncController` + `YahooFinanceProvider` — full sync yields identical snapshots
+- [ ] `AgentsController` — four workflows stream equivalent SSE reports via MAF .NET
+- [ ] `SettingsController` / `SetupController` — DB-backed settings parity
 - [ ] Hangfire nightly sync runs; `/hangfire` dashboard reachable
-- [ ] React app fully on gRPC-Web; single .NET process serves everything
+- [ ] React app runs against .NET with only `VITE_API_BASE_URL` changed
+```
