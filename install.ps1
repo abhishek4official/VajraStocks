@@ -1,94 +1,57 @@
-# VajraStocks — Windows Installer
-# Run this once to set up the application on a new machine.
-# Usage: Right-click → Run with PowerShell (as current user, no admin needed)
+﻿# VajraStocks - Windows Installer
+# Usage: powershell -ExecutionPolicy Bypass -File .\install.ps1
 
-Set-StrictMode -Version Latest
-$ErrorActionPreference = 'Stop'
-
-$AppDir   = $PSScriptRoot
-$DataDir  = "$env:LOCALAPPDATA\VajraStocks"
+$AppDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ShortcutPath = "$env:USERPROFILE\Desktop\VajraStocks.lnk"
 
 Write-Host ""
-Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "   VajraStocks — Setup" -ForegroundColor Cyan
-Write-Host "========================================" -ForegroundColor Cyan
+Write-Host "=======================================" -ForegroundColor Cyan
+Write-Host "   VajraStocks - Setup" -ForegroundColor Cyan
+Write-Host "=======================================" -ForegroundColor Cyan
 Write-Host ""
 
-# 1. Check Python 3.12+
-Write-Host "[1/5] Checking Python..." -ForegroundColor Yellow
-try {
-    $pyVer = python --version 2>&1
-    if ($pyVer -match "Python 3\.(1[2-9]|[2-9]\d)") {
-        Write-Host "      Python OK: $pyVer" -ForegroundColor Green
-    } else {
-        Write-Host "      Python 3.12+ required. Found: $pyVer" -ForegroundColor Red
-        Write-Host "      Install from https://python.org/downloads or via winget:" -ForegroundColor Yellow
-        Write-Host "      winget install Python.Python.3.12" -ForegroundColor White
-        Read-Host "Press Enter to exit"
-        exit 1
-    }
-} catch {
-    Write-Host "      Python not found. Installing via winget..." -ForegroundColor Yellow
-    winget install -e --id Python.Python.3.12 --silent
+# 1. Check uv
+Write-Host "[1/4] Checking uv package manager..." -ForegroundColor Yellow
+$uvOk = $false
+try { $ver = (uv --version) 2>$null; if ($ver) { $uvOk = $true } } catch { }
+if (-not $uvOk) {
+    Write-Host "      Installing uv via pip..." -ForegroundColor Yellow
+    pip install uv
+} else {
+    Write-Host "      uv OK: $ver" -ForegroundColor Green
 }
 
-# 2. Install uv
-Write-Host "[2/5] Installing uv package manager..." -ForegroundColor Yellow
-try {
-    $uvVer = uv --version 2>&1
-    Write-Host "      uv OK: $uvVer" -ForegroundColor Green
-} catch {
-    pip install uv --quiet
-    Write-Host "      uv installed." -ForegroundColor Green
-}
-
-# 3. Backend dependencies
-Write-Host "[3/5] Installing backend dependencies..." -ForegroundColor Yellow
+# 2. Backend dependencies
+Write-Host "[2/4] Installing backend dependencies..." -ForegroundColor Yellow
 Set-Location $AppDir
-uv sync --quiet
-Write-Host "      Backend dependencies OK." -ForegroundColor Green
+uv sync 2>$null
+Write-Host "      Backend OK." -ForegroundColor Green
 
-# 4. Frontend build
-Write-Host "[4/5] Building frontend..." -ForegroundColor Yellow
-Set-Location "$AppDir\frontend"
-if (-not (Test-Path "node_modules")) {
-    npm install --silent
-}
-npm run build --silent
-Write-Host "      Frontend built." -ForegroundColor Green
+# 3. Frontend build
+Write-Host "[3/4] Building frontend..." -ForegroundColor Yellow
+Set-Location (Join-Path $AppDir "frontend")
+if (-not (Test-Path "node_modules")) { npm install }
+npm run build
 Set-Location $AppDir
+Write-Host "      Frontend OK." -ForegroundColor Green
 
-# 5. Create data directory
-Write-Host "[5/5] Creating data directory and desktop shortcut..." -ForegroundColor Yellow
-New-Item -ItemType Directory -Force -Path "$AppDir\data" | Out-Null
-New-Item -ItemType Directory -Force -Path $DataDir | Out-Null
-
-# Create start.ps1 launcher
-$startScript = @"
-Set-Location '$AppDir'
-Start-Process "http://localhost:8000" -ErrorAction SilentlyContinue
-uv run uvicorn stocks.api.main:app --host 127.0.0.1 --port 8000
-"@
-$startScript | Out-File -FilePath "$AppDir\start.ps1" -Encoding utf8 -Force
-
-# Create Desktop shortcut
+# 4. Shortcut
+Write-Host "[4/4] Creating Desktop shortcut..." -ForegroundColor Yellow
+New-Item -ItemType Directory -Force -Path (Join-Path $AppDir "data") | Out-Null
 $wsh = New-Object -ComObject WScript.Shell
-$sc  = $wsh.CreateShortcut($ShortcutPath)
-$sc.TargetPath       = "powershell.exe"
-$sc.Arguments        = "-ExecutionPolicy Bypass -WindowStyle Minimized -File `"$AppDir\start.ps1`""
+$sc = $wsh.CreateShortcut($ShortcutPath)
+$sc.TargetPath = "powershell.exe"
+$sc.Arguments = "-ExecutionPolicy Bypass -WindowStyle Normal -File " + (Join-Path $AppDir "start.ps1")
 $sc.WorkingDirectory = $AppDir
-$sc.Description      = "VajraStocks — NSE Analysis Platform"
-$sc.IconLocation     = "powershell.exe"
+$sc.Description = "VajraStocks NSE Analysis Platform"
 $sc.Save()
+Write-Host "      Shortcut created on Desktop." -ForegroundColor Green
 
 Write-Host ""
-Write-Host "========================================" -ForegroundColor Green
-Write-Host "   Installation complete!" -ForegroundColor Green
-Write-Host "========================================" -ForegroundColor Green
+Write-Host "=======================================" -ForegroundColor Green
+Write-Host "   Setup complete!" -ForegroundColor Green
+Write-Host "   Double-click VajraStocks on your" -ForegroundColor Green
+Write-Host "   Desktop to launch the app." -ForegroundColor Green
+Write-Host "   Opens at http://localhost:8000" -ForegroundColor Cyan
+Write-Host "=======================================" -ForegroundColor Green
 Write-Host ""
-Write-Host "   A 'VajraStocks' shortcut has been added to your Desktop." -ForegroundColor White
-Write-Host "   Double-click it to start the application." -ForegroundColor White
-Write-Host "   The app opens in your browser at http://localhost:8000" -ForegroundColor Cyan
-Write-Host ""
-Read-Host "Press Enter to exit"
