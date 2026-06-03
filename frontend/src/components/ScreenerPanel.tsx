@@ -1,33 +1,109 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useStockStore } from '../store/useStockStore';
-import { Play, Eye, Filter, RefreshCw, BarChart2, Download } from 'lucide-react';
+import { Play, Eye, Filter, RefreshCw, BarChart2, Download, Bookmark, Zap } from 'lucide-react';
 import type { ScreenerRow } from '../services/api';
 
+// ── Screener presets ─────────────────────────────────────────────────────────
+const PRESETS = [
+  {
+    name: 'Breakout Scanner',
+    emoji: '🚀',
+    desc: 'Vol >2x + SMA 200 above + HA bullish',
+    filters: { volume_breakout: '2.0X' as const, sma_200_cross: 'ABOVE' as const, ha_dir: 'UP' as const },
+  },
+  {
+    name: 'Momentum',
+    emoji: '⚡',
+    desc: 'RSI 55-75 + MACD bullish + all SMAs above',
+    filters: { min_rsi: 55, max_rsi: 75, macd_trend: 'BULLISH' as const, sma_20_cross: 'ABOVE' as const, sma_50_cross: 'ABOVE' as const, sma_200_cross: 'ABOVE' as const },
+  },
+  {
+    name: 'Pullback to SMA20',
+    emoji: '📉',
+    desc: 'RSI 40-55 + MACD bullish + SMA 200 above',
+    filters: { min_rsi: 40, max_rsi: 55, macd_trend: 'BULLISH' as const, sma_200_cross: 'ABOVE' as const },
+  },
+  {
+    name: 'Oversold Bounce',
+    emoji: '🔄',
+    desc: 'RSI <35 + SMA 200 above',
+    filters: { max_rsi: 35, sma_200_cross: 'ABOVE' as const },
+  },
+  {
+    name: 'Volume Surge',
+    emoji: '📊',
+    desc: 'Vol >3x average — unusual activity',
+    filters: { volume_breakout: '3.0X' as const },
+  },
+  {
+    name: 'Swing Reversal',
+    emoji: '↩️',
+    desc: 'RSI <45 + Renko DOWN reversal candidates',
+    filters: { max_rsi: 45, renko_dir: 'DOWN' as const },
+  },
+  {
+    name: 'NR7 Squeeze',
+    emoji: '🎯',
+    desc: 'Narrowest range of last 7 days — pre-breakout compression',
+    filters: { only_nr7: true },
+  },
+  {
+    name: 'Inside Bar',
+    emoji: '📦',
+    desc: 'Low-risk entry with well-defined stop loss',
+    filters: { only_inside_bar: true },
+  },
+  {
+    name: 'Gap Up',
+    emoji: '⬆️',
+    desc: 'Opened >1% above yesterday\'s close on high volume',
+    filters: { only_gap_up: true, volume_breakout: '1.5X' as const },
+  },
+  {
+    name: 'RS Leaders',
+    emoji: '🏆',
+    desc: 'Outperforming NIFTY 50 by >20% over 1 month (RS > 1.2)',
+    filters: { min_rs_1m: 1.2, sma_200_cross: 'ABOVE' as const },
+  },
+];
+
 export const ScreenerPanel: React.FC = () => {
-  const { 
-    screenerFilters, 
-    screenerResults, 
-    setScreenerFilters, 
-    runScreener, 
-    isLoading 
+  const {
+    screenerFilters,
+    screenerResults,
+    setScreenerFilters,
+    runScreener,
+    isLoading,
+    setActiveTab,
+    setSelectedSymbol,
+    watchlists,
+    addToWatchlist,
   } = useStockStore();
 
-  // Client-side sorting states
+  // Client-side sorting + pagination states
   const [sortField, setSortField] = useState<keyof ScreenerRow | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [visibleCount, setVisibleCount] = useState(50);
+  const PAGE_SIZE = 50;
 
-  useEffect(() => {
-    // Run an initial sweep when the panel is first mounted
-    runScreener();
-  }, []);
+  useEffect(() => { runScreener(); }, []);
+  // Reset to first page whenever results update
+  useEffect(() => { setVisibleCount(PAGE_SIZE); }, [screenerResults]);
 
   const handleRunScreener = () => {
     runScreener();
   };
 
-  const handleSelectScreenerMatch = (symbol: string) => {
-    // Open in a new tab/window pointing to the stock details
-    window.open(`/?symbol=${symbol}`, '_blank');
+  // Navigate in-place to the Explorer Dashboard for the selected symbol
+  const handleSelectScreenerMatch = async (symbol: string) => {
+    await setSelectedSymbol(symbol);
+    setActiveTab('explorer');
+  };
+
+  // Add ticker to the first watchlist (or the only one if one exists)
+  const handleAddToWatchlist = (symbol: string) => {
+    const target = watchlists[0];
+    if (target) addToWatchlist(target.id, symbol);
   };
 
   const formatNumber = (val: number | null | undefined, decimals = 2) => {
@@ -159,8 +235,45 @@ export const ScreenerPanel: React.FC = () => {
         </div>
       </div>
 
+      {/* ── Preset Cards ──────────────────────────────────────────────────── */}
+      <div className="flex flex-wrap gap-2">
+        {PRESETS.map(p => (
+          <button
+            key={p.name}
+            onClick={() => {
+              // Reset all filters then apply preset
+              setScreenerFilters({
+                min_rsi: undefined, max_rsi: undefined,
+                min_price: undefined, max_price: undefined,
+                sma_20_cross: undefined, sma_50_cross: undefined, sma_200_cross: undefined,
+                macd_trend: undefined, ha_dir: undefined, renko_dir: undefined, lb_dir: undefined,
+                volume_breakout: undefined, min_weekly_avg_volume: undefined,
+                only_nr7: undefined,
+                only_inside_bar: undefined,
+                only_gap_up: undefined,
+                only_gap_down: undefined,
+                min_rs_1m: undefined,
+                ...p.filters,
+              });
+              runScreener();
+            }}
+            disabled={isLoading}
+            className="flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-800/80 bg-[#121620]/30 hover:bg-[#121620]/70 hover:border-purple-500/40 disabled:opacity-40 transition cursor-pointer text-left"
+          >
+            <span className="text-base leading-none">{p.emoji}</span>
+            <div>
+              <div className="text-xs font-bold text-white flex items-center gap-1">
+                <Zap className="w-2.5 h-2.5 text-purple-400" />
+                {p.name}
+              </div>
+              <div className="text-[10px] text-slate-500">{p.desc}</div>
+            </div>
+          </button>
+        ))}
+      </div>
+
       {/* Advanced Filter Inputs Card */}
-      <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-11 gap-4 p-4 rounded-xl border border-slate-800/80 bg-[#121620]/30">
+      <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-13 gap-4 p-4 rounded-xl border border-slate-800/80 bg-[#121620]/30">
         
         {/* Weekly Avg Volume */}
         <div className="flex flex-col gap-1.5">
@@ -191,6 +304,29 @@ export const ScreenerPanel: React.FC = () => {
             <option value="2.0X">2.0x Breakout</option>
             <option value="3.0X">3.0x Breakout</option>
           </select>
+        </div>
+
+        {/* Price Range */}
+        <div className="flex flex-col gap-1.5">
+          <label className="text-xs font-semibold text-slate-400">Min Price (₹)</label>
+          <input
+            type="number"
+            placeholder="No Limit"
+            value={screenerFilters.min_price !== undefined ? screenerFilters.min_price : ''}
+            onChange={(e) => setScreenerFilters({ min_price: e.target.value === '' ? undefined : Number(e.target.value) })}
+            className="w-full px-3 py-1.5 text-sm rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
+          />
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <label className="text-xs font-semibold text-slate-400">Max Price (₹)</label>
+          <input
+            type="number"
+            placeholder="No Limit"
+            value={screenerFilters.max_price !== undefined ? screenerFilters.max_price : ''}
+            onChange={(e) => setScreenerFilters({ max_price: e.target.value === '' ? undefined : Number(e.target.value) })}
+            className="w-full px-3 py-1.5 text-sm rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
+          />
         </div>
 
         {/* RSI Range */}
@@ -321,8 +457,8 @@ export const ScreenerPanel: React.FC = () => {
           <label className="text-xs font-semibold text-slate-400">Three Line Break</label>
           <select
             value={screenerFilters.lb_dir || 'ANY'}
-            onChange={(e) => setScreenerFilters({ 
-              lb_dir: e.target.value === 'ANY' ? undefined : e.target.value as any 
+            onChange={(e) => setScreenerFilters({
+              lb_dir: e.target.value === 'ANY' ? undefined : e.target.value as any
             })}
             className="w-full px-3 py-1.5 text-sm rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
           >
@@ -331,6 +467,43 @@ export const ScreenerPanel: React.FC = () => {
             <option value="DOWN">Bearish (DOWN)</option>
           </select>
         </div>
+
+        {/* Pattern flags */}
+        <div className="flex flex-col gap-1.5 justify-end">
+          <label className="text-xs font-semibold text-slate-400">Patterns</label>
+          <div className="flex flex-col gap-1.5">
+            {([
+              { key: 'only_nr7' as const,       label: 'NR7 only'       },
+              { key: 'only_inside_bar' as const, label: 'Inside Bar'     },
+              { key: 'only_gap_up' as const,     label: 'Gap Up (>1%)'   },
+              { key: 'only_gap_down' as const,   label: 'Gap Down (>1%)' },
+            ]).map(({ key, label }) => (
+              <label key={key} className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={!!screenerFilters[key]}
+                  onChange={(e) => setScreenerFilters({ [key]: e.target.checked || undefined })}
+                  className="accent-purple-500"
+                />
+                <span className="text-xs text-slate-300">{label}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        {/* RS Score filter */}
+        <div className="flex flex-col gap-1.5 justify-end">
+          <label className="text-xs font-semibold text-slate-400">Min RS vs NIFTY</label>
+          <input
+            type="number"
+            step="0.1"
+            placeholder="e.g. 1.2"
+            value={screenerFilters.min_rs_1m !== undefined ? screenerFilters.min_rs_1m : ''}
+            onChange={(e) => setScreenerFilters({ min_rs_1m: e.target.value === '' ? undefined : Number(e.target.value) })}
+            className="w-full px-3 py-1.5 text-sm rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
+          />
+          <span className="text-[10px] text-slate-500">1.0 = matches NIFTY · &gt;1.2 = outperforming</span>
+        </div>
       </div>
 
       {/* Results Grid Table */}
@@ -338,12 +511,15 @@ export const ScreenerPanel: React.FC = () => {
         <div className="flex items-center justify-between pb-3 border-b border-slate-800 mb-3 shrink-0">
           <h3 className="text-sm font-bold text-white tracking-wide flex items-center gap-1.5">
             <BarChart2 className="w-4 h-4 text-purple-400" />
-            Matching Stocks ({sortedResults.length})
+            Matching Stocks
+            <span className="font-mono text-xs text-slate-400 font-normal">
+              ({sortedResults.length.toLocaleString()} result{sortedResults.length !== 1 ? 's' : ''})
+            </span>
           </h3>
           {isLoading && <RefreshCw className="w-4 h-4 text-purple-400 animate-spin" />}
         </div>
 
-        <div className="flex-1 overflow-auto">
+        <div className="flex-1 overflow-auto flex flex-col">
           <table className="w-full border-collapse text-left text-sm text-slate-300">
             <thead>
               <tr className="border-b border-slate-800 text-xs text-slate-400 uppercase tracking-wider font-mono select-none">
@@ -389,6 +565,10 @@ export const ScreenerPanel: React.FC = () => {
                 <th className="py-2.5 px-3 text-center cursor-pointer hover:text-white transition" onClick={() => handleSort('line_break_direction')}>
                   Three Line Break {renderSortIcon('line_break_direction')}
                 </th>
+                <th className="py-2.5 px-3 text-center cursor-pointer hover:text-white transition" onClick={() => handleSort('rs_score_1m' as any)}>
+                  RS 1M {renderSortIcon('rs_score_1m' as any)}
+                </th>
+                <th className="py-2.5 px-3 text-center">Patterns</th>
                 <th className="py-2.5 px-3 text-right">Actions</th>
               </tr>
             </thead>
@@ -402,7 +582,7 @@ export const ScreenerPanel: React.FC = () => {
                   </td>
                 </tr>
               ) : (
-                sortedResults.map((row) => {
+                sortedResults.slice(0, visibleCount).map((row) => {
                   const isChangeBullish = (row.price_pct_change || 0) >= 0;
                   const isHaBullish = row.ha_direction === 'UP';
                   const isRenkoBullish = row.renko_direction === 'UP';
@@ -534,15 +714,64 @@ export const ScreenerPanel: React.FC = () => {
                         </span>
                       </td>
                       
+                      {/* RS Score */}
+                      <td className="py-3 px-3 text-center">
+                        {(row as any).rs_score_1m != null ? (
+                          <span className={`font-mono text-xs px-2 py-0.5 rounded border ${
+                            (row as any).rs_score_1m >= 1.2 ? 'text-emerald-400 bg-emerald-950/20 border-emerald-900/30'
+                            : (row as any).rs_score_1m >= 0.8 ? 'text-slate-300 bg-slate-900/40 border-slate-800'
+                            : 'text-rose-400 bg-rose-950/20 border-rose-900/30'
+                          }`}>
+                            {((row as any).rs_score_1m as number).toFixed(2)}x
+                          </span>
+                        ) : <span className="text-slate-600">—</span>}
+                      </td>
+                      {/* Patterns / Signals */}
+                      <td className="py-3 px-3 text-center">
+                        <div className="flex flex-wrap gap-1 justify-center items-center">
+                          {row.is_nr7 && (
+                            <span className="text-[10px] font-bold text-amber-400 bg-amber-950/25 border border-amber-900/30 px-1.5 py-0.5 rounded">
+                              NR7
+                            </span>
+                          )}
+                          {row.is_inside_bar && (
+                            <span className="text-[10px] font-bold text-indigo-400 bg-indigo-950/25 border border-indigo-900/30 px-1.5 py-0.5 rounded">
+                              Inside Bar
+                            </span>
+                          )}
+                          {row.is_gap_up && (
+                            <span className="text-[10px] font-bold text-emerald-400 bg-emerald-950/25 border border-emerald-900/30 px-1.5 py-0.5 rounded">
+                              ↑ Gap Up
+                            </span>
+                          )}
+                          {row.is_gap_down && (
+                            <span className="text-[10px] font-bold text-rose-400 bg-rose-950/25 border border-rose-900/30 px-1.5 py-0.5 rounded">
+                              ↓ Gap Down
+                            </span>
+                          )}
+                          {!row.is_nr7 && !row.is_inside_bar && !row.is_gap_up && !row.is_gap_down && (
+                            <span className="text-slate-700">—</span>
+                          )}
+                        </div>
+                      </td>
                       {/* Actions */}
                       <td className="py-3 px-3 text-right">
-                        <button
-                          onClick={() => handleSelectScreenerMatch(row.symbol)}
-                          className="p-1 px-2.5 rounded bg-slate-900 border border-slate-800 hover:border-purple-500/80 text-slate-400 hover:text-white text-xs flex items-center gap-1.5 ml-auto transition cursor-pointer"
-                        >
-                          <Eye className="w-3.5 h-3.5" />
-                          Inspect
-                        </button>
+                        <div className="flex items-center gap-1.5 justify-end">
+                          <button
+                            onClick={() => handleAddToWatchlist(row.symbol)}
+                            title="Add to Watchlist"
+                            className="p-1 px-2 rounded bg-slate-900 border border-slate-800 hover:border-indigo-500/80 text-slate-500 hover:text-indigo-400 text-xs flex items-center gap-1 transition cursor-pointer"
+                          >
+                            <Bookmark className="w-3 h-3" />
+                          </button>
+                          <button
+                            onClick={() => handleSelectScreenerMatch(row.symbol)}
+                            className="p-1 px-2.5 rounded bg-slate-900 border border-slate-800 hover:border-purple-500/80 text-slate-400 hover:text-white text-xs flex items-center gap-1.5 transition cursor-pointer"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            Inspect
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -550,6 +779,32 @@ export const ScreenerPanel: React.FC = () => {
               )}
             </tbody>
           </table>
+          {/* Pagination footer */}
+          {sortedResults.length > PAGE_SIZE && (
+            <div className="shrink-0 flex items-center justify-between px-4 py-3 border-t border-slate-800 bg-[#0c0f17]">
+              <span className="text-xs text-slate-500">
+                Showing <span className="text-slate-300 font-semibold">{Math.min(visibleCount, sortedResults.length).toLocaleString()}</span> of <span className="text-slate-300 font-semibold">{sortedResults.length.toLocaleString()}</span> results
+              </span>
+              <div className="flex gap-2">
+                {visibleCount < sortedResults.length && (
+                  <button
+                    onClick={() => setVisibleCount(v => Math.min(v + PAGE_SIZE, sortedResults.length))}
+                    className="px-3 py-1.5 text-xs font-bold bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white rounded-lg transition cursor-pointer"
+                  >
+                    Load {Math.min(PAGE_SIZE, sortedResults.length - visibleCount)} More
+                  </button>
+                )}
+                {visibleCount < sortedResults.length && (
+                  <button
+                    onClick={() => setVisibleCount(sortedResults.length)}
+                    className="px-3 py-1.5 text-xs font-bold bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-400 hover:text-white rounded-lg transition cursor-pointer"
+                  >
+                    Load All ({sortedResults.length.toLocaleString()})
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -1,4 +1,4 @@
-const BASE_URL = 'http://localhost:8000/api/v1';
+const BASE_URL = `${import.meta.env.VITE_API_BASE_URL}/api/v1`;
 
 export interface SymbolDetail {
   id: number;
@@ -41,9 +41,15 @@ export interface IndicatorData {
   sma_20?: number | null;
   sma_50?: number | null;
   sma_200?: number | null;
+  ema_9?: number | null;
+  ema_21?: number | null;
   macd_line?: number | null;
   macd_signal?: number | null;
   macd_histogram?: number | null;
+  bb_upper?: number | null;
+  bb_middle?: number | null;
+  bb_lower?: number | null;
+  atr_14?: number | null;
 }
 
 export interface ScreenerRow {
@@ -63,6 +69,11 @@ export interface ScreenerRow {
   macd_trend?: string | null;
   renko_direction?: string | null;
   line_break_direction?: string | null;
+  is_nr7?: boolean | null;
+  is_inside_bar?: boolean | null;
+  is_gap_up?: boolean | null;
+  is_gap_down?: boolean | null;
+  rs_score_1m?: number | null;
   weekly_avg_volume?: number | null;
   volume_breakout_ratio?: number | null;
 }
@@ -177,6 +188,8 @@ export const apiService = {
   async runScreenerPost(filters: {
     min_rsi?: number;
     max_rsi?: number;
+    min_price?: number;
+    max_price?: number;
     sma_20_cross?: 'ABOVE' | 'BELOW';
     sma_50_cross?: 'ABOVE' | 'BELOW';
     sma_200_cross?: 'ABOVE' | 'BELOW';
@@ -186,6 +199,11 @@ export const apiService = {
     lb_dir?: 'UP' | 'DOWN';
     min_weekly_avg_volume?: number;
     volume_breakout?: 'ANY' | '1.5X' | '2.0X' | '3.0X';
+    only_nr7?: boolean;
+    only_inside_bar?: boolean;
+    only_gap_up?: boolean;
+    only_gap_down?: boolean;
+    min_rs_1m?: number;
     limit?: number;
   }): Promise<ScreenerRow[]> {
     const response = await fetch(`${BASE_URL}/screeners/run`, {
@@ -203,6 +221,11 @@ export const apiService = {
         lb_dir: filters.lb_dir ?? null,
         min_weekly_avg_volume: filters.min_weekly_avg_volume ?? null,
         volume_breakout: filters.volume_breakout ?? null,
+        only_nr7: filters.only_nr7 ?? false,
+        only_inside_bar: filters.only_inside_bar ?? false,
+        only_gap_up: filters.only_gap_up ?? false,
+        only_gap_down: filters.only_gap_down ?? false,
+        min_rs_1m: filters.min_rs_1m ?? null,
         limit: filters.limit ?? 100
       })
     });

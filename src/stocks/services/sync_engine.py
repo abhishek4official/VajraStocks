@@ -50,6 +50,12 @@ class SyncEngine:
                 # Re-query active symbols
                 active_symbols = db_service.get_active_symbols()
 
+            # Ensure all configured index symbols (^NSEI, ^NSEBANK, etc.) exist in the DB.
+            # Indices are never in the NSE equities CSV so they must be seeded separately.
+            symbol_service.ensure_indices_registered()
+            # Re-query so newly registered indices are visible
+            active_symbols = db_service.get_active_symbols()
+
             # Filter by specific symbols if provided (useful for manual runs/testing/CLI arguments)
             if specific_symbols:
                 # Standardize symbols to append .NS if they are raw (e.g. RELIANCE -> RELIANCE.NS)

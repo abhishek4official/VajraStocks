@@ -119,6 +119,13 @@ class AgentPool:
         self.llm = llm_client
         self.agents: dict[str, dict[str, Any]] = {}
         self.agents_dir = Path("config/agents")
+        # Build shared Ollama connection pool once for all get_agent() calls.
+        # Timeout is 20 minutes (1200s) to accommodate slow local Ollama inference.
+        import httpx
+        from ollama import AsyncClient
+        limits = httpx.Limits(max_connections=100, max_keepalive_connections=20, keepalive_expiry=60.0)
+        transport = httpx.AsyncHTTPTransport(retries=3, limits=limits)
+        self._ollama_client = AsyncClient(host=self.config.ai.base_url, timeout=1200.0, transport=transport)
         self._load_agent_registry()
 
     def _load_agent_registry(self) -> None:
@@ -163,13 +170,6 @@ class AgentPool:
     def get_agent(self, agent_name: str) -> Agent:
         """Retrieves or builds a standard Microsoft Agent Framework Agent instance."""
         cfg = self.get_agent_config(agent_name)
-        import httpx
-        from ollama import AsyncClient
-
-        # Keep Ollama timeout to 20 minutes (1200 seconds) by passing configured AsyncClient with robust retries and keepalive
-        limits = httpx.Limits(max_connections=100, max_keepalive_connections=20, keepalive_expiry=60.0)
-        transport = httpx.AsyncHTTPTransport(retries=3, limits=limits)
-        ollama_client = AsyncClient(host=self.config.ai.base_url, timeout=1200.0, transport=transport)
 
         # Enforce native MAF structured response using response_format option if applicable
         options = {}
@@ -186,7 +186,7 @@ class AgentPool:
         client = OllamaChatClient(
             host=self.config.ai.base_url,
             model=self.config.ai.model,  # Strictly use the model configured in config.yaml!
-            client=ollama_client,
+            client=self._ollama_client,
         )
         return Agent(
             client=client,

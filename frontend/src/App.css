@@ -1,1 +1,6 @@
 /* Cleared default styles to prevent conflicts with index.css and Tailwind */
+
+@keyframes shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}

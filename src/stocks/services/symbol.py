@@ -101,6 +101,58 @@ class SymbolService:
         logger.info(f"Successfully parsed {len(parsed_symbols)} symbols from CSV.")
         return parsed_symbols
 
+    def ensure_indices_registered(self) -> int:
+        """Inserts any configured default index symbols (e.g. ^NSEI, ^NSEBANK) that are missing from the database.
+
+        Index symbols are never included in the NSE equities CSV, so they must be seeded separately.
+        This is idempotent — already-present indices are left untouched.
+        """
+        if not self.config.symbols.include_indices:
+            return 0
+
+        indices = self.config.symbols.default_indices
+        if not indices:
+            return 0
+
+        registered = 0
+        for raw_symbol in indices:
+            sym_str = raw_symbol.strip().upper()
+            existing = self.db.scalar(select(Symbol).where(Symbol.symbol == sym_str))
+            if existing:
+                # Make sure it is active
+                if not existing.is_active:
+                    existing.is_active = True
+                    self.db.commit()
+                    logger.info(f"Re-activated index symbol: {sym_str}")
+                continue
+
+            # Derive a human-readable name from the symbol
+            index_names: dict[str, str] = {
+                "^NSEI":    "Nifty 50 Index",
+                "^NSEBANK": "Nifty Bank Index",
+                "^NSMIDCP": "Nifty Midcap 50 Index",
+                "^CNXIT":   "Nifty IT Index",
+            }
+            display_name = index_names.get(sym_str, f"{sym_str} Index")
+
+            new_sym = Symbol(
+                symbol=sym_str,
+                company_name=display_name,
+                isin=f"IDX-{sym_str.lstrip('^')}",   # synthetic ISIN — indices have no real ISIN
+                series="INDEX",
+                is_active=True,
+            )
+            self.db.add(new_sym)
+            try:
+                self.db.commit()
+                registered += 1
+                logger.info(f"Registered index symbol: {sym_str} ({display_name})")
+            except Exception as e:
+                self.db.rollback()
+                logger.warning(f"Could not register index {sym_str}: {e}")
+
+        return registered
+
     def sync_symbols(self, symbols_data: list[dict[str, str]]) -> int:
         """Synchronizes symbols list with the database (inserts new, updates existing, handles delistings)."""
         logger.info(f"Synchronizing {len(symbols_data)} symbols with local database...")

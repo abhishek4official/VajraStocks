@@ -11,11 +11,60 @@ import type {
 } from 'lightweight-charts';
 import { useStockStore } from '../store/useStockStore';
 
+type ChartTimeframe = '1W' | '1M' | '3M' | '6M' | '1Y' | 'MAX';
+type ChartOverlay = 'sma20' | 'sma50' | 'sma200' | 'ema9' | 'ema21' | 'bb' | 'sr' | 'nifty';
+
 interface PriceChartProps {
   indicatorToShow: 'RSI' | 'MACD' | 'NONE';
+  timeframe?: ChartTimeframe;
+  overlays?: Set<ChartOverlay>;
+  niftyCandles?: import('../services/api').CandleData[];
+  customLines?: number[];
+  drawMode?: boolean;
+  onChartClick?: (price: number) => void;
 }
 
-export const PriceChart: React.FC<PriceChartProps> = ({ indicatorToShow }) => {
+/** Detect pivot highs/lows and return clustered S/R price levels. */
+function detectSRLevels(candles: { high: number; low: number; close: number }[], window = 3, maxLevels = 8): number[] {
+  if (candles.length < window * 2 + 1) return [];
+  const pivotHighs: number[] = [];
+  const pivotLows: number[] = [];
+
+  for (let i = window; i < candles.length - window; i++) {
+    const slice = candles.slice(i - window, i + window + 1);
+    const isHigh = candles[i].high === Math.max(...slice.map(c => c.high));
+    const isLow  = candles[i].low  === Math.min(...slice.map(c => c.low));
+    if (isHigh) pivotHighs.push(candles[i].high);
+    if (isLow)  pivotLows.push(candles[i].low);
+  }
+
+  // Cluster levels within 0.5% of each other, keep the most-touched
+  const all = [...pivotHighs, ...pivotLows];
+  const clusters: number[] = [];
+  for (const lvl of all) {
+    const nearby = clusters.find(c => Math.abs(c - lvl) / lvl < 0.005);
+    if (!nearby) clusters.push(lvl);
+  }
+
+  // Sort by distance from last close and return top N
+  const lastClose = candles[candles.length - 1]?.close ?? 0;
+  return clusters
+    .sort((a, b) => Math.abs(a - lastClose) - Math.abs(b - lastClose))
+    .slice(0, maxLevels);
+}
+
+/** Returns a UTC unix timestamp (seconds) for N days before today. */
+function daysAgoUTC(days: number): number {
+  const d = new Date();
+  d.setUTCHours(0, 0, 0, 0);
+  d.setUTCDate(d.getUTCDate() - days);
+  return d.getTime() / 1000;
+}
+
+export const PriceChart: React.FC<PriceChartProps> = ({
+  indicatorToShow, timeframe = '1Y', overlays = new Set(),
+  niftyCandles = [], customLines = [], drawMode = false, onChartClick,
+}) => {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const indicatorContainerRef = useRef<HTMLDivElement>(null);
   
@@ -190,61 +239,161 @@ export const PriceChart: React.FC<PriceChartProps> = ({ indicatorToShow }) => {
     });
     mainSeries.setData(primaryData);
 
-    // 6. Draw SMAs overlay on Price chart (only for Candlesticks and Heikin-Ashi)
-    let sma20Series: any = null;
-    let sma50Series: any = null;
-    let sma200Series: any = null;
+    // Apply timeframe zoom after data is loaded
+    if (timeframe === 'MAX') {
+      mainChart.timeScale().fitContent();
+    } else {
+      const daysMap: Record<ChartTimeframe, number> = {
+        '1W': 7, '1M': 30, '3M': 90, '6M': 180, '1Y': 365, 'MAX': 0,
+      };
+      const fromTs = daysAgoUTC(daysMap[timeframe]);
+      const toTs = daysAgoUTC(0) + 86400; // today + 1 day buffer
+      try {
+        mainChart.timeScale().setVisibleRange({ from: fromTs as any, to: toTs as any });
+      } catch { mainChart.timeScale().fitContent(); }
+    }
 
+    // 5b. Custom horizontal price lines (user-drawn, persisted per symbol)
+    for (const price of customLines) {
+      mainSeries.createPriceLine({
+        price,
+        color: 'rgba(168, 85, 247, 0.8)',
+        lineWidth: 1,
+        lineStyle: 1, // dashed
+        axisLabelVisible: true,
+        title: '─',
+      });
+    }
+
+    // 5c. Draw mode — capture click to add a new line at the crosshair price
+    let lastCrosshairPrice = 0;
+    mainChart.subscribeCrosshairMove((param: any) => {
+      if (param.seriesData) {
+        const d = param.seriesData.get(mainSeries);
+        if (d) lastCrosshairPrice = (d as any).close ?? (d as any).value ?? 0;
+      }
+    });
+    if (drawMode && onChartClick) {
+      chartContainerRef.current?.addEventListener('click', () => {
+        if (lastCrosshairPrice > 0) onChartClick(lastCrosshairPrice);
+      });
+    }
+
+    // 6. Draw SMA overlays (toggleable)
     if (!isRenko && !isLineBreak && indicators.length > 0) {
-      const sma20Data: LineData[] = indicators
-        .filter(ind => ind.sma_20 !== null && ind.sma_20 !== undefined && timeMap.has(ind.time))
-        .map(ind => ({
-          time: timeMap.get(ind.time) as any,
-          value: Number(ind.sma_20)
-        }));
-      
-      const sma50Data: LineData[] = indicators
-        .filter(ind => ind.sma_50 !== null && ind.sma_50 !== undefined && timeMap.has(ind.time))
-        .map(ind => ({
-          time: timeMap.get(ind.time) as any,
-          value: Number(ind.sma_50)
-        }));
+      const addSMA = (key: 'sma_20' | 'sma_50' | 'sma_200', title: string, color: string, width: number) => {
+        const data: LineData[] = indicators
+          .filter(ind => ind[key] != null && timeMap.has(ind.time))
+          .map(ind => ({ time: timeMap.get(ind.time) as any, value: Number(ind[key]) }));
+        if (data.length > 0) {
+          const s = mainChart.addSeries(LineSeries, { color, lineWidth: width, title, priceLineVisible: false });
+          s.setData(data);
+        }
+      };
 
-      const sma200Data: LineData[] = indicators
-        .filter(ind => ind.sma_200 !== null && ind.sma_200 !== undefined && timeMap.has(ind.time))
-        .map(ind => ({
-          time: timeMap.get(ind.time) as any,
-          value: Number(ind.sma_200)
-        }));
+      if (overlays.has('sma20'))  addSMA('sma_20',  'SMA 20',  '#3b82f6', 1.5);
+      if (overlays.has('sma50'))  addSMA('sma_50',  'SMA 50',  '#f59e0b', 1.5);
+      if (overlays.has('sma200')) addSMA('sma_200', 'SMA 200', '#ec4899', 2.0);
+    }
 
-      if (sma20Data.length > 0) {
-        sma20Series = mainChart.addSeries(LineSeries, {
-          color: '#3b82f6', // sleek blue
-          lineWidth: 1.5,
-          title: 'SMA 20',
-          priceLineVisible: false
-        });
-        sma20Series.setData(sma20Data);
+    // 6b. EMA 9 / EMA 21 overlays
+    if (overlays.has('ema9') && !isRenko && !isLineBreak && indicators.length > 0) {
+      const ema9Data: LineData[] = indicators
+        .filter(ind => ind.ema_9 != null && timeMap.has(ind.time))
+        .map(ind => ({ time: timeMap.get(ind.time) as any, value: Number(ind.ema_9) }));
+      if (ema9Data.length > 0) {
+        const s = mainChart.addSeries(LineSeries, { color: '#22d3ee', lineWidth: 1, lineStyle: 1, title: 'EMA 9', priceLineVisible: false });
+        s.setData(ema9Data);
       }
+    }
 
-      if (sma50Data.length > 0) {
-        sma50Series = mainChart.addSeries(LineSeries, {
-          color: '#f59e0b', // warm amber
-          lineWidth: 1.5,
-          title: 'SMA 50',
-          priceLineVisible: false
-        });
-        sma50Series.setData(sma50Data);
+    if (overlays.has('ema21') && !isRenko && !isLineBreak && indicators.length > 0) {
+      const ema21Data: LineData[] = indicators
+        .filter(ind => ind.ema_21 != null && timeMap.has(ind.time))
+        .map(ind => ({ time: timeMap.get(ind.time) as any, value: Number(ind.ema_21) }));
+      if (ema21Data.length > 0) {
+        const s = mainChart.addSeries(LineSeries, { color: '#f97316', lineWidth: 1, lineStyle: 1, title: 'EMA 21', priceLineVisible: false });
+        s.setData(ema21Data);
       }
+    }
 
-      if (sma200Data.length > 0) {
-        sma200Series = mainChart.addSeries(LineSeries, {
-          color: '#ec4899', // hot pink
-          lineWidth: 2.0,
-          title: 'SMA 200',
-          priceLineVisible: false
+    // 6c. Bollinger Bands overlay
+    if (overlays.has('bb') && !isRenko && !isLineBreak && indicators.length > 0) {
+      const bbFilter = (key: 'bb_upper' | 'bb_middle' | 'bb_lower') =>
+        indicators.filter(ind => ind[key] != null && timeMap.has(ind.time))
+          .map(ind => ({ time: timeMap.get(ind.time) as any, value: Number(ind[key]) }));
+
+      const bbUpper = bbFilter('bb_upper');
+      const bbMiddle = bbFilter('bb_middle');
+      const bbLower = bbFilter('bb_lower');
+
+      if (bbUpper.length > 0) {
+        const su = mainChart.addSeries(LineSeries, { color: 'rgba(148,163,184,0.5)', lineWidth: 1, lineStyle: 2, title: 'BB Upper', priceLineVisible: false });
+        su.setData(bbUpper);
+      }
+      if (bbMiddle.length > 0) {
+        const sm = mainChart.addSeries(LineSeries, { color: 'rgba(148,163,184,0.3)', lineWidth: 1, lineStyle: 2, title: 'BB Mid', priceLineVisible: false });
+        sm.setData(bbMiddle);
+      }
+      if (bbLower.length > 0) {
+        const sl = mainChart.addSeries(LineSeries, { color: 'rgba(148,163,184,0.5)', lineWidth: 1, lineStyle: 2, title: 'BB Lower', priceLineVisible: false });
+        sl.setData(bbLower);
+      }
+    }
+
+    // 6d. Auto Support & Resistance levels
+    if (overlays.has('sr') && primaryData.length > 10) {
+      const srcCandles = chartType === 'candles' ? candles
+        : chartType === 'heikin-ashi' ? heikinAshi : [];
+      if (srcCandles.length > 0) {
+        const levels = detectSRLevels(srcCandles);
+        const lastTs = primaryData[primaryData.length - 1]?.time as number;
+        const firstTs = primaryData[0]?.time as number;
+        for (const lvl of levels) {
+          const srSeries = mainChart.addSeries(LineSeries, {
+            color: 'rgba(251, 191, 36, 0.55)',
+            lineWidth: 1,
+            lineStyle: 1, // dashed
+            priceLineVisible: false,
+            lastValueVisible: false,
+            crosshairMarkerVisible: false,
+          });
+          srSeries.setData([
+            { time: firstTs as any, value: lvl },
+            { time: lastTs as any,  value: lvl },
+          ]);
+        }
+      }
+    }
+
+    // 6e. NIFTY 50 normalised overlay (% change from first visible candle)
+    if (overlays.has('nifty') && niftyCandles.length > 0 && primaryData.length > 0) {
+      // Build a map: date-string → nifty close
+      const niftyMap = new Map<string, number>(niftyCandles.map(c => [c.time, c.close]));
+      // Match NIFTY dates to the stock's timeMap
+      const niftyPts: { time: number; close: number }[] = [];
+      for (const c of candles) {
+        const nc = niftyMap.get(c.time);
+        const ts = timeMap.get(c.time);
+        if (nc != null && ts != null) niftyPts.push({ time: ts, close: nc });
+      }
+      if (niftyPts.length > 1) {
+        const base = niftyPts[0].close;
+        const stockBase = primaryData[0]?.close ?? primaryData[0]?.value ?? (candles[0]?.close ?? 1);
+        // Scale NIFTY to same starting price as stock
+        const niftyScaled: LineData[] = niftyPts.map(p => ({
+          time: p.time as any,
+          value: stockBase * (p.close / base),
+        }));
+        const niftySeries = mainChart.addSeries(LineSeries, {
+          color: 'rgba(251,191,36,0.7)',
+          lineWidth: 1.5,
+          lineStyle: 0,
+          title: 'NIFTY',
+          priceLineVisible: false,
+          lastValueVisible: true,
         });
-        sma200Series.setData(sma200Data);
+        niftySeries.setData(niftyScaled);
       }
     }
 
@@ -404,26 +553,52 @@ export const PriceChart: React.FC<PriceChartProps> = ({ indicatorToShow }) => {
       }
     };
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
-    chartType, 
-    candles, 
-    heikinAshi, 
-    renkoBricks, 
-    lineBreakLines, 
-    indicators, 
+    chartType,
+    candles,
+    heikinAshi,
+    renkoBricks,
+    lineBreakLines,
+    indicators,
     indicatorToShow,
-    activeSymbol
+    timeframe,
+    overlays,
+    niftyCandles,
+    customLines,
+    drawMode,
+    activeSymbol,
   ]);
+
+  const { isLoading } = useStockStore();
+
+  // Show shimmer skeleton while chart data is loading
+  if (isLoading && candles.length === 0) {
+    return (
+      <div className="flex flex-col gap-2 w-full">
+        <div className="w-full rounded-xl border border-slate-800/80 bg-[#101217] overflow-hidden"
+          style={{ height: indicatorToShow !== 'NONE' ? 380 : 500 }}>
+          <div className="h-full w-full animate-pulse">
+            <div className="h-full bg-gradient-to-r from-slate-900/0 via-slate-800/30 to-slate-900/0 bg-[length:400%_100%]"
+              style={{ animation: 'shimmer 1.8s ease-in-out infinite', backgroundPosition: '200% 0' }} />
+          </div>
+        </div>
+        {indicatorToShow !== 'NONE' && (
+          <div className="w-full rounded-xl border border-slate-800/80 bg-[#101217] overflow-hidden animate-pulse" style={{ height: 180 }} />
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-2 w-full">
-      <div 
-        ref={chartContainerRef} 
+      <div
+        ref={chartContainerRef}
         className="w-full rounded-xl overflow-hidden border border-slate-800/80 bg-[#101217]"
       />
       {indicatorToShow !== 'NONE' && (
-        <div 
-          ref={indicatorContainerRef} 
+        <div
+          ref={indicatorContainerRef}
           className="w-full rounded-xl overflow-hidden border border-slate-800/80 bg-[#101217]"
         />
       )}

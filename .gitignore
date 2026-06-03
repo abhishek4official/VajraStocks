@@ -19,8 +19,8 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
-lib64/
+/lib/
+/lib64/
 parts/
 sdist/
 var/
@@ -241,4 +241,31 @@ Thumbs.db
 # SQL Server LocalDB local database backups or local attachments if created inside repo
 *.mdf
 *.ldf
+
+
+# ==========================================
+# Flutter / Dart Gitignore
+# ==========================================
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+**/build/
+**/coverage/
+app.*.symbols
+app.*.map.json
+/android/app/debug
+/android/app/profile
+/android/app/release
+*.apk
+*.ap_
+*.app
+*.ipa
+*.keystore
+*.jks
+local.properties
+key.properties
 

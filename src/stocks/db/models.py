@@ -279,6 +279,15 @@ class ScreeningSnapshot(Base):
     # Latest Line Break Direction
     line_break_direction: Mapped[str | None] = mapped_column(String(10), nullable=True)
 
+    # Pattern Detection Flags
+    is_nr7: Mapped[bool | None] = mapped_column(Boolean, nullable=True)        # NR7 — narrowest range of last 7 days
+    is_inside_bar: Mapped[bool | None] = mapped_column(Boolean, nullable=True)  # Inside bar — range contained within prior bar
+    is_gap_up: Mapped[bool | None] = mapped_column(Boolean, nullable=True)     # Today open > prev close by >1%
+    is_gap_down: Mapped[bool | None] = mapped_column(Boolean, nullable=True)   # Today open < prev close by >1%
+
+    # Relative Strength vs NIFTY 50
+    rs_score_1m: Mapped[float | None] = mapped_column(Float, nullable=True)    # (stock 21D return) / (NIFTY 21D return)
+
     updated_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now())
 
     # Relationships
