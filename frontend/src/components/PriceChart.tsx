@@ -19,6 +19,9 @@ interface PriceChartProps {
   timeframe?: ChartTimeframe;
   overlays?: Set<ChartOverlay>;
   niftyCandles?: import('../services/api').CandleData[];
+  customLines?: number[];
+  drawMode?: boolean;
+  onChartClick?: (price: number) => void;
 }
 
 /** Detect pivot highs/lows and return clustered S/R price levels. */
@@ -58,7 +61,10 @@ function daysAgoUTC(days: number): number {
   return d.getTime() / 1000;
 }
 
-export const PriceChart: React.FC<PriceChartProps> = ({ indicatorToShow, timeframe = '1Y', overlays = new Set(), niftyCandles = [] }) => {
+export const PriceChart: React.FC<PriceChartProps> = ({
+  indicatorToShow, timeframe = '1Y', overlays = new Set(),
+  niftyCandles = [], customLines = [], drawMode = false, onChartClick,
+}) => {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const indicatorContainerRef = useRef<HTMLDivElement>(null);
   
@@ -245,6 +251,32 @@ export const PriceChart: React.FC<PriceChartProps> = ({ indicatorToShow, timefra
       try {
         mainChart.timeScale().setVisibleRange({ from: fromTs as any, to: toTs as any });
       } catch { mainChart.timeScale().fitContent(); }
+    }
+
+    // 5b. Custom horizontal price lines (user-drawn, persisted per symbol)
+    for (const price of customLines) {
+      mainSeries.createPriceLine({
+        price,
+        color: 'rgba(168, 85, 247, 0.8)',
+        lineWidth: 1,
+        lineStyle: 1, // dashed
+        axisLabelVisible: true,
+        title: '─',
+      });
+    }
+
+    // 5c. Draw mode — capture click to add a new line at the crosshair price
+    let lastCrosshairPrice = 0;
+    mainChart.subscribeCrosshairMove((param: any) => {
+      if (param.seriesData) {
+        const d = param.seriesData.get(mainSeries);
+        if (d) lastCrosshairPrice = (d as any).close ?? (d as any).value ?? 0;
+      }
+    });
+    if (drawMode && onChartClick) {
+      chartContainerRef.current?.addEventListener('click', () => {
+        if (lastCrosshairPrice > 0) onChartClick(lastCrosshairPrice);
+      });
     }
 
     // 6. Draw SMA overlays (toggleable)
@@ -533,18 +565,40 @@ export const PriceChart: React.FC<PriceChartProps> = ({ indicatorToShow, timefra
     timeframe,
     overlays,
     niftyCandles,
+    customLines,
+    drawMode,
     activeSymbol,
   ]);
 
+  const { isLoading } = useStockStore();
+
+  // Show shimmer skeleton while chart data is loading
+  if (isLoading && candles.length === 0) {
+    return (
+      <div className="flex flex-col gap-2 w-full">
+        <div className="w-full rounded-xl border border-slate-800/80 bg-[#101217] overflow-hidden"
+          style={{ height: indicatorToShow !== 'NONE' ? 380 : 500 }}>
+          <div className="h-full w-full animate-pulse">
+            <div className="h-full bg-gradient-to-r from-slate-900/0 via-slate-800/30 to-slate-900/0 bg-[length:400%_100%]"
+              style={{ animation: 'shimmer 1.8s ease-in-out infinite', backgroundPosition: '200% 0' }} />
+          </div>
+        </div>
+        {indicatorToShow !== 'NONE' && (
+          <div className="w-full rounded-xl border border-slate-800/80 bg-[#101217] overflow-hidden animate-pulse" style={{ height: 180 }} />
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-2 w-full">
-      <div 
-        ref={chartContainerRef} 
+      <div
+        ref={chartContainerRef}
         className="w-full rounded-xl overflow-hidden border border-slate-800/80 bg-[#101217]"
       />
       {indicatorToShow !== 'NONE' && (
-        <div 
-          ref={indicatorContainerRef} 
+        <div
+          ref={indicatorContainerRef}
           className="w-full rounded-xl overflow-hidden border border-slate-800/80 bg-[#101217]"
         />
       )}

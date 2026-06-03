@@ -71,7 +71,7 @@ export interface WatchlistAlert {
   createdAt: string;
 }
 
-type TabId = 'explorer' | 'screener' | 'sync' | 'ai-research' | 'portfolio' | 'watchlist';
+type TabId = 'explorer' | 'screener' | 'sync' | 'ai-research' | 'portfolio' | 'watchlist' | 'compare';
 type ChartTimeframe = '1W' | '1M' | '3M' | '6M' | '1Y' | 'MAX';
 
 // ─── Store shape ──────────────────────────────────────────────────────────────
@@ -92,6 +92,8 @@ interface StockState {
   indicators: IndicatorData[];
   corporateActions: CorporateAction[];
   niftyCandles: CandleData[];
+  // Per-symbol custom horizontal price lines (persisted to localStorage)
+  customLines: Record<string, number[]>;
 
   screenerFilters: ScreenerFilters;
   screenerResults: ScreenerRow[];
@@ -108,6 +110,8 @@ interface StockState {
   aiConfidence: string | null;
 
   fetchNiftyCandles: () => Promise<void>;
+  addCustomLine: (symbol: string, price: number) => void;
+  removeCustomLines: (symbol: string) => void;
 
   // Portfolio
   portfolioHoldings: PortfolioHolding[];
@@ -252,7 +256,7 @@ function parseZerodhaCSV(csvText: string): PortfolioHolding[] {
 
 function getInitialTab(): TabId {
   const path = window.location.pathname.replace(/^\/+/, '').split('/')[0];
-  const valid: TabId[] = ['explorer', 'screener', 'sync', 'ai-research', 'portfolio', 'watchlist'];
+  const valid: TabId[] = ['explorer', 'screener', 'sync', 'ai-research', 'portfolio', 'watchlist', 'compare'];
   return valid.includes(path as TabId) ? (path as TabId) : 'explorer';
 }
 
@@ -274,6 +278,7 @@ export const useStockStore = create<StockState>((set, get) => ({
   indicators: [],
   corporateActions: [],
   niftyCandles: [],
+  customLines: JSON.parse(localStorage.getItem('vajra_lines') || '{}'),
 
   screenerFilters: {
     min_rsi: undefined,
@@ -500,6 +505,20 @@ export const useStockStore = create<StockState>((set, get) => ({
     } catch (err: unknown) {
       set({ error: (err as Error).message || 'Failed to fetch symbol data', isLoading: false });
     }
+  },
+
+  addCustomLine: (symbol, price) => {
+    const cur = get().customLines;
+    const updated = { ...cur, [symbol]: [...(cur[symbol] ?? []), price] };
+    localStorage.setItem('vajra_lines', JSON.stringify(updated));
+    set({ customLines: updated });
+  },
+
+  removeCustomLines: (symbol) => {
+    const cur = { ...get().customLines };
+    delete cur[symbol];
+    localStorage.setItem('vajra_lines', JSON.stringify(cur));
+    set({ customLines: cur });
   },
 
   fetchNiftyCandles: async () => {

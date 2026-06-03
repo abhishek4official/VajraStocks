@@ -10,6 +10,7 @@ import { AgentTerminal } from './components/AgentTerminal';
 import { PortfolioPanel } from './components/PortfolioPanel';
 import { WatchlistPanel } from './components/WatchlistPanel';
 import { TradePlanCard } from './components/TradePlanCard';
+import { ComparePanel } from './components/ComparePanel';
 import {
   LineChart,
   Search,
@@ -41,9 +42,13 @@ function App() {
     isLoading,
     addToWatchlist,
     watchlists,
+    customLines,
+    addCustomLine,
+    removeCustomLines,
   } = useStockStore();
 
   const [indicatorToShow, setIndicatorToShow] = useState<'RSI' | 'MACD' | 'NONE'>('RSI');
+  const [drawMode, setDrawMode] = useState(false);
 
   // Compute 52W High/Low from candles in the store (last 252 trading days ≈ 1 year)
   const stats52w = useMemo(() => {
@@ -106,6 +111,7 @@ function App() {
         case 'p': setActiveTab('portfolio');   break;
         case 'w': setActiveTab('watchlist');   break;
         case 'a': setActiveTab('ai-research'); break;
+        case 'c': setActiveTab('compare');    break;
       }
     };
     window.addEventListener('keydown', handleKey);
@@ -139,12 +145,12 @@ function App() {
         {/* Dynamic Global Navigation Tabs */}
         <nav className="flex bg-[#121620]/80 p-1 rounded-lg border border-slate-800 flex-wrap gap-0.5">
           {([
-            { id: 'explorer',     label: 'Explorer',   Icon: Layers       },
-            { id: 'screener',     label: 'Screener',   Icon: Search       },
-            { id: 'portfolio',    label: 'Portfolio',  Icon: IndianRupee  },
-            { id: 'watchlist',    label: 'Watchlist',  Icon: Bookmark     },
-            { id: 'ai-research',  label: 'AI Research',Icon: Cpu          },
-            { id: 'sync',         label: 'Sync',       Icon: Settings     },
+            { id: 'explorer',    label: 'Explorer',    Icon: Layers      },
+            { id: 'screener',    label: 'Screener',    Icon: Search      },
+            { id: 'portfolio',   label: 'Portfolio',   Icon: IndianRupee },
+            { id: 'watchlist',   label: 'Watchlist',   Icon: Bookmark    },
+            { id: 'compare',     label: 'Compare',     Icon: TrendingUp  },
+            { id: 'ai-research', label: 'AI Research', Icon: Cpu         },
           ] as const).map(({ id, label, Icon }) => (
             <button
               key={id}
@@ -159,6 +165,18 @@ function App() {
               {label}
             </button>
           ))}
+          {/* Sync Centre — gear icon, not a primary tab */}
+          <button
+            onClick={() => setActiveTab('sync')}
+            title="Sync Centre"
+            className={`flex items-center gap-1.5 px-2 py-1.5 rounded-md transition duration-150 cursor-pointer ${
+              activeTab === 'sync'
+                ? 'bg-slate-700 text-white'
+                : 'text-slate-500 hover:text-slate-300'
+            }`}
+          >
+            <Settings className="w-3.5 h-3.5" />
+          </button>
         </nav>
 
         {/* Global Loading Spinner */}
@@ -303,6 +321,28 @@ function App() {
                       ))}
                     </div>
 
+                    {/* Drawing tools */}
+                    <div className="flex bg-slate-950/80 p-0.5 rounded-lg border border-slate-850">
+                      <button
+                        onClick={() => setDrawMode(d => !d)}
+                        title={drawMode ? 'Click chart to place H-Line · Click again to exit' : 'Draw horizontal level'}
+                        className={`px-2.5 py-1.5 rounded-md text-[10px] font-bold transition cursor-pointer ${
+                          drawMode ? 'bg-purple-600 text-white' : 'text-slate-500 hover:text-slate-300'
+                        }`}
+                      >
+                        {drawMode ? '✏️ Drawing…' : '✏️ H-Line'}
+                      </button>
+                      {activeSymbol && (customLines[activeSymbol]?.length ?? 0) > 0 && (
+                        <button
+                          onClick={() => activeSymbol && removeCustomLines(activeSymbol)}
+                          title="Clear all drawn lines"
+                          className="px-2.5 py-1.5 rounded-md text-[10px] font-bold text-rose-400 hover:text-rose-300 transition cursor-pointer"
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
+
                     {/* Overlay toggles — SMAs + EMAs + BB in one block */}
                     <div className="flex bg-slate-950/80 p-0.5 rounded-lg border border-slate-850 flex-wrap">
                       {([
@@ -340,7 +380,17 @@ function App() {
               {/* Central Charting Area */}
               {activeSymbol ? (
                 <>
-                  <PriceChart indicatorToShow={indicatorToShow} timeframe={chartTimeframe} overlays={chartOverlays} niftyCandles={niftyCandles} />
+                  <PriceChart
+                    indicatorToShow={indicatorToShow}
+                    timeframe={chartTimeframe}
+                    overlays={chartOverlays}
+                    niftyCandles={niftyCandles}
+                    customLines={activeSymbol ? (customLines[activeSymbol] ?? []) : []}
+                    drawMode={drawMode}
+                    onChartClick={(price) => {
+                      if (activeSymbol) { addCustomLine(activeSymbol, price); setDrawMode(false); }
+                    }}
+                  />
                   
                   {/* Multi-Pane Grid details */}
                   <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 min-h-[350px]">
@@ -375,6 +425,9 @@ function App() {
 
         {/* TAB 5: Portfolio */}
         {activeTab === 'portfolio' && <PortfolioPanel />}
+
+        {/* Compare */}
+        {activeTab === 'compare' && <ComparePanel />}
 
         {/* TAB 6: Watchlist */}
         {activeTab === 'watchlist' && <WatchlistPanel />}

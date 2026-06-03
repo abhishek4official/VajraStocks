@@ -80,14 +80,15 @@ export const ScreenerPanel: React.FC = () => {
     addToWatchlist,
   } = useStockStore();
 
-  // Client-side sorting states
+  // Client-side sorting + pagination states
   const [sortField, setSortField] = useState<keyof ScreenerRow | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [visibleCount, setVisibleCount] = useState(50);
+  const PAGE_SIZE = 50;
 
-  useEffect(() => {
-    // Run an initial sweep when the panel is first mounted
-    runScreener();
-  }, []);
+  useEffect(() => { runScreener(); }, []);
+  // Reset to first page whenever results update
+  useEffect(() => { setVisibleCount(PAGE_SIZE); }, [screenerResults]);
 
   const handleRunScreener = () => {
     runScreener();
@@ -513,7 +514,7 @@ export const ScreenerPanel: React.FC = () => {
           {isLoading && <RefreshCw className="w-4 h-4 text-purple-400 animate-spin" />}
         </div>
 
-        <div className="flex-1 overflow-auto">
+        <div className="flex-1 overflow-auto flex flex-col">
           <table className="w-full border-collapse text-left text-sm text-slate-300">
             <thead>
               <tr className="border-b border-slate-800 text-xs text-slate-400 uppercase tracking-wider font-mono select-none">
@@ -576,7 +577,7 @@ export const ScreenerPanel: React.FC = () => {
                   </td>
                 </tr>
               ) : (
-                sortedResults.map((row) => {
+                sortedResults.slice(0, visibleCount).map((row) => {
                   const isChangeBullish = (row.price_pct_change || 0) >= 0;
                   const isHaBullish = row.ha_direction === 'UP';
                   const isRenkoBullish = row.renko_direction === 'UP';
@@ -751,6 +752,32 @@ export const ScreenerPanel: React.FC = () => {
               )}
             </tbody>
           </table>
+          {/* Pagination footer */}
+          {sortedResults.length > PAGE_SIZE && (
+            <div className="shrink-0 flex items-center justify-between px-4 py-3 border-t border-slate-800 bg-[#0c0f17]">
+              <span className="text-xs text-slate-500">
+                Showing <span className="text-slate-300 font-semibold">{Math.min(visibleCount, sortedResults.length).toLocaleString()}</span> of <span className="text-slate-300 font-semibold">{sortedResults.length.toLocaleString()}</span> results
+              </span>
+              <div className="flex gap-2">
+                {visibleCount < sortedResults.length && (
+                  <button
+                    onClick={() => setVisibleCount(v => Math.min(v + PAGE_SIZE, sortedResults.length))}
+                    className="px-3 py-1.5 text-xs font-bold bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white rounded-lg transition cursor-pointer"
+                  >
+                    Load {Math.min(PAGE_SIZE, sortedResults.length - visibleCount)} More
+                  </button>
+                )}
+                {visibleCount < sortedResults.length && (
+                  <button
+                    onClick={() => setVisibleCount(sortedResults.length)}
+                    className="px-3 py-1.5 text-xs font-bold bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-400 hover:text-white rounded-lg transition cursor-pointer"
+                  >
+                    Load All ({sortedResults.length.toLocaleString()})
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
