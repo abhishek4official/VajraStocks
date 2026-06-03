@@ -53,6 +53,18 @@ const PRESETS = [
     desc: 'Low-risk entry with well-defined stop loss',
     filters: { only_inside_bar: true },
   },
+  {
+    name: 'Gap Up',
+    emoji: '⬆️',
+    desc: 'Opened >1% above yesterday\'s close on high volume',
+    filters: { only_gap_up: true, volume_breakout: '1.5X' as const },
+  },
+  {
+    name: 'RS Leaders',
+    emoji: '🏆',
+    desc: 'Outperforming NIFTY 50 by >20% over 1 month (RS > 1.2)',
+    filters: { min_rs_1m: 1.2, sma_200_cross: 'ABOVE' as const },
+  },
 ];
 
 export const ScreenerPanel: React.FC = () => {
@@ -454,25 +466,37 @@ export const ScreenerPanel: React.FC = () => {
         <div className="flex flex-col gap-1.5 justify-end">
           <label className="text-xs font-semibold text-slate-400">Patterns</label>
           <div className="flex flex-col gap-1.5">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={!!screenerFilters.only_nr7}
-                onChange={(e) => setScreenerFilters({ only_nr7: e.target.checked || undefined })}
-                className="accent-purple-500"
-              />
-              <span className="text-xs text-slate-300">NR7 only</span>
-            </label>
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={!!screenerFilters.only_inside_bar}
-                onChange={(e) => setScreenerFilters({ only_inside_bar: e.target.checked || undefined })}
-                className="accent-purple-500"
-              />
-              <span className="text-xs text-slate-300">Inside Bar only</span>
-            </label>
+            {([
+              { key: 'only_nr7' as const,       label: 'NR7 only'       },
+              { key: 'only_inside_bar' as const, label: 'Inside Bar'     },
+              { key: 'only_gap_up' as const,     label: 'Gap Up (>1%)'   },
+              { key: 'only_gap_down' as const,   label: 'Gap Down (>1%)' },
+            ]).map(({ key, label }) => (
+              <label key={key} className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={!!screenerFilters[key]}
+                  onChange={(e) => setScreenerFilters({ [key]: e.target.checked || undefined })}
+                  className="accent-purple-500"
+                />
+                <span className="text-xs text-slate-300">{label}</span>
+              </label>
+            ))}
           </div>
+        </div>
+
+        {/* RS Score filter */}
+        <div className="flex flex-col gap-1.5 justify-end">
+          <label className="text-xs font-semibold text-slate-400">Min RS vs NIFTY</label>
+          <input
+            type="number"
+            step="0.1"
+            placeholder="e.g. 1.2"
+            value={screenerFilters.min_rs_1m !== undefined ? screenerFilters.min_rs_1m : ''}
+            onChange={(e) => setScreenerFilters({ min_rs_1m: e.target.value === '' ? undefined : Number(e.target.value) })}
+            className="w-full px-3 py-1.5 text-sm rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
+          />
+          <span className="text-[10px] text-slate-500">1.0 = matches NIFTY · &gt;1.2 = outperforming</span>
         </div>
       </div>
 
@@ -535,6 +559,10 @@ export const ScreenerPanel: React.FC = () => {
                 <th className="py-2.5 px-3 text-center cursor-pointer hover:text-white transition" onClick={() => handleSort('line_break_direction')}>
                   Three Line Break {renderSortIcon('line_break_direction')}
                 </th>
+                <th className="py-2.5 px-3 text-center cursor-pointer hover:text-white transition" onClick={() => handleSort('rs_score_1m' as any)}>
+                  RS 1M {renderSortIcon('rs_score_1m' as any)}
+                </th>
+                <th className="py-2.5 px-3 text-center">Gap</th>
                 <th className="py-2.5 px-3 text-right">Actions</th>
               </tr>
             </thead>
@@ -680,6 +708,24 @@ export const ScreenerPanel: React.FC = () => {
                         </span>
                       </td>
                       
+                      {/* RS Score */}
+                      <td className="py-3 px-3 text-center">
+                        {(row as any).rs_score_1m != null ? (
+                          <span className={`font-mono text-xs px-2 py-0.5 rounded border ${
+                            (row as any).rs_score_1m >= 1.2 ? 'text-emerald-400 bg-emerald-950/20 border-emerald-900/30'
+                            : (row as any).rs_score_1m >= 0.8 ? 'text-slate-300 bg-slate-900/40 border-slate-800'
+                            : 'text-rose-400 bg-rose-950/20 border-rose-900/30'
+                          }`}>
+                            {((row as any).rs_score_1m as number).toFixed(2)}x
+                          </span>
+                        ) : <span className="text-slate-600">—</span>}
+                      </td>
+                      {/* Gap */}
+                      <td className="py-3 px-3 text-center">
+                        {(row as any).is_gap_up   && <span className="text-[10px] font-bold text-emerald-400 bg-emerald-950/20 border border-emerald-900/30 px-1.5 py-0.5 rounded">↑ GAP</span>}
+                        {(row as any).is_gap_down && <span className="text-[10px] font-bold text-rose-400 bg-rose-950/20 border border-rose-900/30 px-1.5 py-0.5 rounded">↓ GAP</span>}
+                        {!(row as any).is_gap_up && !(row as any).is_gap_down && <span className="text-slate-700">—</span>}
+                      </td>
                       {/* Actions */}
                       <td className="py-3 px-3 text-right">
                         <div className="flex items-center gap-1.5 justify-end">

@@ -30,6 +30,9 @@ interface ScreenerFilters {
   volume_breakout?: 'ANY' | '1.5X' | '2.0X' | '3.0X';
   only_nr7?: boolean;
   only_inside_bar?: boolean;
+  only_gap_up?: boolean;
+  only_gap_down?: boolean;
+  min_rs_1m?: number;
   limit?: number;
 }
 
@@ -55,6 +58,17 @@ export interface Watchlist {
   id: string;
   name: string;
   items: WatchlistItem[];
+}
+
+export type AlertType = 'price_above' | 'price_below' | 'rsi_above' | 'rsi_below';
+
+export interface WatchlistAlert {
+  id: string;
+  symbol: string;
+  type: AlertType;
+  threshold: number;
+  triggered: boolean;
+  createdAt: string;
 }
 
 type TabId = 'explorer' | 'screener' | 'sync' | 'ai-research' | 'portfolio' | 'watchlist';
@@ -101,6 +115,7 @@ interface StockState {
   // Watchlists
   watchlists: Watchlist[];
   activeWatchlistId: string | null;
+  alerts: WatchlistAlert[];
 
   isLoading: boolean;
   isSyncing: boolean;
@@ -126,6 +141,11 @@ interface StockState {
   setActiveWatchlist: (id: string) => void;
   addToWatchlist: (watchlistId: string, symbol: string) => void;
   removeFromWatchlist: (watchlistId: string, symbol: string) => void;
+
+  // Alert actions
+  addAlert: (symbol: string, type: AlertType, threshold: number) => void;
+  removeAlert: (id: string) => void;
+  checkAlerts: () => void;
 
   // Async
   fetchSymbols: (activeOnly?: boolean) => Promise<void>;
@@ -164,6 +184,17 @@ function savePortfolio(holdings: PortfolioHolding[]) {
 
 function saveWatchlists(wl: Watchlist[]) {
   localStorage.setItem(WATCHLIST_KEY, JSON.stringify(wl));
+}
+
+const ALERTS_KEY = 'vajra_alerts';
+
+function loadAlerts(): WatchlistAlert[] {
+  try { return JSON.parse(localStorage.getItem(ALERTS_KEY) || '[]'); }
+  catch { return []; }
+}
+
+function saveAlerts(a: WatchlistAlert[]) {
+  localStorage.setItem(ALERTS_KEY, JSON.stringify(a));
 }
 
 /** Parse a Zerodha Console holdings CSV export.
@@ -260,6 +291,9 @@ export const useStockStore = create<StockState>((set, get) => ({
     volume_breakout: undefined,
     only_nr7: undefined,
     only_inside_bar: undefined,
+    only_gap_up: undefined,
+    only_gap_down: undefined,
+    min_rs_1m: undefined,
     limit: 2500,
   },
   screenerResults: [],
@@ -277,6 +311,7 @@ export const useStockStore = create<StockState>((set, get) => ({
   portfolioHoldings: loadPortfolio(),
   watchlists: loadWatchlists(),
   activeWatchlistId: null,
+  alerts: loadAlerts(),
 
   isLoading: false,
   isSyncing: false,
@@ -347,6 +382,57 @@ export const useStockStore = create<StockState>((set, get) => ({
     });
     saveWatchlists(wl);
     set({ watchlists: wl });
+  },
+
+  // ── Alerts ─────────────────────────────────────────────────────────────────
+
+  addAlert: (symbol, type, threshold) => {
+    const a = [...get().alerts, { id: crypto.randomUUID(), symbol, type, threshold, triggered: false, createdAt: new Date().toISOString() }];
+    saveAlerts(a);
+    set({ alerts: a });
+  },
+
+  removeAlert: (id) => {
+    const a = get().alerts.filter(x => x.id !== id);
+    saveAlerts(a);
+    set({ alerts: a });
+  },
+
+  checkAlerts: () => {
+    const { alerts, screenerResults } = get();
+    if (!alerts.length || !screenerResults.length) return;
+
+    const snapMap = new Map(screenerResults.map(r => [r.symbol, r]));
+    let anyTriggered = false;
+
+    const updated = alerts.map(alert => {
+      if (alert.triggered) return alert;
+      const snap = snapMap.get(alert.symbol) ?? snapMap.get(`${alert.symbol}.NS`);
+      if (!snap) return alert;
+
+      let fired = false;
+      if (alert.type === 'price_above' && snap.close_price >= alert.threshold) fired = true;
+      if (alert.type === 'price_below' && snap.close_price <= alert.threshold) fired = true;
+      if (alert.type === 'rsi_above'   && snap.rsi_14 != null && snap.rsi_14 >= alert.threshold) fired = true;
+      if (alert.type === 'rsi_below'   && snap.rsi_14 != null && snap.rsi_14 <= alert.threshold) fired = true;
+
+      if (fired) {
+        anyTriggered = true;
+        const label = alert.type.replace('_', ' ').replace('price', '₹').replace('rsi', 'RSI');
+        if ('Notification' in window && Notification.permission === 'granted') {
+          new Notification(`🔔 VAJRA Alert: ${alert.symbol.replace('.NS', '')}`, {
+            body: `${label} ${alert.threshold} triggered — Current: ${alert.type.startsWith('rsi') ? snap.rsi_14?.toFixed(1) : '₹' + snap.close_price.toFixed(2)}`,
+          });
+        }
+        return { ...alert, triggered: true };
+      }
+      return alert;
+    });
+
+    if (anyTriggered) {
+      saveAlerts(updated);
+      set({ alerts: updated });
+    }
   },
 
   removeFromWatchlist: (watchlistId, symbol) => {
@@ -435,6 +521,8 @@ export const useStockStore = create<StockState>((set, get) => ({
       if (filters.min_price !== undefined) results = results.filter(r => r.close_price >= filters.min_price!);
       if (filters.max_price !== undefined) results = results.filter(r => r.close_price <= filters.max_price!);
       set({ screenerResults: results, isLoading: false });
+      // Check price/RSI alerts against fresh screener data
+      get().checkAlerts();
     } catch (err: unknown) {
       set({ error: (err as Error).message || 'Failed to execute screening sweep', isLoading: false });
     }

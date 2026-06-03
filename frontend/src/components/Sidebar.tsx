@@ -1,6 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useStockStore } from '../store/useStockStore';
-import { Search, RefreshCw, Radio, CheckCircle, AlertTriangle } from 'lucide-react';
+import { Search, RefreshCw, Radio, CheckCircle, AlertTriangle, ArrowUpDown } from 'lucide-react';
+
+type SortOption = 'alpha' | 'last_sync';
 
 export const Sidebar: React.FC = () => {
   const { 
@@ -14,17 +16,28 @@ export const Sidebar: React.FC = () => {
 
   const [searchTerm, setSearchTerm] = useState('');
   const [activeOnly, setActiveOnly] = useState(true);
+  const [sortBy, setSortBy] = useState<SortOption>('alpha');
   const [syncingTicker, setSyncingTicker] = useState<string | null>(null);
 
   useEffect(() => {
     fetchSymbols(activeOnly);
   }, [activeOnly]);
 
-  const filteredSymbols = symbols.filter(sym => 
-    sym.symbol.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    sym.symbol.replace('.NS', '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-    sym.company_name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredSymbols = useMemo(() => {
+    const filtered = symbols.filter(sym =>
+      sym.symbol.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      sym.symbol.replace('.NS', '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      sym.company_name.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+    if (sortBy === 'last_sync') {
+      return [...filtered].sort((a, b) => {
+        const aDate = a.last_successful_sync_date ?? '';
+        const bDate = b.last_successful_sync_date ?? '';
+        return bDate.localeCompare(aDate); // most recently synced first
+      });
+    }
+    return filtered; // default is already alphabetical from backend
+  }, [symbols, searchTerm, sortBy]);
 
   const handleSyncSymbol = async (e: React.MouseEvent, symbol: string) => {
     e.stopPropagation(); // prevent card selection
@@ -66,6 +79,19 @@ export const Sidebar: React.FC = () => {
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-9 pr-4 py-2 text-sm rounded-lg bg-slate-900/80 border border-slate-850 text-white placeholder-slate-500 focus:outline-none focus:border-purple-500 transition"
           />
+        </div>
+
+        {/* Sort selector */}
+        <div className="flex items-center gap-2">
+          <ArrowUpDown className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+          <select
+            value={sortBy}
+            onChange={e => setSortBy(e.target.value as SortOption)}
+            className="flex-1 px-2 py-1 text-xs rounded bg-slate-900/80 border border-slate-850 text-slate-300 focus:outline-none focus:border-purple-500 transition"
+          >
+            <option value="alpha">Sort: A → Z</option>
+            <option value="last_sync">Sort: Last Synced</option>
+          </select>
         </div>
 
         {/* Filter Toggle */}

@@ -64,6 +64,20 @@ function App() {
   const changePct = stats52w && stats52w.prevClose > 0 ? (changeAmt / stats52w.prevClose) * 100 : 0;
   const isBullishDay = changeAmt >= 0;
 
+  // RS Score vs NIFTY 50 — 21-trading-day return ratio
+  const rsScore = useMemo(() => {
+    if (!candles.length || !niftyCandles.length) return null;
+    const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 35);
+    const cutStr = cutoff.toISOString().split('T')[0];
+    const stockOld = candles.find(c => c.time >= cutStr);
+    const niftyOld = niftyCandles.find(c => c.time >= cutStr);
+    if (!stockOld || !niftyOld || niftyOld.close === 0) return null;
+    const stockRet = (candles[candles.length - 1].close - stockOld.close) / stockOld.close;
+    const niftyRet = (niftyCandles[niftyCandles.length - 1].close - niftyOld.close) / niftyOld.close;
+    if (niftyRet === 0) return null;
+    return stockRet / niftyRet;
+  }, [candles, niftyCandles]);
+
   const fmtINR = (n: number) =>
     new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
   const fmtVol = (v: number) =>
@@ -203,6 +217,7 @@ function App() {
                   {/* Row 2: OHLC / Volume / 52W strip */}
                   {stats52w && (
                     <div className="flex flex-wrap gap-x-5 gap-y-1 pt-1 border-t border-slate-800/60">
+                      {/* CMP + Day Change */}
                       <div className="flex items-center gap-1.5">
                         <span className={`text-base font-extrabold font-mono ${isBullishDay ? 'text-emerald-400' : 'text-rose-400'}`}>
                           ₹{fmtINR(stats52w.close)}
@@ -212,18 +227,32 @@ function App() {
                           {isBullishDay ? '+' : ''}{fmtINR(changeAmt)} ({isBullishDay ? '+' : ''}{changePct.toFixed(2)}%)
                         </span>
                       </div>
-                      {[
-                        { label: 'Day H', value: `₹${fmtINR(stats52w.dayHigh)}` },
-                        { label: 'Day L', value: `₹${fmtINR(stats52w.dayLow)}` },
-                        { label: 'Volume', value: fmtVol(stats52w.volume) },
-                        { label: '52W H', value: `₹${fmtINR(stats52w.high)}` },
-                        { label: '52W L', value: `₹${fmtINR(stats52w.low)}` },
-                      ].map(({ label, value }) => (
+                      {/* Static stats */}
+                      {([
+                        { label: 'Day H',   value: `₹${fmtINR(stats52w.dayHigh)}` },
+                        { label: 'Day L',   value: `₹${fmtINR(stats52w.dayLow)}`  },
+                        { label: 'Volume',  value: fmtVol(stats52w.volume)          },
+                        { label: '52W H',   value: `₹${fmtINR(stats52w.high)}`     },
+                        { label: '52W L',   value: `₹${fmtINR(stats52w.low)}`      },
+                      ] as { label: string; value: string }[]).map(({ label, value }) => (
                         <div key={label} className="flex items-center gap-1 text-xs">
                           <span className="text-slate-500">{label}</span>
                           <span className="text-slate-200 font-mono font-semibold">{value}</span>
                         </div>
                       ))}
+                      {/* RS Score badge */}
+                      {rsScore != null && (
+                        <div className="flex items-center gap-1 text-xs">
+                          <span className="text-slate-500">RS 1M</span>
+                          <span className={`font-mono font-bold px-1.5 py-0.5 rounded border text-[10px] ${
+                            rsScore >= 1.2 ? 'text-emerald-400 bg-emerald-950/20 border-emerald-900/30'
+                            : rsScore >= 0.8 ? 'text-slate-300 bg-slate-900/40 border-slate-800'
+                            : 'text-rose-400 bg-rose-950/20 border-rose-900/30'
+                          }`}>
+                            {rsScore.toFixed(2)}x
+                          </span>
+                        </div>
+                      )}
                     </div>
                   )}
 

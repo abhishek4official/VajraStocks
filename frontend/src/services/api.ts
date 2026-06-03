@@ -71,6 +71,9 @@ export interface ScreenerRow {
   line_break_direction?: string | null;
   is_nr7?: boolean | null;
   is_inside_bar?: boolean | null;
+  is_gap_up?: boolean | null;
+  is_gap_down?: boolean | null;
+  rs_score_1m?: number | null;
   weekly_avg_volume?: number | null;
   volume_breakout_ratio?: number | null;
 }
@@ -217,6 +220,9 @@ export const apiService = {
         volume_breakout: filters.volume_breakout ?? null,
         only_nr7: filters.only_nr7 ?? false,
         only_inside_bar: filters.only_inside_bar ?? false,
+        only_gap_up: filters.only_gap_up ?? false,
+        only_gap_down: filters.only_gap_down ?? false,
+        min_rs_1m: filters.min_rs_1m ?? null,
         limit: filters.limit ?? 100
       })
     });

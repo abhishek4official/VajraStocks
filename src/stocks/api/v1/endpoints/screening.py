@@ -23,6 +23,9 @@ class ScreeningParams(BaseModel):
     volume_breakout: str | None = None  # 'ANY', '1.5X', '2.0X', '3.0X'
     only_nr7: bool = False
     only_inside_bar: bool = False
+    only_gap_up: bool = False
+    only_gap_down: bool = False
+    min_rs_1m: float | None = None
     limit: int = 2500  # No hard cap — return all matches by default
 
 
@@ -45,6 +48,9 @@ class ScreenerRowResponse(BaseModel):
     line_break_direction: str | None = None
     is_nr7: bool | None = None
     is_inside_bar: bool | None = None
+    is_gap_up: bool | None = None
+    is_gap_down: bool | None = None
+    rs_score_1m: float | None = None
     weekly_avg_volume: float | None = None
     volume_breakout_ratio: float | None = None
 
@@ -67,6 +73,9 @@ def get_screening_results_get(
     volume_breakout: str | None = None,
     only_nr7: bool = False,
     only_inside_bar: bool = False,
+    only_gap_up: bool = False,
+    only_gap_down: bool = False,
+    min_rs_1m: float | None = None,
     limit: int = 2500,
     db: Session = Depends(get_db),
 ):
@@ -86,6 +95,9 @@ def get_screening_results_get(
         volume_breakout=volume_breakout,
         only_nr7=only_nr7,
         only_inside_bar=only_inside_bar,
+        only_gap_up=only_gap_up,
+        only_gap_down=only_gap_down,
+        min_rs_1m=min_rs_1m,
         limit=limit,
     )
 
@@ -109,6 +121,9 @@ def get_screening_results_get(
             "line_break_direction": r.line_break_direction,
             "is_nr7": r.is_nr7,
             "is_inside_bar": r.is_inside_bar,
+            "is_gap_up": r.is_gap_up,
+            "is_gap_down": r.is_gap_down,
+            "rs_score_1m": r.rs_score_1m,
             "weekly_avg_volume": getattr(r, "weekly_avg_volume", None),
             "volume_breakout_ratio": getattr(r, "volume_breakout_ratio", None),
         }
@@ -134,6 +149,9 @@ def get_screening_results_post(params: ScreeningParams, db: Session = Depends(ge
         volume_breakout=params.volume_breakout,
         only_nr7=params.only_nr7,
         only_inside_bar=params.only_inside_bar,
+        only_gap_up=params.only_gap_up,
+        only_gap_down=params.only_gap_down,
+        min_rs_1m=params.min_rs_1m,
         limit=params.limit,
     )
 
@@ -157,6 +175,9 @@ def get_screening_results_post(params: ScreeningParams, db: Session = Depends(ge
             "line_break_direction": r.line_break_direction,
             "is_nr7": r.is_nr7,
             "is_inside_bar": r.is_inside_bar,
+            "is_gap_up": r.is_gap_up,
+            "is_gap_down": r.is_gap_down,
+            "rs_score_1m": r.rs_score_1m,
             "weekly_avg_volume": getattr(r, "weekly_avg_volume", None),
             "volume_breakout_ratio": getattr(r, "volume_breakout_ratio", None),
         }

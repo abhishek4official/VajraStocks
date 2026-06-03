@@ -21,7 +21,7 @@ class ScreeningService:
         self.config = config
         self.db = db_session
 
-    def refresh_snapshot_for_symbol(self, symbol_id: int) -> None:
+    def refresh_snapshot_for_symbol(self, symbol_id: int, nifty_21d_return: float | None = None) -> None:
         """Compiles the latest EOD prices and derived structures to upsert the screening snapshot for a symbol."""
         try:
             # 1. Fetch Symbol details
@@ -64,6 +64,33 @@ class ScreeningService:
                     float(latest_price.high) < float(prev.high) and
                     float(latest_price.low) > float(prev.low)
                 )
+
+            # Gap Up / Gap Down: today's open vs previous close (threshold >1%)
+            is_gap_up = None
+            is_gap_down = None
+            if len(prices) >= 2:
+                prev_close = float(prices[1].close)
+                today_open = float(latest_price.open)
+                if prev_close > 0:
+                    gap_pct = (today_open - prev_close) / prev_close
+                    is_gap_up   = gap_pct >  0.01   # opened >1% above prior close
+                    is_gap_down = gap_pct < -0.01   # opened >1% below prior close
+
+            # Relative Strength vs NIFTY 50 (1-month, ~21 trading days)
+            # rs_score_1m > 1.0 means outperforming NIFTY; < 1.0 means underperforming
+            rs_score_1m = None
+            if nifty_21d_return is not None and nifty_21d_return != 0:
+                import datetime as dt
+                cutoff = dt.date.today() - dt.timedelta(days=35)
+                oldest_price = self.db.scalar(
+                    select(DailyPrice)
+                    .where(DailyPrice.symbol_id == symbol_id, DailyPrice.trading_date >= cutoff)
+                    .order_by(DailyPrice.trading_date.asc())
+                    .limit(1)
+                )
+                if oldest_price and float(oldest_price.close) > 0:
+                    stock_21d_return = (close_price - float(oldest_price.close)) / float(oldest_price.close)
+                    rs_score_1m = stock_21d_return / nifty_21d_return
 
             # 3. Fetch latest Heikin-Ashi candle
             ha = self.db.scalar(
@@ -139,6 +166,9 @@ class ScreeningService:
                     line_break_direction=line_break_direction,
                     is_nr7=is_nr7,
                     is_inside_bar=is_inside_bar,
+                    is_gap_up=is_gap_up,
+                    is_gap_down=is_gap_down,
+                    rs_score_1m=rs_score_1m,
                 )
                 self.db.add(snapshot)
             else:
@@ -157,6 +187,9 @@ class ScreeningService:
                 snapshot.line_break_direction = line_break_direction
                 snapshot.is_nr7 = is_nr7
                 snapshot.is_inside_bar = is_inside_bar
+                snapshot.is_gap_up = is_gap_up
+                snapshot.is_gap_down = is_gap_down
+                snapshot.rs_score_1m = rs_score_1m
 
             self.db.commit()
         except Exception as e:
@@ -164,15 +197,47 @@ class ScreeningService:
             logger.error(f"Failed to refresh screening snapshot for symbol_id {symbol_id}: {e}")
             raise e
 
+    def _get_nifty_21d_return(self) -> float | None:
+        """Pre-loads the NIFTY 50 21-trading-day return for RS score computation. Returns None if not available."""
+        import datetime as dt
+        try:
+            nifty_sym = self.db.scalar(select(Symbol).where(Symbol.symbol == "^NSEI"))
+            if not nifty_sym:
+                return None
+
+            cutoff = dt.date.today() - dt.timedelta(days=35)  # 35 calendar days ≈ 25 trading days buffer
+            oldest = self.db.scalar(
+                select(DailyPrice)
+                .where(DailyPrice.symbol_id == nifty_sym.id, DailyPrice.trading_date >= cutoff)
+                .order_by(DailyPrice.trading_date.asc())
+                .limit(1)
+            )
+            latest = self.db.scalar(
+                select(DailyPrice)
+                .where(DailyPrice.symbol_id == nifty_sym.id)
+                .order_by(DailyPrice.trading_date.desc())
+                .limit(1)
+            )
+            if oldest and latest and float(oldest.close) > 0:
+                return (float(latest.close) - float(oldest.close)) / float(oldest.close)
+        except Exception as e:
+            logger.warning(f"Could not compute NIFTY 21D return: {e}")
+        return None
+
     def refresh_all_snapshots(self) -> int:
         """Refreshes the screening snapshots for all active symbols in the database."""
         try:
             active_symbols = self.db.scalars(select(Symbol).filter_by(is_active=True)).all()
             logger.info(f"Refreshing screening snapshots for {len(active_symbols)} active symbols...")
 
+            # Pre-load NIFTY 21-day return once — used for RS score on every symbol
+            nifty_21d_return = self._get_nifty_21d_return()
+            if nifty_21d_return is not None:
+                logger.debug(f"NIFTY 21D return for RS scoring: {nifty_21d_return:.4f}")
+
             refreshed_count = 0
             for sym in active_symbols:
-                self.refresh_snapshot_for_symbol(sym.id)
+                self.refresh_snapshot_for_symbol(sym.id, nifty_21d_return=nifty_21d_return)
                 refreshed_count += 1
 
             logger.info(f"Successfully refreshed {refreshed_count} screening snapshots.")
@@ -196,6 +261,9 @@ class ScreeningService:
         volume_breakout: str | None = None,
         only_nr7: bool = False,
         only_inside_bar: bool = False,
+        only_gap_up: bool = False,
+        only_gap_down: bool = False,
+        min_rs_1m: float | None = None,
         limit: int = 2500,
     ) -> list[ScreeningSnapshot]:
         """Runs high-speed query sweeps directly against the narrow screening_snapshots table."""
@@ -223,6 +291,12 @@ class ScreeningService:
             stmt = stmt.where(ScreeningSnapshot.is_nr7 == True)  # noqa: E712
         if only_inside_bar:
             stmt = stmt.where(ScreeningSnapshot.is_inside_bar == True)  # noqa: E712
+        if only_gap_up:
+            stmt = stmt.where(ScreeningSnapshot.is_gap_up == True)  # noqa: E712
+        if only_gap_down:
+            stmt = stmt.where(ScreeningSnapshot.is_gap_down == True)  # noqa: E712
+        if min_rs_1m is not None:
+            stmt = stmt.where(ScreeningSnapshot.rs_score_1m >= min_rs_1m)
 
         stmt = stmt.order_by(ScreeningSnapshot.symbol.asc())
 
@@ -262,6 +336,12 @@ class ScreeningService:
             symbol_ids_subq = symbol_ids_subq.where(ScreeningSnapshot.is_nr7 == True)  # noqa: E712
         if only_inside_bar:
             symbol_ids_subq = symbol_ids_subq.where(ScreeningSnapshot.is_inside_bar == True)  # noqa: E712
+        if only_gap_up:
+            symbol_ids_subq = symbol_ids_subq.where(ScreeningSnapshot.is_gap_up == True)  # noqa: E712
+        if only_gap_down:
+            symbol_ids_subq = symbol_ids_subq.where(ScreeningSnapshot.is_gap_down == True)  # noqa: E712
+        if min_rs_1m is not None:
+            symbol_ids_subq = symbol_ids_subq.where(ScreeningSnapshot.rs_score_1m >= min_rs_1m)
 
         subq = (
             select(

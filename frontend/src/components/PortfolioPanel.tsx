@@ -1,10 +1,21 @@
-import React, { useRef } from 'react';
+import React, { useMemo, useRef } from 'react';
 import { useStockStore } from '../store/useStockStore';
 import { Upload, Trash2, TrendingUp, TrendingDown, IndianRupee, BarChart2 } from 'lucide-react';
 import type { PortfolioHolding } from '../store/useStockStore';
 
 export const PortfolioPanel: React.FC = () => {
-  const { portfolioHoldings, importPortfolioCSV, clearPortfolio, setSelectedSymbol, setActiveTab } = useStockStore();
+  const { portfolioHoldings, importPortfolioCSV, clearPortfolio, setSelectedSymbol, setActiveTab, niftyCandles } = useStockStore();
+
+  // NIFTY 1Y return for benchmark comparison
+  const niftyReturn = useMemo(() => {
+    if (!niftyCandles.length) return null;
+    const cutoff = new Date(); cutoff.setFullYear(cutoff.getFullYear() - 1);
+    const cutStr = cutoff.toISOString().split('T')[0];
+    const old = niftyCandles.find(c => c.time >= cutStr);
+    const latest = niftyCandles[niftyCandles.length - 1];
+    if (!old || old.close === 0) return null;
+    return (latest.close - old.close) / old.close * 100;
+  }, [niftyCandles]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // ── Aggregate stats ────────────────────────────────────────────────────────
@@ -137,6 +148,37 @@ export const PortfolioPanel: React.FC = () => {
               </div>
             ))}
           </div>
+
+          {/* ── Benchmark vs NIFTY ────────────────────────────────────────── */}
+          {niftyReturn !== null && (
+            <div className="p-4 rounded-xl border border-slate-800/80 bg-[#121620]/30 flex items-center justify-between gap-4">
+              <div className="text-xs text-slate-400">
+                <span className="font-semibold text-slate-300">Portfolio vs NIFTY 50</span>
+                <span className="ml-2 text-slate-500">(1-Year return)</span>
+              </div>
+              <div className="flex items-center gap-6">
+                <div className="text-center">
+                  <p className="text-[10px] text-slate-500">Your Portfolio</p>
+                  <p className={`text-sm font-extrabold font-mono ${totalReturnPct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                    {totalReturnPct >= 0 ? '+' : ''}{totalReturnPct.toFixed(2)}%
+                  </p>
+                </div>
+                <div className="text-slate-600 text-sm">vs</div>
+                <div className="text-center">
+                  <p className="text-[10px] text-slate-500">NIFTY 50</p>
+                  <p className={`text-sm font-extrabold font-mono ${niftyReturn >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                    {niftyReturn >= 0 ? '+' : ''}{niftyReturn.toFixed(2)}%
+                  </p>
+                </div>
+                <div className="text-center">
+                  <p className="text-[10px] text-slate-500">Alpha</p>
+                  <p className={`text-sm font-extrabold font-mono ${(totalReturnPct - niftyReturn) >= 0 ? 'text-purple-400' : 'text-amber-400'}`}>
+                    {(totalReturnPct - niftyReturn) >= 0 ? '+' : ''}{(totalReturnPct - niftyReturn).toFixed(2)}%
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* ── Allocation Strip ───────────────────────────────────────────── */}
           {allocationBars.length > 0 && (
