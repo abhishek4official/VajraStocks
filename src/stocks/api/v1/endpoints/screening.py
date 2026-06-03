@@ -21,6 +21,8 @@ class ScreeningParams(BaseModel):
     lb_dir: str | None = None  # 'UP', 'DOWN'
     min_weekly_avg_volume: float | None = None
     volume_breakout: str | None = None  # 'ANY', '1.5X', '2.0X', '3.0X'
+    only_nr7: bool = False
+    only_inside_bar: bool = False
     limit: int = 2500  # No hard cap — return all matches by default
 
 
@@ -41,6 +43,8 @@ class ScreenerRowResponse(BaseModel):
     macd_trend: str | None = None
     renko_direction: str | None = None
     line_break_direction: str | None = None
+    is_nr7: bool | None = None
+    is_inside_bar: bool | None = None
     weekly_avg_volume: float | None = None
     volume_breakout_ratio: float | None = None
 
@@ -61,6 +65,8 @@ def get_screening_results_get(
     lb_dir: str | None = None,
     min_weekly_avg_volume: float | None = None,
     volume_breakout: str | None = None,
+    only_nr7: bool = False,
+    only_inside_bar: bool = False,
     limit: int = 2500,
     db: Session = Depends(get_db),
 ):
@@ -78,6 +84,8 @@ def get_screening_results_get(
         lb_dir=lb_dir,
         min_weekly_avg_volume=min_weekly_avg_volume,
         volume_breakout=volume_breakout,
+        only_nr7=only_nr7,
+        only_inside_bar=only_inside_bar,
         limit=limit,
     )
 
@@ -99,6 +107,8 @@ def get_screening_results_get(
             "macd_trend": r.macd_trend,
             "renko_direction": r.renko_direction,
             "line_break_direction": r.line_break_direction,
+            "is_nr7": r.is_nr7,
+            "is_inside_bar": r.is_inside_bar,
             "weekly_avg_volume": getattr(r, "weekly_avg_volume", None),
             "volume_breakout_ratio": getattr(r, "volume_breakout_ratio", None),
         }
@@ -122,6 +132,8 @@ def get_screening_results_post(params: ScreeningParams, db: Session = Depends(ge
         lb_dir=params.lb_dir,
         min_weekly_avg_volume=params.min_weekly_avg_volume,
         volume_breakout=params.volume_breakout,
+        only_nr7=params.only_nr7,
+        only_inside_bar=params.only_inside_bar,
         limit=params.limit,
     )
 
@@ -143,6 +155,8 @@ def get_screening_results_post(params: ScreeningParams, db: Session = Depends(ge
             "macd_trend": r.macd_trend,
             "renko_direction": r.renko_direction,
             "line_break_direction": r.line_break_direction,
+            "is_nr7": r.is_nr7,
+            "is_inside_bar": r.is_inside_bar,
             "weekly_avg_volume": getattr(r, "weekly_avg_volume", None),
             "volume_breakout_ratio": getattr(r, "volume_breakout_ratio", None),
         }

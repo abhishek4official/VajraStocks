@@ -41,6 +41,18 @@ const PRESETS = [
     desc: 'RSI <45 + Renko DOWN reversal candidates',
     filters: { max_rsi: 45, renko_dir: 'DOWN' as const },
   },
+  {
+    name: 'NR7 Squeeze',
+    emoji: '🎯',
+    desc: 'Narrowest range of last 7 days — pre-breakout compression',
+    filters: { only_nr7: true },
+  },
+  {
+    name: 'Inside Bar',
+    emoji: '📦',
+    desc: 'Low-risk entry with well-defined stop loss',
+    filters: { only_inside_bar: true },
+  },
 ];
 
 export const ScreenerPanel: React.FC = () => {
@@ -427,8 +439,8 @@ export const ScreenerPanel: React.FC = () => {
           <label className="text-xs font-semibold text-slate-400">Three Line Break</label>
           <select
             value={screenerFilters.lb_dir || 'ANY'}
-            onChange={(e) => setScreenerFilters({ 
-              lb_dir: e.target.value === 'ANY' ? undefined : e.target.value as any 
+            onChange={(e) => setScreenerFilters({
+              lb_dir: e.target.value === 'ANY' ? undefined : e.target.value as any
             })}
             className="w-full px-3 py-1.5 text-sm rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
           >
@@ -436,6 +448,31 @@ export const ScreenerPanel: React.FC = () => {
             <option value="UP">Bullish (UP)</option>
             <option value="DOWN">Bearish (DOWN)</option>
           </select>
+        </div>
+
+        {/* Pattern flags */}
+        <div className="flex flex-col gap-1.5 justify-end">
+          <label className="text-xs font-semibold text-slate-400">Patterns</label>
+          <div className="flex flex-col gap-1.5">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={!!screenerFilters.only_nr7}
+                onChange={(e) => setScreenerFilters({ only_nr7: e.target.checked || undefined })}
+                className="accent-purple-500"
+              />
+              <span className="text-xs text-slate-300">NR7 only</span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={!!screenerFilters.only_inside_bar}
+                onChange={(e) => setScreenerFilters({ only_inside_bar: e.target.checked || undefined })}
+                className="accent-purple-500"
+              />
+              <span className="text-xs text-slate-300">Inside Bar only</span>
+            </label>
+          </div>
         </div>
       </div>
 

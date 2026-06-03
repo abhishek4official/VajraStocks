@@ -79,6 +79,11 @@ def bootstrap_symbols(config_path: str):
         synced = symbol_service.sync_symbols(parsed_symbols)
         logger.info(f"Bootstrap complete. {synced} active symbols are now registered in the database.")
 
+        logger.info("Registering configured index symbols (^NSEI, ^NSEBANK, etc.)...")
+        idx_count = symbol_service.ensure_indices_registered()
+        if idx_count:
+            logger.info(f"Registered {idx_count} new index symbol(s).")
+
         db_manager.dispose()
     except Exception as e:
         logger.critical(f"Symbol bootstrap operation failed: {e}")

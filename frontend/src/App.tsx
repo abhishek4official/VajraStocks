@@ -9,6 +9,7 @@ import { SyncPanel } from './components/SyncPanel';
 import { AgentTerminal } from './components/AgentTerminal';
 import { PortfolioPanel } from './components/PortfolioPanel';
 import { WatchlistPanel } from './components/WatchlistPanel';
+import { TradePlanCard } from './components/TradePlanCard';
 import {
   LineChart,
   Search,
@@ -34,7 +35,9 @@ function App() {
     activeSymbol,
     activeSymbolDetail,
     candles,
+    niftyCandles,
     fetchSymbols,
+    fetchNiftyCandles,
     isLoading,
     addToWatchlist,
     watchlists,
@@ -68,6 +71,7 @@ function App() {
 
   useEffect(() => {
     fetchSymbols();
+    fetchNiftyCandles(); // attempt to load NIFTY data for overlay — silently fails if not synced
 
     const handlePopState = () => {
       const path = window.location.pathname.replace(/^\/+/, '').split('/')[0];
@@ -279,15 +283,17 @@ function App() {
                         { key: 'ema9'   as const, label: 'EMA 9',   color: 'text-cyan-400'   },
                         { key: 'ema21'  as const, label: 'EMA 21',  color: 'text-orange-400' },
                         { key: 'bb'     as const, label: 'BB',      color: 'text-slate-300'  },
-                      ]).map(({ key, label, color }) => (
+                        { key: 'sr'     as const, label: 'S/R',     color: 'text-yellow-400' },
+                        { key: 'nifty'  as const, label: 'NIFTY',   color: 'text-yellow-300', disabled: niftyCandles.length === 0 },
+                      ]).map(({ key, label, color, disabled = false }) => (
                         <button
                           key={key}
-                          onClick={() => toggleChartOverlay(key)}
-                          title={chartOverlays.has(key) ? `Hide ${label}` : `Show ${label}`}
-                          className={`px-2.5 py-1.5 rounded-md text-[10px] font-bold transition duration-150 cursor-pointer ${
-                            chartOverlays.has(key)
-                              ? `bg-slate-700 ${color}`
-                              : 'text-slate-600 hover:text-slate-400'
+                          onClick={() => !disabled && toggleChartOverlay(key)}
+                          title={disabled ? `Sync ^NSEI first to enable` : chartOverlays.has(key) ? `Hide ${label}` : `Show ${label}`}
+                          className={`px-2.5 py-1.5 rounded-md text-[10px] font-bold transition duration-150 ${
+                            disabled ? 'opacity-30 cursor-not-allowed text-slate-600'
+                            : chartOverlays.has(key) ? `bg-slate-700 ${color} cursor-pointer`
+                            : 'text-slate-600 hover:text-slate-400 cursor-pointer'
                           }`}
                         >
                           {label}
@@ -305,14 +311,15 @@ function App() {
               {/* Central Charting Area */}
               {activeSymbol ? (
                 <>
-                  <PriceChart indicatorToShow={indicatorToShow} timeframe={chartTimeframe} overlays={chartOverlays} />
+                  <PriceChart indicatorToShow={indicatorToShow} timeframe={chartTimeframe} overlays={chartOverlays} niftyCandles={niftyCandles} />
                   
                   {/* Multi-Pane Grid details */}
                   <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 min-h-[350px]">
                     <div className="xl:col-span-2">
                       <MetricsTable />
                     </div>
-                    <div className="xl:col-span-1">
+                    <div className="xl:col-span-1 flex flex-col gap-4">
+                      <TradePlanCard />
                       <CorporateActionsTimeline />
                     </div>
                   </div>

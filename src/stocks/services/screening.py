@@ -29,9 +29,9 @@ class ScreeningService:
             if not symbol_obj or not symbol_obj.is_active:
                 return
 
-            # 2. Fetch latest 2 EOD prices to compute close and percentage change
+            # 2. Fetch latest 7 EOD prices — enough for NR7 + Inside Bar + pct change
             prices = self.db.scalars(
-                select(DailyPrice).filter_by(symbol_id=symbol_id).order_by(DailyPrice.trading_date.desc()).limit(2)
+                select(DailyPrice).filter_by(symbol_id=symbol_id).order_by(DailyPrice.trading_date.desc()).limit(7)
             ).all()
 
             if not prices:
@@ -48,6 +48,22 @@ class ScreeningService:
                 prev_close = float(prices[1].close)
                 if prev_close > 0:
                     price_pct_change = ((close_price - prev_close) / prev_close) * 100.0
+
+            # NR7: today's high-low range is the narrowest of the last 7 trading days
+            is_nr7 = None
+            if len(prices) >= 7:
+                today_range = float(latest_price.high) - float(latest_price.low)
+                prior_ranges = [float(p.high) - float(p.low) for p in prices[1:7]]
+                is_nr7 = today_range < min(prior_ranges) if prior_ranges else False
+
+            # Inside Bar: today's high < prior high AND today's low > prior low
+            is_inside_bar = None
+            if len(prices) >= 2:
+                prev = prices[1]
+                is_inside_bar = (
+                    float(latest_price.high) < float(prev.high) and
+                    float(latest_price.low) > float(prev.low)
+                )
 
             # 3. Fetch latest Heikin-Ashi candle
             ha = self.db.scalar(
@@ -121,6 +137,8 @@ class ScreeningService:
                     macd_trend=macd_trend,
                     renko_direction=renko_direction,
                     line_break_direction=line_break_direction,
+                    is_nr7=is_nr7,
+                    is_inside_bar=is_inside_bar,
                 )
                 self.db.add(snapshot)
             else:
@@ -137,6 +155,8 @@ class ScreeningService:
                 snapshot.macd_trend = macd_trend
                 snapshot.renko_direction = renko_direction
                 snapshot.line_break_direction = line_break_direction
+                snapshot.is_nr7 = is_nr7
+                snapshot.is_inside_bar = is_inside_bar
 
             self.db.commit()
         except Exception as e:
@@ -174,7 +194,9 @@ class ScreeningService:
         lb_dir: str | None = None,
         min_weekly_avg_volume: float | None = None,
         volume_breakout: str | None = None,
-        limit: int = 100,
+        only_nr7: bool = False,
+        only_inside_bar: bool = False,
+        limit: int = 2500,
     ) -> list[ScreeningSnapshot]:
         """Runs high-speed query sweeps directly against the narrow screening_snapshots table."""
         stmt = select(ScreeningSnapshot)
@@ -197,6 +219,10 @@ class ScreeningService:
             stmt = stmt.where(ScreeningSnapshot.renko_direction == renko_dir.upper())
         if lb_dir is not None:
             stmt = stmt.where(ScreeningSnapshot.line_break_direction == lb_dir.upper())
+        if only_nr7:
+            stmt = stmt.where(ScreeningSnapshot.is_nr7 == True)  # noqa: E712
+        if only_inside_bar:
+            stmt = stmt.where(ScreeningSnapshot.is_inside_bar == True)  # noqa: E712
 
         stmt = stmt.order_by(ScreeningSnapshot.symbol.asc())
 
@@ -232,6 +258,10 @@ class ScreeningService:
             symbol_ids_subq = symbol_ids_subq.where(ScreeningSnapshot.renko_direction == renko_dir.upper())
         if lb_dir is not None:
             symbol_ids_subq = symbol_ids_subq.where(ScreeningSnapshot.line_break_direction == lb_dir.upper())
+        if only_nr7:
+            symbol_ids_subq = symbol_ids_subq.where(ScreeningSnapshot.is_nr7 == True)  # noqa: E712
+        if only_inside_bar:
+            symbol_ids_subq = symbol_ids_subq.where(ScreeningSnapshot.is_inside_bar == True)  # noqa: E712
 
         subq = (
             select(

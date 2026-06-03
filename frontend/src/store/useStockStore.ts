@@ -28,10 +28,12 @@ interface ScreenerFilters {
   lb_dir?: 'UP' | 'DOWN';
   min_weekly_avg_volume?: number;
   volume_breakout?: 'ANY' | '1.5X' | '2.0X' | '3.0X';
+  only_nr7?: boolean;
+  only_inside_bar?: boolean;
   limit?: number;
 }
 
-export type ChartOverlay = 'sma20' | 'sma50' | 'sma200' | 'ema9' | 'ema21' | 'bb';
+export type ChartOverlay = 'sma20' | 'sma50' | 'sma200' | 'ema9' | 'ema21' | 'bb' | 'sr' | 'nifty';
 
 export interface PortfolioHolding {
   instrument: string;   // raw ticker e.g. RELIANCE
@@ -75,6 +77,7 @@ interface StockState {
   lineBreakLines: LineBreakLine[];
   indicators: IndicatorData[];
   corporateActions: CorporateAction[];
+  niftyCandles: CandleData[];
 
   screenerFilters: ScreenerFilters;
   screenerResults: ScreenerRow[];
@@ -89,6 +92,8 @@ interface StockState {
   aiReport: string | null;
   aiRecommendation: string | null;
   aiConfidence: string | null;
+
+  fetchNiftyCandles: () => Promise<void>;
 
   // Portfolio
   portfolioHoldings: PortfolioHolding[];
@@ -237,6 +242,7 @@ export const useStockStore = create<StockState>((set, get) => ({
   lineBreakLines: [],
   indicators: [],
   corporateActions: [],
+  niftyCandles: [],
 
   screenerFilters: {
     min_rsi: undefined,
@@ -252,6 +258,8 @@ export const useStockStore = create<StockState>((set, get) => ({
     lb_dir: undefined,
     min_weekly_avg_volume: undefined,
     volume_breakout: undefined,
+    only_nr7: undefined,
+    only_inside_bar: undefined,
     limit: 2500,
   },
   screenerResults: [],
@@ -405,6 +413,16 @@ export const useStockStore = create<StockState>((set, get) => ({
       set({ candles, heikinAshi, renkoBricks, lineBreakLines, indicators, corporateActions, isLoading: false });
     } catch (err: unknown) {
       set({ error: (err as Error).message || 'Failed to fetch symbol data', isLoading: false });
+    }
+  },
+
+  fetchNiftyCandles: async () => {
+    try {
+      const candles = await apiService.getCandles('^NSEI');
+      set({ niftyCandles: candles });
+    } catch {
+      // NIFTY not synced yet — silently ignore, overlay will be hidden
+      set({ niftyCandles: [] });
     }
   },
 

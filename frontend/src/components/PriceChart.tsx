@@ -12,12 +12,42 @@ import type {
 import { useStockStore } from '../store/useStockStore';
 
 type ChartTimeframe = '1W' | '1M' | '3M' | '6M' | '1Y' | 'MAX';
-type ChartOverlay = 'ema9' | 'ema21' | 'bb';
+type ChartOverlay = 'sma20' | 'sma50' | 'sma200' | 'ema9' | 'ema21' | 'bb' | 'sr' | 'nifty';
 
 interface PriceChartProps {
   indicatorToShow: 'RSI' | 'MACD' | 'NONE';
   timeframe?: ChartTimeframe;
   overlays?: Set<ChartOverlay>;
+  niftyCandles?: import('../services/api').CandleData[];
+}
+
+/** Detect pivot highs/lows and return clustered S/R price levels. */
+function detectSRLevels(candles: { high: number; low: number; close: number }[], window = 3, maxLevels = 8): number[] {
+  if (candles.length < window * 2 + 1) return [];
+  const pivotHighs: number[] = [];
+  const pivotLows: number[] = [];
+
+  for (let i = window; i < candles.length - window; i++) {
+    const slice = candles.slice(i - window, i + window + 1);
+    const isHigh = candles[i].high === Math.max(...slice.map(c => c.high));
+    const isLow  = candles[i].low  === Math.min(...slice.map(c => c.low));
+    if (isHigh) pivotHighs.push(candles[i].high);
+    if (isLow)  pivotLows.push(candles[i].low);
+  }
+
+  // Cluster levels within 0.5% of each other, keep the most-touched
+  const all = [...pivotHighs, ...pivotLows];
+  const clusters: number[] = [];
+  for (const lvl of all) {
+    const nearby = clusters.find(c => Math.abs(c - lvl) / lvl < 0.005);
+    if (!nearby) clusters.push(lvl);
+  }
+
+  // Sort by distance from last close and return top N
+  const lastClose = candles[candles.length - 1]?.close ?? 0;
+  return clusters
+    .sort((a, b) => Math.abs(a - lastClose) - Math.abs(b - lastClose))
+    .slice(0, maxLevels);
 }
 
 /** Returns a UTC unix timestamp (seconds) for N days before today. */
@@ -28,7 +58,7 @@ function daysAgoUTC(days: number): number {
   return d.getTime() / 1000;
 }
 
-export const PriceChart: React.FC<PriceChartProps> = ({ indicatorToShow, timeframe = '1Y', overlays = new Set() }) => {
+export const PriceChart: React.FC<PriceChartProps> = ({ indicatorToShow, timeframe = '1Y', overlays = new Set(), niftyCandles = [] }) => {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const indicatorContainerRef = useRef<HTMLDivElement>(null);
   
@@ -279,6 +309,62 @@ export const PriceChart: React.FC<PriceChartProps> = ({ indicatorToShow, timefra
       }
     }
 
+    // 6d. Auto Support & Resistance levels
+    if (overlays.has('sr') && primaryData.length > 10) {
+      const srcCandles = chartType === 'candles' ? candles
+        : chartType === 'heikin-ashi' ? heikinAshi : [];
+      if (srcCandles.length > 0) {
+        const levels = detectSRLevels(srcCandles);
+        const lastTs = primaryData[primaryData.length - 1]?.time as number;
+        const firstTs = primaryData[0]?.time as number;
+        for (const lvl of levels) {
+          const srSeries = mainChart.addSeries(LineSeries, {
+            color: 'rgba(251, 191, 36, 0.55)',
+            lineWidth: 1,
+            lineStyle: 1, // dashed
+            priceLineVisible: false,
+            lastValueVisible: false,
+            crosshairMarkerVisible: false,
+          });
+          srSeries.setData([
+            { time: firstTs as any, value: lvl },
+            { time: lastTs as any,  value: lvl },
+          ]);
+        }
+      }
+    }
+
+    // 6e. NIFTY 50 normalised overlay (% change from first visible candle)
+    if (overlays.has('nifty') && niftyCandles.length > 0 && primaryData.length > 0) {
+      // Build a map: date-string → nifty close
+      const niftyMap = new Map<string, number>(niftyCandles.map(c => [c.time, c.close]));
+      // Match NIFTY dates to the stock's timeMap
+      const niftyPts: { time: number; close: number }[] = [];
+      for (const c of candles) {
+        const nc = niftyMap.get(c.time);
+        const ts = timeMap.get(c.time);
+        if (nc != null && ts != null) niftyPts.push({ time: ts, close: nc });
+      }
+      if (niftyPts.length > 1) {
+        const base = niftyPts[0].close;
+        const stockBase = primaryData[0]?.close ?? primaryData[0]?.value ?? (candles[0]?.close ?? 1);
+        // Scale NIFTY to same starting price as stock
+        const niftyScaled: LineData[] = niftyPts.map(p => ({
+          time: p.time as any,
+          value: stockBase * (p.close / base),
+        }));
+        const niftySeries = mainChart.addSeries(LineSeries, {
+          color: 'rgba(251,191,36,0.7)',
+          lineWidth: 1.5,
+          lineStyle: 0,
+          title: 'NIFTY',
+          priceLineVisible: false,
+          lastValueVisible: true,
+        });
+        niftySeries.setData(niftyScaled);
+      }
+    }
+
     // 7. Add Volume overlay histogram on Price chart
     if (hasVolume && volumeData.length > 0) {
       const volumeSeries = mainChart.addSeries(HistogramSeries, {
@@ -446,6 +532,7 @@ export const PriceChart: React.FC<PriceChartProps> = ({ indicatorToShow, timefra
     indicatorToShow,
     timeframe,
     overlays,
+    niftyCandles,
     activeSymbol,
   ]);
 
