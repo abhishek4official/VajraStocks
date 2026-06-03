@@ -11,11 +11,22 @@ import type {
 } from 'lightweight-charts';
 import { useStockStore } from '../store/useStockStore';
 
+type ChartTimeframe = '1W' | '1M' | '3M' | '6M' | '1Y' | 'MAX';
+
 interface PriceChartProps {
   indicatorToShow: 'RSI' | 'MACD' | 'NONE';
+  timeframe?: ChartTimeframe;
 }
 
-export const PriceChart: React.FC<PriceChartProps> = ({ indicatorToShow }) => {
+/** Returns a UTC unix timestamp (seconds) for N days before today. */
+function daysAgoUTC(days: number): number {
+  const d = new Date();
+  d.setUTCHours(0, 0, 0, 0);
+  d.setUTCDate(d.getUTCDate() - days);
+  return d.getTime() / 1000;
+}
+
+export const PriceChart: React.FC<PriceChartProps> = ({ indicatorToShow, timeframe = '1Y' }) => {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const indicatorContainerRef = useRef<HTMLDivElement>(null);
   
@@ -189,6 +200,20 @@ export const PriceChart: React.FC<PriceChartProps> = ({ indicatorToShow }) => {
       wickDownColor: '#ef4444',
     });
     mainSeries.setData(primaryData);
+
+    // Apply timeframe zoom after data is loaded
+    if (timeframe === 'MAX') {
+      mainChart.timeScale().fitContent();
+    } else {
+      const daysMap: Record<ChartTimeframe, number> = {
+        '1W': 7, '1M': 30, '3M': 90, '6M': 180, '1Y': 365, 'MAX': 0,
+      };
+      const fromTs = daysAgoUTC(daysMap[timeframe]);
+      const toTs = daysAgoUTC(0) + 86400; // today + 1 day buffer
+      try {
+        mainChart.timeScale().setVisibleRange({ from: fromTs as any, to: toTs as any });
+      } catch { mainChart.timeScale().fitContent(); }
+    }
 
     // 6. Draw SMAs overlay on Price chart (only for Candlesticks and Heikin-Ashi)
     let sma20Series: any = null;
@@ -405,14 +430,15 @@ export const PriceChart: React.FC<PriceChartProps> = ({ indicatorToShow }) => {
     };
 
   }, [
-    chartType, 
-    candles, 
-    heikinAshi, 
-    renkoBricks, 
-    lineBreakLines, 
-    indicators, 
+    chartType,
+    candles,
+    heikinAshi,
+    renkoBricks,
+    lineBreakLines,
+    indicators,
     indicatorToShow,
-    activeSymbol
+    timeframe,
+    activeSymbol,
   ]);
 
   return (

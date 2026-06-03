@@ -1,15 +1,19 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useStockStore } from '../store/useStockStore';
-import { Play, Eye, Filter, RefreshCw, BarChart2, Download } from 'lucide-react';
+import { Play, Eye, Filter, RefreshCw, BarChart2, Download, Bookmark } from 'lucide-react';
 import type { ScreenerRow } from '../services/api';
 
 export const ScreenerPanel: React.FC = () => {
-  const { 
-    screenerFilters, 
-    screenerResults, 
-    setScreenerFilters, 
-    runScreener, 
-    isLoading 
+  const {
+    screenerFilters,
+    screenerResults,
+    setScreenerFilters,
+    runScreener,
+    isLoading,
+    setActiveTab,
+    setSelectedSymbol,
+    watchlists,
+    addToWatchlist,
   } = useStockStore();
 
   // Client-side sorting states
@@ -25,9 +29,16 @@ export const ScreenerPanel: React.FC = () => {
     runScreener();
   };
 
-  const handleSelectScreenerMatch = (symbol: string) => {
-    // Open in a new tab/window pointing to the stock details
-    window.open(`/?symbol=${symbol}`, '_blank');
+  // Navigate in-place to the Explorer Dashboard for the selected symbol
+  const handleSelectScreenerMatch = async (symbol: string) => {
+    await setSelectedSymbol(symbol);
+    setActiveTab('explorer');
+  };
+
+  // Add ticker to the first watchlist (or the only one if one exists)
+  const handleAddToWatchlist = (symbol: string) => {
+    const target = watchlists[0];
+    if (target) addToWatchlist(target.id, symbol);
   };
 
   const formatNumber = (val: number | null | undefined, decimals = 2) => {
@@ -338,7 +349,10 @@ export const ScreenerPanel: React.FC = () => {
         <div className="flex items-center justify-between pb-3 border-b border-slate-800 mb-3 shrink-0">
           <h3 className="text-sm font-bold text-white tracking-wide flex items-center gap-1.5">
             <BarChart2 className="w-4 h-4 text-purple-400" />
-            Matching Stocks ({sortedResults.length})
+            Matching Stocks
+            <span className="font-mono text-xs text-slate-400 font-normal">
+              ({sortedResults.length.toLocaleString()} result{sortedResults.length !== 1 ? 's' : ''})
+            </span>
           </h3>
           {isLoading && <RefreshCw className="w-4 h-4 text-purple-400 animate-spin" />}
         </div>
@@ -536,13 +550,22 @@ export const ScreenerPanel: React.FC = () => {
                       
                       {/* Actions */}
                       <td className="py-3 px-3 text-right">
-                        <button
-                          onClick={() => handleSelectScreenerMatch(row.symbol)}
-                          className="p-1 px-2.5 rounded bg-slate-900 border border-slate-800 hover:border-purple-500/80 text-slate-400 hover:text-white text-xs flex items-center gap-1.5 ml-auto transition cursor-pointer"
-                        >
-                          <Eye className="w-3.5 h-3.5" />
-                          Inspect
-                        </button>
+                        <div className="flex items-center gap-1.5 justify-end">
+                          <button
+                            onClick={() => handleAddToWatchlist(row.symbol)}
+                            title="Add to Watchlist"
+                            className="p-1 px-2 rounded bg-slate-900 border border-slate-800 hover:border-indigo-500/80 text-slate-500 hover:text-indigo-400 text-xs flex items-center gap-1 transition cursor-pointer"
+                          >
+                            <Bookmark className="w-3 h-3" />
+                          </button>
+                          <button
+                            onClick={() => handleSelectScreenerMatch(row.symbol)}
+                            className="p-1 px-2.5 rounded bg-slate-900 border border-slate-800 hover:border-purple-500/80 text-slate-400 hover:text-white text-xs flex items-center gap-1.5 transition cursor-pointer"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            Inspect
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );

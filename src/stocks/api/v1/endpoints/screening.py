@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from stocks.api.deps import get_db
+from stocks.api.deps import config, get_db
 from stocks.services.screening import ScreeningService
 
 router = APIRouter(prefix="/screeners", tags=["Stock Screening"])
@@ -21,7 +21,7 @@ class ScreeningParams(BaseModel):
     lb_dir: str | None = None  # 'UP', 'DOWN'
     min_weekly_avg_volume: float | None = None
     volume_breakout: str | None = None  # 'ANY', '1.5X', '2.0X', '3.0X'
-    limit: int = 100
+    limit: int = 2500  # No hard cap — return all matches by default
 
 
 class ScreenerRowResponse(BaseModel):
@@ -61,14 +61,10 @@ def get_screening_results_get(
     lb_dir: str | None = None,
     min_weekly_avg_volume: float | None = None,
     volume_breakout: str | None = None,
-    limit: int = 100,
+    limit: int = 2500,
     db: Session = Depends(get_db),
 ):
     """Executes a high-speed screening sweep using query parameters directly against the narrow snapshot layer."""
-    from stocks.config import Config
-
-    config = Config.load()
-
     screening_service = ScreeningService(config, db)
     results = screening_service.query_screener(
         min_rsi=min_rsi,
@@ -113,10 +109,6 @@ def get_screening_results_get(
 @router.post("/run", response_model=list[ScreenerRowResponse])
 def get_screening_results_post(params: ScreeningParams, db: Session = Depends(get_db)):
     """Executes a high-speed screening sweep using a POST body request directly against the snapshot layer."""
-    from stocks.config import Config
-
-    config = Config.load()
-
     screening_service = ScreeningService(config, db)
     results = screening_service.query_screener(
         min_rsi=params.min_rsi,

@@ -3,24 +3,19 @@ from fastapi.responses import StreamingResponse
 from loguru import logger
 from sqlalchemy.orm import Session
 
-from stocks.api.deps import get_db
+from stocks.api.deps import config, get_db
 from stocks.services.agents.orchestrator import Orchestrator
 
 router = APIRouter(prefix="/agents", tags=["AI Quant Agents"])
 
 
 @router.get("/chat-stream")
-def chat_stream(
+async def chat_stream(
     prompt: str = Query(..., description="The user's query prompt to feed the multi-agent system"),
     db: Session = Depends(get_db),
 ):
     """Executes a dynamic multi-agent technical research workflow and streams progress events in real-time."""
     logger.info(f"AI Agent Chat request initiated with prompt: '{prompt}'")
-
-    # Load configuration
-    from stocks.config import Config
-
-    config = Config.load()
 
     orchestrator = Orchestrator(config, db)
 

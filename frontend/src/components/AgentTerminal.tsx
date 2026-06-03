@@ -120,6 +120,34 @@ export const AgentTerminal: React.FC = () => {
       return <p key={idx} className="text-xs text-slate-350 my-1 leading-relaxed">{parseInlineFormatting(trimmed)}</p>;
     });
 
+    // Flush any table that ends on the final line of the report
+    if (tableHeaders.length > 0) {
+      const headers = [...tableHeaders];
+      const rows = [...tableRows];
+      parsedElements.push(
+        <div key="table-final" className="my-4 overflow-x-auto rounded-lg border border-slate-800 bg-slate-950/40">
+          <table className="w-full border-collapse text-left text-xs">
+            <thead>
+              <tr className="border-b border-slate-800 bg-slate-900/60 font-mono font-bold text-slate-400">
+                {headers.map((h, i) => (
+                  <th key={i} className="p-2.5 px-4 font-bold">{h.replace(/\*\*/g, '')}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-850">
+              {rows.map((row, rIdx) => (
+                <tr key={rIdx} className="hover:bg-slate-900/30 transition">
+                  {row.map((cell, cIdx) => (
+                    <td key={cIdx} className="p-2.5 px-4 font-mono font-medium text-white">{cell.replace(/\*\*/g, '')}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+    }
+
     return <div className="space-y-1">{parsedElements}</div>;
   };
 
