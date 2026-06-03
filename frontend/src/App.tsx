@@ -29,6 +29,8 @@ function App() {
     setChartType,
     chartTimeframe,
     setChartTimeframe,
+    chartOverlays,
+    toggleChartOverlay,
     activeSymbol,
     activeSymbolDetail,
     candles,
@@ -65,18 +67,35 @@ function App() {
     v >= 1_000_000 ? `${(v / 1_000_000).toFixed(2)}M` : v >= 1000 ? `${(v / 1000).toFixed(1)}K` : String(v);
 
   useEffect(() => {
-    // Initial load of symbols
     fetchSymbols();
 
-    // Browser back/forward button history navigation synchronization
     const handlePopState = () => {
       const path = window.location.pathname.replace(/^\/+/, '').split('/')[0];
-      const tab = ['explorer', 'screener', 'sync', 'ai-research'].includes(path) ? path : 'explorer';
+      const valid = ['explorer', 'screener', 'sync', 'ai-research', 'portfolio', 'watchlist'];
+      const tab = valid.includes(path) ? path : 'explorer';
       useStockStore.setState({ activeTab: tab as any });
     };
-
     window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
+
+    // Keyboard shortcuts
+    const handleKey = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement).tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return; // don't fire inside inputs
+      const { setActiveTab } = useStockStore.getState();
+      switch (e.key.toLowerCase()) {
+        case 'e': setActiveTab('explorer');    break;
+        case 's': setActiveTab('screener');    break;
+        case 'p': setActiveTab('portfolio');   break;
+        case 'w': setActiveTab('watchlist');   break;
+        case 'a': setActiveTab('ai-research'); break;
+      }
+    };
+    window.addEventListener('keydown', handleKey);
+
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+      window.removeEventListener('keydown', handleKey);
+    };
   }, []);
 
   return (
@@ -236,7 +255,7 @@ function App() {
                       ))}
                     </div>
 
-                    {/* Indicator */}
+                    {/* Indicator sub-pane */}
                     <div className="flex bg-slate-950/80 p-0.5 rounded-lg border border-slate-850">
                       {(['RSI', 'MACD', 'NONE'] as const).map(ind => (
                         <button
@@ -247,6 +266,31 @@ function App() {
                           }`}
                         >
                           {ind}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Overlay toggles — SMAs + EMAs + BB in one block */}
+                    <div className="flex bg-slate-950/80 p-0.5 rounded-lg border border-slate-850 flex-wrap">
+                      {([
+                        { key: 'sma20'  as const, label: 'SMA 20',  color: 'text-blue-400'   },
+                        { key: 'sma50'  as const, label: 'SMA 50',  color: 'text-amber-400'  },
+                        { key: 'sma200' as const, label: 'SMA 200', color: 'text-pink-400'   },
+                        { key: 'ema9'   as const, label: 'EMA 9',   color: 'text-cyan-400'   },
+                        { key: 'ema21'  as const, label: 'EMA 21',  color: 'text-orange-400' },
+                        { key: 'bb'     as const, label: 'BB',      color: 'text-slate-300'  },
+                      ]).map(({ key, label, color }) => (
+                        <button
+                          key={key}
+                          onClick={() => toggleChartOverlay(key)}
+                          title={chartOverlays.has(key) ? `Hide ${label}` : `Show ${label}`}
+                          className={`px-2.5 py-1.5 rounded-md text-[10px] font-bold transition duration-150 cursor-pointer ${
+                            chartOverlays.has(key)
+                              ? `bg-slate-700 ${color}`
+                              : 'text-slate-600 hover:text-slate-400'
+                          }`}
+                        >
+                          {label}
                         </button>
                       ))}
                     </div>
@@ -261,7 +305,7 @@ function App() {
               {/* Central Charting Area */}
               {activeSymbol ? (
                 <>
-                  <PriceChart indicatorToShow={indicatorToShow} timeframe={chartTimeframe} />
+                  <PriceChart indicatorToShow={indicatorToShow} timeframe={chartTimeframe} overlays={chartOverlays} />
                   
                   {/* Multi-Pane Grid details */}
                   <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 min-h-[350px]">

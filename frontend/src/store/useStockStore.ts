@@ -17,6 +17,8 @@ import type {
 interface ScreenerFilters {
   min_rsi?: number;
   max_rsi?: number;
+  min_price?: number;
+  max_price?: number;
   sma_20_cross?: 'ABOVE' | 'BELOW';
   sma_50_cross?: 'ABOVE' | 'BELOW';
   sma_200_cross?: 'ABOVE' | 'BELOW';
@@ -28,6 +30,8 @@ interface ScreenerFilters {
   volume_breakout?: 'ANY' | '1.5X' | '2.0X' | '3.0X';
   limit?: number;
 }
+
+export type ChartOverlay = 'sma20' | 'sma50' | 'sma200' | 'ema9' | 'ema21' | 'bb';
 
 export interface PortfolioHolding {
   instrument: string;   // raw ticker e.g. RELIANCE
@@ -63,6 +67,7 @@ interface StockState {
   activeTab: TabId;
   chartType: 'candles' | 'heikin-ashi' | 'renko' | 'line-break';
   chartTimeframe: ChartTimeframe;
+  chartOverlays: Set<ChartOverlay>;
 
   candles: CandleData[];
   heikinAshi: CandleData[];
@@ -100,6 +105,7 @@ interface StockState {
   setActiveTab: (tab: TabId) => void;
   setChartType: (type: 'candles' | 'heikin-ashi' | 'renko' | 'line-break') => void;
   setChartTimeframe: (tf: ChartTimeframe) => void;
+  toggleChartOverlay: (overlay: ChartOverlay) => void;
   setScreenerFilters: (filters: Partial<ScreenerFilters>) => void;
   setAiQuery: (query: string) => void;
   clearAiConsole: () => void;
@@ -223,6 +229,7 @@ export const useStockStore = create<StockState>((set, get) => ({
   activeTab: getInitialTab(),
   chartType: 'candles',
   chartTimeframe: '1Y',
+  chartOverlays: new Set<ChartOverlay>(['sma20', 'sma50', 'sma200']),
 
   candles: [],
   heikinAshi: [],
@@ -234,6 +241,8 @@ export const useStockStore = create<StockState>((set, get) => ({
   screenerFilters: {
     min_rsi: undefined,
     max_rsi: undefined,
+    min_price: undefined,
+    max_price: undefined,
     sma_20_cross: undefined,
     sma_50_cross: undefined,
     sma_200_cross: undefined,
@@ -276,6 +285,11 @@ export const useStockStore = create<StockState>((set, get) => ({
   },
   setChartType: (chartType) => set({ chartType }),
   setChartTimeframe: (chartTimeframe) => set({ chartTimeframe }),
+  toggleChartOverlay: (overlay) => {
+    const next = new Set(get().chartOverlays);
+    if (next.has(overlay)) next.delete(overlay); else next.add(overlay);
+    set({ chartOverlays: next });
+  },
   setScreenerFilters: (filters) => set({
     screenerFilters: { ...get().screenerFilters, ...filters }
   }),
@@ -397,7 +411,11 @@ export const useStockStore = create<StockState>((set, get) => ({
   runScreener: async () => {
     set({ isLoading: true, error: null });
     try {
-      const results = await apiService.runScreenerPost(get().screenerFilters);
+      const filters = get().screenerFilters;
+      let results = await apiService.runScreenerPost(filters);
+      // Apply client-side price range filter (close_price already in response)
+      if (filters.min_price !== undefined) results = results.filter(r => r.close_price >= filters.min_price!);
+      if (filters.max_price !== undefined) results = results.filter(r => r.close_price <= filters.max_price!);
       set({ screenerResults: results, isLoading: false });
     } catch (err: unknown) {
       set({ error: (err as Error).message || 'Failed to execute screening sweep', isLoading: false });

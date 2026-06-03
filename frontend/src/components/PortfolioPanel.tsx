@@ -163,6 +163,34 @@ export const PortfolioPanel: React.FC = () => {
             </div>
           )}
 
+          {/* ── P&L Bar Chart ─────────────────────────────────────────────── */}
+          <div className="p-4 rounded-xl border border-slate-800/80 bg-[#121620]/30">
+            <p className="text-xs font-semibold text-slate-400 mb-4">P&amp;L per Holding</p>
+            <div className="space-y-2.5">
+              {[...portfolioHoldings]
+                .sort((a, b) => b.pnl - a.pnl)
+                .map(h => {
+                  const maxAbs = Math.max(...portfolioHoldings.map(x => Math.abs(x.pnl)), 1);
+                  const barPct = Math.abs(h.pnl) / maxAbs * 100;
+                  const bull = h.pnl >= 0;
+                  return (
+                    <div key={h.instrument} className="flex items-center gap-3">
+                      <span className="text-xs font-mono font-bold text-slate-300 w-24 shrink-0 truncate">{h.instrument}</span>
+                      <div className="flex-1 h-5 bg-slate-900 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all ${bull ? 'bg-emerald-500/70' : 'bg-rose-500/70'}`}
+                          style={{ width: `${barPct}%` }}
+                        />
+                      </div>
+                      <span className={`text-xs font-mono font-semibold w-24 text-right shrink-0 ${pnlClass(h.pnl)}`}>
+                        {bull ? '+' : ''}₹{fmtINR(h.pnl)}
+                      </span>
+                    </div>
+                  );
+                })}
+            </div>
+          </div>
+
           {/* ── Holdings Table ─────────────────────────────────────────────── */}
           <div className="bg-[#121620]/60 rounded-xl border border-slate-800/80 p-4 flex flex-col">
             <h3 className="text-sm font-bold text-white mb-3 flex items-center gap-2">

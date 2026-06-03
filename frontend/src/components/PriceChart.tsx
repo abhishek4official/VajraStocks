@@ -12,10 +12,12 @@ import type {
 import { useStockStore } from '../store/useStockStore';
 
 type ChartTimeframe = '1W' | '1M' | '3M' | '6M' | '1Y' | 'MAX';
+type ChartOverlay = 'ema9' | 'ema21' | 'bb';
 
 interface PriceChartProps {
   indicatorToShow: 'RSI' | 'MACD' | 'NONE';
   timeframe?: ChartTimeframe;
+  overlays?: Set<ChartOverlay>;
 }
 
 /** Returns a UTC unix timestamp (seconds) for N days before today. */
@@ -26,7 +28,7 @@ function daysAgoUTC(days: number): number {
   return d.getTime() / 1000;
 }
 
-export const PriceChart: React.FC<PriceChartProps> = ({ indicatorToShow, timeframe = '1Y' }) => {
+export const PriceChart: React.FC<PriceChartProps> = ({ indicatorToShow, timeframe = '1Y', overlays = new Set() }) => {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const indicatorContainerRef = useRef<HTMLDivElement>(null);
   
@@ -215,61 +217,65 @@ export const PriceChart: React.FC<PriceChartProps> = ({ indicatorToShow, timefra
       } catch { mainChart.timeScale().fitContent(); }
     }
 
-    // 6. Draw SMAs overlay on Price chart (only for Candlesticks and Heikin-Ashi)
-    let sma20Series: any = null;
-    let sma50Series: any = null;
-    let sma200Series: any = null;
-
+    // 6. Draw SMA overlays (toggleable)
     if (!isRenko && !isLineBreak && indicators.length > 0) {
-      const sma20Data: LineData[] = indicators
-        .filter(ind => ind.sma_20 !== null && ind.sma_20 !== undefined && timeMap.has(ind.time))
-        .map(ind => ({
-          time: timeMap.get(ind.time) as any,
-          value: Number(ind.sma_20)
-        }));
-      
-      const sma50Data: LineData[] = indicators
-        .filter(ind => ind.sma_50 !== null && ind.sma_50 !== undefined && timeMap.has(ind.time))
-        .map(ind => ({
-          time: timeMap.get(ind.time) as any,
-          value: Number(ind.sma_50)
-        }));
+      const addSMA = (key: 'sma_20' | 'sma_50' | 'sma_200', title: string, color: string, width: number) => {
+        const data: LineData[] = indicators
+          .filter(ind => ind[key] != null && timeMap.has(ind.time))
+          .map(ind => ({ time: timeMap.get(ind.time) as any, value: Number(ind[key]) }));
+        if (data.length > 0) {
+          const s = mainChart.addSeries(LineSeries, { color, lineWidth: width, title, priceLineVisible: false });
+          s.setData(data);
+        }
+      };
 
-      const sma200Data: LineData[] = indicators
-        .filter(ind => ind.sma_200 !== null && ind.sma_200 !== undefined && timeMap.has(ind.time))
-        .map(ind => ({
-          time: timeMap.get(ind.time) as any,
-          value: Number(ind.sma_200)
-        }));
+      if (overlays.has('sma20'))  addSMA('sma_20',  'SMA 20',  '#3b82f6', 1.5);
+      if (overlays.has('sma50'))  addSMA('sma_50',  'SMA 50',  '#f59e0b', 1.5);
+      if (overlays.has('sma200')) addSMA('sma_200', 'SMA 200', '#ec4899', 2.0);
+    }
 
-      if (sma20Data.length > 0) {
-        sma20Series = mainChart.addSeries(LineSeries, {
-          color: '#3b82f6', // sleek blue
-          lineWidth: 1.5,
-          title: 'SMA 20',
-          priceLineVisible: false
-        });
-        sma20Series.setData(sma20Data);
+    // 6b. EMA 9 / EMA 21 overlays
+    if (overlays.has('ema9') && !isRenko && !isLineBreak && indicators.length > 0) {
+      const ema9Data: LineData[] = indicators
+        .filter(ind => ind.ema_9 != null && timeMap.has(ind.time))
+        .map(ind => ({ time: timeMap.get(ind.time) as any, value: Number(ind.ema_9) }));
+      if (ema9Data.length > 0) {
+        const s = mainChart.addSeries(LineSeries, { color: '#22d3ee', lineWidth: 1, lineStyle: 1, title: 'EMA 9', priceLineVisible: false });
+        s.setData(ema9Data);
       }
+    }
 
-      if (sma50Data.length > 0) {
-        sma50Series = mainChart.addSeries(LineSeries, {
-          color: '#f59e0b', // warm amber
-          lineWidth: 1.5,
-          title: 'SMA 50',
-          priceLineVisible: false
-        });
-        sma50Series.setData(sma50Data);
+    if (overlays.has('ema21') && !isRenko && !isLineBreak && indicators.length > 0) {
+      const ema21Data: LineData[] = indicators
+        .filter(ind => ind.ema_21 != null && timeMap.has(ind.time))
+        .map(ind => ({ time: timeMap.get(ind.time) as any, value: Number(ind.ema_21) }));
+      if (ema21Data.length > 0) {
+        const s = mainChart.addSeries(LineSeries, { color: '#f97316', lineWidth: 1, lineStyle: 1, title: 'EMA 21', priceLineVisible: false });
+        s.setData(ema21Data);
       }
+    }
 
-      if (sma200Data.length > 0) {
-        sma200Series = mainChart.addSeries(LineSeries, {
-          color: '#ec4899', // hot pink
-          lineWidth: 2.0,
-          title: 'SMA 200',
-          priceLineVisible: false
-        });
-        sma200Series.setData(sma200Data);
+    // 6c. Bollinger Bands overlay
+    if (overlays.has('bb') && !isRenko && !isLineBreak && indicators.length > 0) {
+      const bbFilter = (key: 'bb_upper' | 'bb_middle' | 'bb_lower') =>
+        indicators.filter(ind => ind[key] != null && timeMap.has(ind.time))
+          .map(ind => ({ time: timeMap.get(ind.time) as any, value: Number(ind[key]) }));
+
+      const bbUpper = bbFilter('bb_upper');
+      const bbMiddle = bbFilter('bb_middle');
+      const bbLower = bbFilter('bb_lower');
+
+      if (bbUpper.length > 0) {
+        const su = mainChart.addSeries(LineSeries, { color: 'rgba(148,163,184,0.5)', lineWidth: 1, lineStyle: 2, title: 'BB Upper', priceLineVisible: false });
+        su.setData(bbUpper);
+      }
+      if (bbMiddle.length > 0) {
+        const sm = mainChart.addSeries(LineSeries, { color: 'rgba(148,163,184,0.3)', lineWidth: 1, lineStyle: 2, title: 'BB Mid', priceLineVisible: false });
+        sm.setData(bbMiddle);
+      }
+      if (bbLower.length > 0) {
+        const sl = mainChart.addSeries(LineSeries, { color: 'rgba(148,163,184,0.5)', lineWidth: 1, lineStyle: 2, title: 'BB Lower', priceLineVisible: false });
+        sl.setData(bbLower);
       }
     }
 
@@ -429,6 +435,7 @@ export const PriceChart: React.FC<PriceChartProps> = ({ indicatorToShow, timefra
       }
     };
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     chartType,
     candles,
@@ -438,6 +445,7 @@ export const PriceChart: React.FC<PriceChartProps> = ({ indicatorToShow, timefra
     indicators,
     indicatorToShow,
     timeframe,
+    overlays,
     activeSymbol,
   ]);
 

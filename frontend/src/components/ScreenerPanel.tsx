@@ -1,7 +1,47 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useStockStore } from '../store/useStockStore';
-import { Play, Eye, Filter, RefreshCw, BarChart2, Download, Bookmark } from 'lucide-react';
+import { Play, Eye, Filter, RefreshCw, BarChart2, Download, Bookmark, Zap } from 'lucide-react';
 import type { ScreenerRow } from '../services/api';
+
+// ── Screener presets ─────────────────────────────────────────────────────────
+const PRESETS = [
+  {
+    name: 'Breakout Scanner',
+    emoji: '🚀',
+    desc: 'Vol >2x + SMA 200 above + HA bullish',
+    filters: { volume_breakout: '2.0X' as const, sma_200_cross: 'ABOVE' as const, ha_dir: 'UP' as const },
+  },
+  {
+    name: 'Momentum',
+    emoji: '⚡',
+    desc: 'RSI 55-75 + MACD bullish + all SMAs above',
+    filters: { min_rsi: 55, max_rsi: 75, macd_trend: 'BULLISH' as const, sma_20_cross: 'ABOVE' as const, sma_50_cross: 'ABOVE' as const, sma_200_cross: 'ABOVE' as const },
+  },
+  {
+    name: 'Pullback to SMA20',
+    emoji: '📉',
+    desc: 'RSI 40-55 + MACD bullish + SMA 200 above',
+    filters: { min_rsi: 40, max_rsi: 55, macd_trend: 'BULLISH' as const, sma_200_cross: 'ABOVE' as const },
+  },
+  {
+    name: 'Oversold Bounce',
+    emoji: '🔄',
+    desc: 'RSI <35 + SMA 200 above',
+    filters: { max_rsi: 35, sma_200_cross: 'ABOVE' as const },
+  },
+  {
+    name: 'Volume Surge',
+    emoji: '📊',
+    desc: 'Vol >3x average — unusual activity',
+    filters: { volume_breakout: '3.0X' as const },
+  },
+  {
+    name: 'Swing Reversal',
+    emoji: '↩️',
+    desc: 'RSI <45 + Renko DOWN reversal candidates',
+    filters: { max_rsi: 45, renko_dir: 'DOWN' as const },
+  },
+];
 
 export const ScreenerPanel: React.FC = () => {
   const {
@@ -170,8 +210,40 @@ export const ScreenerPanel: React.FC = () => {
         </div>
       </div>
 
+      {/* ── Preset Cards ──────────────────────────────────────────────────── */}
+      <div className="flex flex-wrap gap-2">
+        {PRESETS.map(p => (
+          <button
+            key={p.name}
+            onClick={() => {
+              // Reset all filters then apply preset
+              setScreenerFilters({
+                min_rsi: undefined, max_rsi: undefined,
+                min_price: undefined, max_price: undefined,
+                sma_20_cross: undefined, sma_50_cross: undefined, sma_200_cross: undefined,
+                macd_trend: undefined, ha_dir: undefined, renko_dir: undefined, lb_dir: undefined,
+                volume_breakout: undefined, min_weekly_avg_volume: undefined,
+                ...p.filters,
+              });
+              runScreener();
+            }}
+            disabled={isLoading}
+            className="flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-800/80 bg-[#121620]/30 hover:bg-[#121620]/70 hover:border-purple-500/40 disabled:opacity-40 transition cursor-pointer text-left"
+          >
+            <span className="text-base leading-none">{p.emoji}</span>
+            <div>
+              <div className="text-xs font-bold text-white flex items-center gap-1">
+                <Zap className="w-2.5 h-2.5 text-purple-400" />
+                {p.name}
+              </div>
+              <div className="text-[10px] text-slate-500">{p.desc}</div>
+            </div>
+          </button>
+        ))}
+      </div>
+
       {/* Advanced Filter Inputs Card */}
-      <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-11 gap-4 p-4 rounded-xl border border-slate-800/80 bg-[#121620]/30">
+      <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-13 gap-4 p-4 rounded-xl border border-slate-800/80 bg-[#121620]/30">
         
         {/* Weekly Avg Volume */}
         <div className="flex flex-col gap-1.5">
@@ -202,6 +274,29 @@ export const ScreenerPanel: React.FC = () => {
             <option value="2.0X">2.0x Breakout</option>
             <option value="3.0X">3.0x Breakout</option>
           </select>
+        </div>
+
+        {/* Price Range */}
+        <div className="flex flex-col gap-1.5">
+          <label className="text-xs font-semibold text-slate-400">Min Price (₹)</label>
+          <input
+            type="number"
+            placeholder="No Limit"
+            value={screenerFilters.min_price !== undefined ? screenerFilters.min_price : ''}
+            onChange={(e) => setScreenerFilters({ min_price: e.target.value === '' ? undefined : Number(e.target.value) })}
+            className="w-full px-3 py-1.5 text-sm rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
+          />
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <label className="text-xs font-semibold text-slate-400">Max Price (₹)</label>
+          <input
+            type="number"
+            placeholder="No Limit"
+            value={screenerFilters.max_price !== undefined ? screenerFilters.max_price : ''}
+            onChange={(e) => setScreenerFilters({ max_price: e.target.value === '' ? undefined : Number(e.target.value) })}
+            className="w-full px-3 py-1.5 text-sm rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
+          />
         </div>
 
         {/* RSI Range */}
