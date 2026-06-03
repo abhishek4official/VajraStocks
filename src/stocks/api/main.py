@@ -139,10 +139,23 @@ from stocks.api.v1.router import api_router  # noqa: E402
 app.include_router(api_router)
 
 # ── Serve Vite frontend build ──────────────────────────────────────────────────
-# When frontend/dist exists (production build), serve it as static files.
-# In dev mode (npm run dev), the Vite dev server runs separately on :5173.
-_frontend_dist = Path(__file__).parent.parent.parent.parent / "frontend" / "dist"
-if _frontend_dist.exists():
+# Resolves the frontend/dist directory using multiple strategies so it works
+# regardless of how uvicorn is launched (cwd, installed package, etc.)
+def _find_frontend_dist() -> Path | None:
+    candidates = [
+        Path(__file__).resolve().parent.parent.parent.parent / "frontend" / "dist",
+        Path.cwd() / "frontend" / "dist",
+        Path.cwd().parent / "frontend" / "dist",
+    ]
+    for p in candidates:
+        if (p / "index.html").exists():
+            return p
+    return None
+
+_frontend_dist = _find_frontend_dist()
+if _frontend_dist:
     from fastapi.staticfiles import StaticFiles
     app.mount("/", StaticFiles(directory=str(_frontend_dist), html=True), name="static")
-    logger.info(f"Serving frontend build from: {_frontend_dist}")
+    logger.info(f"Serving frontend from: {_frontend_dist}")
+else:
+    logger.warning("frontend/dist not found — run 'npm run build' in the frontend directory")
