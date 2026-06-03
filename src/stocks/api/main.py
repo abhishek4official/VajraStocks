@@ -141,7 +141,7 @@ app.include_router(api_router)
 # ── Serve Vite frontend build ──────────────────────────────────────────────────
 # When frontend/dist exists (production build), serve it as static files.
 # In dev mode (npm run dev), the Vite dev server runs separately on :5173.
-_frontend_dist = Path(__file__).parent.parent.parent.parent.parent / "frontend" / "dist"
+_frontend_dist = Path(__file__).parent.parent.parent.parent / "frontend" / "dist"
 if _frontend_dist.exists():
     from fastapi.staticfiles import StaticFiles
     app.mount("/", StaticFiles(directory=str(_frontend_dist), html=True), name="static")
