@@ -146,10 +146,13 @@ app.include_router(api_router)
 # Resolves the frontend/dist directory using multiple strategies so it works
 # regardless of how uvicorn is launched (cwd, installed package, etc.)
 def _find_frontend_dist() -> Path | None:
+    here = Path(__file__).resolve()
+    # Repo layout: <root>/python/src/stocks/api/main.py  →  <root>/frontend/dist
     candidates = [
-        Path(__file__).resolve().parent.parent.parent.parent / "frontend" / "dist",
+        here.parent.parent.parent.parent.parent / "frontend" / "dist",  # <root>/frontend/dist
+        here.parent.parent.parent.parent / "frontend" / "dist",          # legacy (pre-restructure)
         Path.cwd() / "frontend" / "dist",
-        Path.cwd().parent / "frontend" / "dist",
+        Path.cwd().parent / "frontend" / "dist",                          # when cwd == <root>/python
     ]
     for p in candidates:
         if (p / "index.html").exists():

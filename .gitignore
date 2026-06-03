@@ -269,3 +269,11 @@ app.*.map.json
 local.properties
 key.properties
 
+
+# VajraStocks local data (SQLite) and runtime
+python/data/
+python/logs/
+data/
+vajra.db
+vajra.db-*
+*.db-journal

@@ -2,60 +2,66 @@
 
 _Last updated: 2026-06-04_
 
-## Current State (Reartecture branch)
-
-Phase 1 Foundation is **complete and committed**:
-- SQLite support (multi-provider DB abstraction)
-- DB-backed settings (`app_settings` table + SettingsService)
-- First-run setup wizard (`SetupWizard.tsx`)
-- Settings UI page (`SettingsPanel.tsx`)
-- FastAPI lifespan (no more module-level init crash)
-- FastAPI serves the React build at one port (StaticFiles + SPA catch-all)
-- `install.ps1` + `start.ps1` Windows scripts
-
-## CRITICAL: Two project copies exist on disk
-
-| Path | Status |
-|------|--------|
-| `C:\Users\abhis\Documents\VajraStocks` | **THE REAL ONE** — git repo, all current work |
-| `C:\Users\abhis\Documents\Workspace\VajraAgent\Stocks` | OLD COPY — stale code, DO NOT USE |
-
-The OLD copy's venv has a `stocks.pth` pointing to its own stale `src/`.
-If a server loads from there, you get the old code (404 on `/`, health shows
-`app_name: nse-historical-downloader`).
-
-## How to tell which code is running
+## Repository layout (segregated)
 
 ```
-curl http://localhost:8000/health
+VajraStocks/
+├── python/                 # Python backend (FastAPI + SQLAlchemy)
+│   ├── src/stocks/
+│   ├── migrations/
+│   ├── config/
+│   ├── tests/  scripts/  data/  logs/
+│   ├── pyproject.toml  uv.lock  alembic.ini
+│   └── .venv/              # created by `uv sync` (run from python/)
+├── frontend/               # React 19 + Vite
+├── dotnet/                 # .NET Core migration target
+│   └── docs/               # MIGRATION_GUIDE.md + IMPLEMENTATION_GUIDE.md
+├── agent-framework-source-tmp/   # MAF Python reference (read-only)
+├── vajra_stocks_flutter/   # Flutter (ignored)
+├── install.ps1  start.ps1  # launchers (operate on python/ + frontend/)
+└── README.md  RUN_NOTES.md  LICENSE
 ```
-- NEW (correct):  `{"status":"HEALTHY","version":"1.0.0"}`
-- OLD (stale):    `{"status":"HEALTHY","app_name":"nse-historical-downloader",...}`
 
-## How to run CORRECTLY
-
-Always from the real project dir, using ITS OWN venv:
+## How to run
 
 ```powershell
 cd C:\Users\abhis\Documents\VajraStocks
 .\start.ps1
 ```
+Opens http://localhost:8000 (hard-refresh Ctrl+Shift+R after a rebuild).
 
-Or explicitly:
-```powershell
-cd C:\Users\abhis\Documents\VajraStocks
-.\.venv\Scripts\python.exe -m uvicorn stocks.api.main:app --host 127.0.0.1 --port 8000
-```
+`start.ps1` cd's into `python/` and uses `python/.venv\Scripts\python.exe` directly,
+so it always loads the correct backend (never a stale copy).
 
-Then open: http://localhost:8000
+## Rebuild after code changes
+
+- Backend: just restart `start.ps1` (uvicorn picks up `python/src`).
+- Frontend: `cd frontend; npm run build` — FastAPI serves the new `frontend/dist`.
 
 ## Database
 
-Currently using **MSSQL** (from `config/config.yaml`). All existing NSE data
-intact. The `app_settings` table is auto-created on startup.
-To switch to SQLite: change `db_connection_string` in the Settings tab
-(starts empty — would need re-sync).
+Currently **MSSQL LocalDB** (`(localdb)\MSSQLLocalDB` → `NSEStockData`, 2,367 symbols).
+Connection string is in `python/config/config.yaml`.
+- The app auto-starts LocalDB on boot (`ensure_localdb_started`).
+- `app_settings` table is auto-created on startup (idempotent).
+- To go fully local: switch the connection string to `sqlite:///data/vajra.db`
+  (a migration script exists at `python/scripts/migrate_mssql_to_sqlite.py`).
 
-## TODO / Next (Phase 2)
+## CRITICAL: stale duplicate copy
+
+A second OLD copy exists at:
+`C:\Users\abhis\Documents\Workspace\VajraAgent\Stocks`
+Its venv's `stocks.pth` points to its own stale `src/`. Never run from there.
+Tell-tale of wrong code: `curl /health` shows `app_name: nse-historical-downloader`
+instead of `version: 1.0.0`.
+
+## .NET migration
+
+See `dotnet/docs/`:
+- `MIGRATION_GUIDE.md` — strategy, component mapping, phased roadmap, risks
+- `IMPLEMENTATION_GUIDE.md` — solution structure, .proto contracts, EF Core,
+  gRPC services, MAF .NET agents, Yahoo Finance client, Hangfire, frontend gRPC-Web
+
+## Next (Phase 2, Python side)
 
 Persist Portfolio, Watchlist, Alerts to DB (currently localStorage).
