@@ -248,6 +248,11 @@ export const ScreenerPanel: React.FC = () => {
                 sma_20_cross: undefined, sma_50_cross: undefined, sma_200_cross: undefined,
                 macd_trend: undefined, ha_dir: undefined, renko_dir: undefined, lb_dir: undefined,
                 volume_breakout: undefined, min_weekly_avg_volume: undefined,
+                only_nr7: undefined,
+                only_inside_bar: undefined,
+                only_gap_up: undefined,
+                only_gap_down: undefined,
+                min_rs_1m: undefined,
                 ...p.filters,
               });
               runScreener();
@@ -563,7 +568,7 @@ export const ScreenerPanel: React.FC = () => {
                 <th className="py-2.5 px-3 text-center cursor-pointer hover:text-white transition" onClick={() => handleSort('rs_score_1m' as any)}>
                   RS 1M {renderSortIcon('rs_score_1m' as any)}
                 </th>
-                <th className="py-2.5 px-3 text-center">Gap</th>
+                <th className="py-2.5 px-3 text-center">Patterns</th>
                 <th className="py-2.5 px-3 text-right">Actions</th>
               </tr>
             </thead>
@@ -721,11 +726,33 @@ export const ScreenerPanel: React.FC = () => {
                           </span>
                         ) : <span className="text-slate-600">—</span>}
                       </td>
-                      {/* Gap */}
+                      {/* Patterns / Signals */}
                       <td className="py-3 px-3 text-center">
-                        {(row as any).is_gap_up   && <span className="text-[10px] font-bold text-emerald-400 bg-emerald-950/20 border border-emerald-900/30 px-1.5 py-0.5 rounded">↑ GAP</span>}
-                        {(row as any).is_gap_down && <span className="text-[10px] font-bold text-rose-400 bg-rose-950/20 border border-rose-900/30 px-1.5 py-0.5 rounded">↓ GAP</span>}
-                        {!(row as any).is_gap_up && !(row as any).is_gap_down && <span className="text-slate-700">—</span>}
+                        <div className="flex flex-wrap gap-1 justify-center items-center">
+                          {row.is_nr7 && (
+                            <span className="text-[10px] font-bold text-amber-400 bg-amber-950/25 border border-amber-900/30 px-1.5 py-0.5 rounded">
+                              NR7
+                            </span>
+                          )}
+                          {row.is_inside_bar && (
+                            <span className="text-[10px] font-bold text-indigo-400 bg-indigo-950/25 border border-indigo-900/30 px-1.5 py-0.5 rounded">
+                              Inside Bar
+                            </span>
+                          )}
+                          {row.is_gap_up && (
+                            <span className="text-[10px] font-bold text-emerald-400 bg-emerald-950/25 border border-emerald-900/30 px-1.5 py-0.5 rounded">
+                              ↑ Gap Up
+                            </span>
+                          )}
+                          {row.is_gap_down && (
+                            <span className="text-[10px] font-bold text-rose-400 bg-rose-950/25 border border-rose-900/30 px-1.5 py-0.5 rounded">
+                              ↓ Gap Down
+                            </span>
+                          )}
+                          {!row.is_nr7 && !row.is_inside_bar && !row.is_gap_up && !row.is_gap_down && (
+                            <span className="text-slate-700">—</span>
+                          )}
+                        </div>
                       </td>
                       {/* Actions */}
                       <td className="py-3 px-3 text-right">

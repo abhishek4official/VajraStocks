@@ -259,7 +259,7 @@ export const AgentTerminal: React.FC = () => {
                     )}
                     <div className="leading-relaxed text-[11px] font-medium whitespace-pre-wrap">{evt.status}</div>
                     
-                    {evt.data?.sql_query && (
+                    {evt.data && typeof evt.data.sql_query === 'string' && evt.data.sql_query && (
                       <pre className="mt-2 p-2 rounded bg-slate-950 border border-slate-900 text-emerald-400 overflow-x-auto text-[10px] leading-tight select-all">
                         {evt.data.sql_query}
                       </pre>

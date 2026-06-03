@@ -201,6 +201,9 @@ export const apiService = {
     volume_breakout?: 'ANY' | '1.5X' | '2.0X' | '3.0X';
     only_nr7?: boolean;
     only_inside_bar?: boolean;
+    only_gap_up?: boolean;
+    only_gap_down?: boolean;
+    min_rs_1m?: number;
     limit?: number;
   }): Promise<ScreenerRow[]> {
     const response = await fetch(`${BASE_URL}/screeners/run`, {
