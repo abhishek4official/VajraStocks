@@ -3,8 +3,6 @@ from typing import Optional
 
 from sqlalchemy import (
     BIGINT,
-    DECIMAL,
-    NVARCHAR,
     Boolean,
     Date,
     DateTime,
@@ -12,6 +10,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    Numeric,
     String,
     Text,
     UniqueConstraint,
@@ -32,10 +31,10 @@ class Symbol(Base):
     __tablename__ = "symbols"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    symbol: Mapped[str] = mapped_column(NVARCHAR(50), nullable=False, unique=True, index=True)
-    company_name: Mapped[str] = mapped_column(NVARCHAR(255), nullable=False)
-    isin: Mapped[str] = mapped_column(NVARCHAR(50), nullable=False, unique=True)
-    series: Mapped[str] = mapped_column(NVARCHAR(10), nullable=False)
+    symbol: Mapped[str] = mapped_column(String(50), nullable=False, unique=True, index=True)
+    company_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    isin: Mapped[str] = mapped_column(String(50), nullable=False, unique=True)
+    series: Mapped[str] = mapped_column(String(10), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=func.now())
     updated_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now())
@@ -75,11 +74,11 @@ class DailyPrice(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     symbol_id: Mapped[int] = mapped_column(Integer, ForeignKey("symbols.id", ondelete="CASCADE"), nullable=False)
     trading_date: Mapped[datetime.date] = mapped_column(Date, nullable=False)
-    open: Mapped[float] = mapped_column(DECIMAL(18, 4), nullable=False)
-    high: Mapped[float] = mapped_column(DECIMAL(18, 4), nullable=False)
-    low: Mapped[float] = mapped_column(DECIMAL(18, 4), nullable=False)
-    close: Mapped[float] = mapped_column(DECIMAL(18, 4), nullable=False)
-    adj_close: Mapped[float] = mapped_column(DECIMAL(18, 4), nullable=False)
+    open: Mapped[float] = mapped_column(Numeric(18, 4), nullable=False)
+    high: Mapped[float] = mapped_column(Numeric(18, 4), nullable=False)
+    low: Mapped[float] = mapped_column(Numeric(18, 4), nullable=False)
+    close: Mapped[float] = mapped_column(Numeric(18, 4), nullable=False)
+    adj_close: Mapped[float] = mapped_column(Numeric(18, 4), nullable=False)
     volume: Mapped[int] = mapped_column(BIGINT, nullable=False)
     granularity: Mapped[str] = mapped_column(String(10), nullable=False, default="1d")
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=func.now())
@@ -101,8 +100,8 @@ class CorporateAction(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     symbol_id: Mapped[int] = mapped_column(Integer, ForeignKey("symbols.id", ondelete="CASCADE"), nullable=False)
     action_date: Mapped[datetime.date] = mapped_column(Date, nullable=False)
-    action_type: Mapped[str] = mapped_column(NVARCHAR(50), nullable=False)  # 'DIVIDEND', 'SPLIT'
-    value: Mapped[float] = mapped_column(DECIMAL(18, 4), nullable=False)  # Dividend amount or split ratio
+    action_type: Mapped[str] = mapped_column(String(50), nullable=False)  # 'DIVIDEND', 'SPLIT'
+    value: Mapped[float] = mapped_column(Numeric(18, 4), nullable=False)  # Dividend amount or split ratio
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=func.now())
 
     # Relationships
@@ -120,7 +119,7 @@ class SyncJob(Base):
     run_id: Mapped[str] = mapped_column(String(50), nullable=False, index=True)  # UUID
     start_time: Mapped[datetime.datetime] = mapped_column(DateTime, nullable=False, default=func.now())
     end_time: Mapped[datetime.datetime | None] = mapped_column(DateTime, nullable=True)
-    status: Mapped[str] = mapped_column(NVARCHAR(50), nullable=False)  # 'RUNNING', 'SUCCESS', 'FAILED', 'PARTIAL'
+    status: Mapped[str] = mapped_column(String(50), nullable=False)  # 'RUNNING', 'SUCCESS', 'FAILED', 'PARTIAL'
     total_symbols: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     processed_symbols: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     failed_symbols: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
@@ -135,7 +134,7 @@ class SymbolSyncState(Base):
 
     symbol_id: Mapped[int] = mapped_column(Integer, ForeignKey("symbols.id", ondelete="CASCADE"), primary_key=True)
     last_successful_sync_date: Mapped[datetime.date] = mapped_column(Date, nullable=False)
-    last_attempt_status: Mapped[str] = mapped_column(NVARCHAR(50), nullable=False)  # 'SUCCESS', 'FAILED'
+    last_attempt_status: Mapped[str] = mapped_column(String(50), nullable=False)  # 'SUCCESS', 'FAILED'
     last_error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     updated_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now())
 
@@ -186,10 +185,10 @@ class DailyHeikinAshi(Base):
     symbol_id: Mapped[int] = mapped_column(Integer, ForeignKey("symbols.id", ondelete="CASCADE"), nullable=False)
     trading_date: Mapped[datetime.date] = mapped_column(Date, nullable=False)
     granularity: Mapped[str] = mapped_column(String(10), nullable=False, default="1d")
-    open: Mapped[float] = mapped_column(DECIMAL(12, 4), nullable=False)
-    high: Mapped[float] = mapped_column(DECIMAL(12, 4), nullable=False)
-    low: Mapped[float] = mapped_column(DECIMAL(12, 4), nullable=False)
-    close: Mapped[float] = mapped_column(DECIMAL(12, 4), nullable=False)
+    open: Mapped[float] = mapped_column(Numeric(12, 4), nullable=False)
+    high: Mapped[float] = mapped_column(Numeric(12, 4), nullable=False)
+    low: Mapped[float] = mapped_column(Numeric(12, 4), nullable=False)
+    close: Mapped[float] = mapped_column(Numeric(12, 4), nullable=False)
 
     # Relationships
     symbol_obj: Mapped["Symbol"] = relationship("Symbol", back_populates="heikin_ashi")
@@ -210,10 +209,10 @@ class RenkoBrick(Base):
     brick_index: Mapped[int] = mapped_column(Integer, nullable=False)
     start_date: Mapped[datetime.date] = mapped_column(Date, nullable=False)
     end_date: Mapped[datetime.date] = mapped_column(Date, nullable=False)
-    open: Mapped[float] = mapped_column(DECIMAL(12, 4), nullable=False)
-    close: Mapped[float] = mapped_column(DECIMAL(12, 4), nullable=False)
+    open: Mapped[float] = mapped_column(Numeric(12, 4), nullable=False)
+    close: Mapped[float] = mapped_column(Numeric(12, 4), nullable=False)
     direction: Mapped[str] = mapped_column(String(10), nullable=False)  # 'UP', 'DOWN'
-    brick_size: Mapped[float] = mapped_column(DECIMAL(12, 4), nullable=False)
+    brick_size: Mapped[float] = mapped_column(Numeric(12, 4), nullable=False)
 
     # Relationships
     symbol_obj: Mapped["Symbol"] = relationship("Symbol", back_populates="renko_bricks")
@@ -234,8 +233,8 @@ class LineBreakLine(Base):
     line_index: Mapped[int] = mapped_column(Integer, nullable=False)
     start_date: Mapped[datetime.date] = mapped_column(Date, nullable=False)
     end_date: Mapped[datetime.date] = mapped_column(Date, nullable=False)
-    open: Mapped[float] = mapped_column(DECIMAL(12, 4), nullable=False)
-    close: Mapped[float] = mapped_column(DECIMAL(12, 4), nullable=False)
+    open: Mapped[float] = mapped_column(Numeric(12, 4), nullable=False)
+    close: Mapped[float] = mapped_column(Numeric(12, 4), nullable=False)
     direction: Mapped[str] = mapped_column(String(10), nullable=False)  # 'UP', 'DOWN'
 
     # Relationships
@@ -253,17 +252,17 @@ class ScreeningSnapshot(Base):
     __tablename__ = "screening_snapshots"
 
     symbol_id: Mapped[int] = mapped_column(Integer, ForeignKey("symbols.id", ondelete="CASCADE"), primary_key=True)
-    symbol: Mapped[str] = mapped_column(NVARCHAR(50), nullable=False)
-    company_name: Mapped[str] = mapped_column(NVARCHAR(255), nullable=False)
+    symbol: Mapped[str] = mapped_column(String(50), nullable=False)
+    company_name: Mapped[str] = mapped_column(String(255), nullable=False)
     last_trading_date: Mapped[datetime.date] = mapped_column(Date, nullable=False)
 
     # Prices
-    close_price: Mapped[float] = mapped_column(DECIMAL(12, 4), nullable=False)
+    close_price: Mapped[float] = mapped_column(Numeric(12, 4), nullable=False)
     price_pct_change: Mapped[float | None] = mapped_column(Float, nullable=True)
     volume: Mapped[int] = mapped_column(BIGINT, nullable=False)
 
     # Heikin-Ashi Latest
-    ha_close: Mapped[float] = mapped_column(DECIMAL(12, 4), nullable=False)
+    ha_close: Mapped[float] = mapped_column(Numeric(12, 4), nullable=False)
     ha_direction: Mapped[str] = mapped_column(String(10), nullable=False)
 
     # Indicators Latest
@@ -297,3 +296,21 @@ class ScreeningSnapshot(Base):
         Index("ix_snapshot_rsi", "rsi_14"),
         Index("ix_snapshot_sma_200", "sma_200_cross_direction"),
     )
+
+
+class AppSetting(Base):
+    """Application settings stored in the database — replaces config.yaml for runtime configuration."""
+
+    __tablename__ = "app_settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    category: Mapped[str] = mapped_column(String(50), nullable=False)   # AI / DATABASE / MARKET / DOWNLOADER / APPLICATION
+    key: Mapped[str] = mapped_column(String(100), nullable=False)
+    value: Mapped[str] = mapped_column(Text, nullable=False)             # always stored as string
+    value_type: Mapped[str] = mapped_column(String(20), nullable=False)  # string / integer / float / boolean / json
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_secret: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=func.now())
+    updated_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now())
+
+    __table_args__ = (UniqueConstraint("category", "key", name="UQ_AppSetting_Category_Key"),)

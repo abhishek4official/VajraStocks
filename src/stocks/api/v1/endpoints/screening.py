@@ -2,7 +2,10 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from stocks.api.deps import config, get_db
+from stocks.api.deps import get_db
+from stocks.config import Config as _Config
+
+config = _Config.load()
 from stocks.services.screening import ScreeningService
 
 router = APIRouter(prefix="/screeners", tags=["Stock Screening"])

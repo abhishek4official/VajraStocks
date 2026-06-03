@@ -36,7 +36,7 @@ def sync(config_path: str, symbols: str):
         logger.info("Initializing historical downloader synchronization...")
 
         # 3. Initialize Database Manager & Bootstrapper
-        db_manager = DatabaseManager(config)
+        db_manager = DatabaseManager.from_config(config)
         db_manager.initialize()
 
         # 4. Parse override symbol list if provided
@@ -66,7 +66,7 @@ def bootstrap_symbols(config_path: str):
         setup_logging(config)
         logger.info("Bootstrapping symbol registry...")
 
-        db_manager = DatabaseManager(config)
+        db_manager = DatabaseManager.from_config(config)
         db_manager.initialize()
 
         session = db_manager.get_session()
@@ -100,7 +100,7 @@ def status(config_path: str, limit: int):
         config = Config.load(config_file)
         setup_logging(config)
 
-        db_manager = DatabaseManager(config)
+        db_manager = DatabaseManager.from_config(config)
         db_manager.initialize()
 
         session = db_manager.get_session()
@@ -170,7 +170,7 @@ def screen(
         config = Config.load(config_file)
         setup_logging(config)
 
-        db_manager = DatabaseManager(config)
+        db_manager = DatabaseManager.from_config(config)
         db_manager.initialize()
 
         session = db_manager.get_session()
@@ -229,7 +229,7 @@ def refresh_snapshots(config_path: str):
         config = Config.load(config_file)
         setup_logging(config)
 
-        db_manager = DatabaseManager(config)
+        db_manager = DatabaseManager.from_config(config)
         db_manager.initialize()
 
         session = db_manager.get_session()
@@ -257,7 +257,7 @@ def recalculate_derived(config_path: str, symbols: str, limit: int | None):
         config = Config.load(config_file)
         setup_logging(config)
 
-        db_manager = DatabaseManager(config)
+        db_manager = DatabaseManager.from_config(config)
         db_manager.initialize()
 
         session = db_manager.get_session()

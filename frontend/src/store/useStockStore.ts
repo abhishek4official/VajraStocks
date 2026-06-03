@@ -71,7 +71,7 @@ export interface WatchlistAlert {
   createdAt: string;
 }
 
-type TabId = 'explorer' | 'screener' | 'sync' | 'ai-research' | 'portfolio' | 'watchlist' | 'compare';
+type TabId = 'explorer' | 'screener' | 'sync' | 'ai-research' | 'portfolio' | 'watchlist' | 'compare' | 'settings';
 type ChartTimeframe = '1W' | '1M' | '3M' | '6M' | '1Y' | 'MAX';
 
 // ─── Store shape ──────────────────────────────────────────────────────────────
@@ -256,7 +256,7 @@ function parseZerodhaCSV(csvText: string): PortfolioHolding[] {
 
 function getInitialTab(): TabId {
   const path = window.location.pathname.replace(/^\/+/, '').split('/')[0];
-  const valid: TabId[] = ['explorer', 'screener', 'sync', 'ai-research', 'portfolio', 'watchlist', 'compare'];
+  const valid: TabId[] = ['explorer', 'screener', 'sync', 'ai-research', 'portfolio', 'watchlist', 'compare', 'settings'];
   return valid.includes(path as TabId) ? (path as TabId) : 'explorer';
 }
 

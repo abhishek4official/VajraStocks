@@ -1,11 +1,11 @@
 from datetime import datetime
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from stocks.api.deps import config, db_manager, get_db
+from stocks.api.deps import get_db
 from stocks.db.models import Symbol, SymbolSyncState, SyncJob
 from stocks.services.database import DatabaseService
 from stocks.services.sync_engine import SyncEngine
@@ -13,7 +13,8 @@ from stocks.services.sync_engine import SyncEngine
 router = APIRouter(prefix="/sync", tags=["Synchronization Monitoring"])
 
 
-# Pydantic Response Schemas
+# ── Pydantic schemas ───────────────────────────────────────────────────────────
+
 class SyncJobResponse(BaseModel):
     id: int
     run_id: str
@@ -37,25 +38,36 @@ class SymbolSyncStatusResponse(BaseModel):
     last_error_message: str | None = None
 
 
-def _execute_async_sync(symbols: list[str] | None = None):
-    """Worker task executed in a background thread."""
-    engine = SyncEngine(config, db_manager)
+# ── Background workers ────────────────────────────────────────────────────────
+
+def _get_config_and_manager(request: Request):
+    """Resolves Config + DatabaseManager from app.state."""
+    from stocks.config import Config
+    db_manager = request.app.state.db_manager
+    try:
+        cfg = Config.load()
+    except Exception:
+        cfg = Config()
+    return cfg, db_manager
+
+
+def _execute_async_sync(request: Request, symbols: list[str] | None = None):
+    cfg, db_manager = _get_config_and_manager(request)
+    engine = SyncEngine(cfg, db_manager)
     try:
         engine.run_sync(specific_symbols=symbols)
     except Exception:
-        # Logged internally inside SyncEngine, catch to prevent crash
         pass
 
 
-def _execute_async_recalculate(symbol_ticker: str | None = None):
-    """Worker task to recalculate indicators and market structures for symbols in the background."""
+def _execute_async_recalculate(request: Request, symbol_ticker: str | None = None):
     from sqlalchemy import delete
-
     from stocks.db.models import DailyHeikinAshi, DailyIndicator, LineBreakLine, RenkoBrick
 
+    cfg, db_manager = _get_config_and_manager(request)
     session = db_manager.get_session()
-    db_service = DatabaseService(config, session)
-    sync_engine = SyncEngine(config, db_manager)
+    db_service = DatabaseService(cfg, session)
+    sync_engine = SyncEngine(cfg, db_manager)
 
     try:
         active_symbols = db_service.get_active_symbols()
@@ -66,65 +78,58 @@ def _execute_async_recalculate(symbol_ticker: str | None = None):
             active_symbols = [s for s in active_symbols if s.symbol == clean_sym]
 
         for symbol_obj in active_symbols:
-            # Clear all existing derived data to guarantee clean cold start calculations
             session.execute(delete(DailyIndicator).where(DailyIndicator.symbol_id == symbol_obj.id))
             session.execute(delete(DailyHeikinAshi).where(DailyHeikinAshi.symbol_id == symbol_obj.id))
             session.execute(delete(RenkoBrick).where(RenkoBrick.symbol_id == symbol_obj.id))
             session.execute(delete(LineBreakLine).where(LineBreakLine.symbol_id == symbol_obj.id))
             session.commit()
 
-            # Fetch all prices in DB
             prices = db_service.get_prices_for_window(symbol_obj.id, datetime.strptime("1970-01-01", "%Y-%m-%d").date())
             if prices:
                 sync_engine.calculate_and_save_derived_data(db_service, symbol_obj, prices)
 
-        # Rebuild snapshots
         from stocks.services.screening import ScreeningService
-
-        screening_service = ScreeningService(config, session)
-        screening_service.refresh_all_snapshots()
+        ScreeningService(cfg, session).refresh_all_snapshots()
     except Exception:
         pass
     finally:
         session.close()
 
 
+# ── Routes ─────────────────────────────────────────────────────────────────────
+
 @router.post("/full")
-def run_full_synchronization(background_tasks: BackgroundTasks):
-    """Triggers an asynchronous full EOD downloader and incremental sync run in the background."""
-    background_tasks.add_task(_execute_async_sync)
+def run_full_synchronization(request: Request, background_tasks: BackgroundTasks):
+    """Triggers an asynchronous full EOD sync in the background."""
+    background_tasks.add_task(_execute_async_sync, request, None)
     return {"message": "Full synchronization job triggered successfully in the background."}
 
 
 @router.post("/symbol/{symbol}")
-def run_symbol_synchronization(symbol: str, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
-    """Triggers an asynchronous sync run for a single requested symbol in the background."""
-    # Verify symbol exists
+def run_symbol_synchronization(symbol: str, request: Request, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    """Triggers an asynchronous sync for a single symbol."""
     clean_sym = symbol.strip().upper()
     raw_sym = clean_sym.replace(".NS", "")
     if not clean_sym.endswith(".NS") and not clean_sym.startswith("^"):
         clean_sym = f"{clean_sym}.NS"
-
     exist = db.scalar(select(Symbol.id).where((Symbol.symbol == clean_sym) | (Symbol.symbol == raw_sym)))
     if not exist:
         raise HTTPException(status_code=404, detail=f"Symbol '{symbol}' is not registered.")
-
-    background_tasks.add_task(_execute_async_sync, [symbol])
-    return {"message": f"Sync job for symbol '{symbol}' triggered successfully in the background."}
+    background_tasks.add_task(_execute_async_sync, request, [symbol])
+    return {"message": f"Sync job for '{symbol}' triggered successfully in the background."}
 
 
 @router.post("/recalculate")
-def run_derived_recalculations(background_tasks: BackgroundTasks, symbol: str | None = None):
-    """Triggers a background manual rebuild of technical indicators, HA, Renko, and Line Break structures."""
-    background_tasks.add_task(_execute_async_recalculate, symbol)
+def run_derived_recalculations(request: Request, background_tasks: BackgroundTasks, symbol: str | None = None):
+    """Triggers a background rebuild of technical indicators and market structures."""
+    background_tasks.add_task(_execute_async_recalculate, request, symbol)
     return {"message": "Derived data recalculation job triggered successfully in the background."}
 
 
 @router.get("/jobs", response_model=list[SyncJobResponse])
 def get_sync_jobs_history(limit: int = 10, db: Session = Depends(get_db)):
-    """Retrieves EOD sync jobs history records."""
+    """Retrieves EOD sync job history."""
     jobs = db.scalars(select(SyncJob).order_by(SyncJob.start_time.desc()).limit(limit)).all()
-
     return [
         {
             "id": r.id,
@@ -144,11 +149,10 @@ def get_sync_jobs_history(limit: int = 10, db: Session = Depends(get_db)):
 
 @router.get("/status", response_model=list[SymbolSyncStatusResponse])
 def get_symbols_sync_status(status_filter: str | None = None, db: Session = Depends(get_db)):
-    """Retrieves current synchronization health status per stock symbol."""
+    """Retrieves per-symbol sync health status."""
     stmt = select(SymbolSyncState, Symbol).join(Symbol, SymbolSyncState.symbol_id == Symbol.id)
     if status_filter:
         stmt = stmt.where(SymbolSyncState.last_attempt_status == status_filter.strip().upper())
-
     results = db.execute(stmt).all()
     return [
         {
