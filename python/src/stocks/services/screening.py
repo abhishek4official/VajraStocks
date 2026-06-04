@@ -12,6 +12,8 @@ from stocks.db.models import (
     ScreeningSnapshot,
     Symbol,
 )
+from stocks.services.quant.planner import TradePlannerService
+from stocks.services.settings_service import SettingsService
 
 
 class ScreeningService:
@@ -20,6 +22,60 @@ class ScreeningService:
     def __init__(self, config: Config, db_session: Session):
         self.config = config
         self.db = db_session
+        self._mtf: dict | None = None  # memoized MTF/risk thresholds
+
+    def _mtf_thresholds(self) -> dict:
+        """Loads (once) the MTF/risk thresholds from settings, memoized per service instance."""
+        if self._mtf is None:
+            s = SettingsService(self.db)
+            self._mtf = {
+                "atr_low": s.get_float("PORTFOLIO", "daily_atr_low_pct", 2.0),
+                "atr_high": s.get_float("PORTFOLIO", "daily_atr_high_pct", 5.0),
+                "bias_band": s.get_float("PORTFOLIO", "bias_neutral_band_pct", 2.0),
+                "weekly_ema": s.get_int("PORTFOLIO", "weekly_regime_ema", 40),
+            }
+        return self._mtf
+
+    def _compute_weekly_trend(self, symbol_id: int, weekly_ema_len: int) -> str | None:
+        """Resamples daily closes to weekly (W-FRI) and returns UP/DOWN vs the N-week EMA.
+
+        Uses existing daily price data — no separate weekly indicator table needed.
+        Returns None when there is insufficient history.
+        """
+        try:
+            import datetime as dt
+
+            import pandas as pd
+            import pandas_ta as ta
+
+            # ~ weekly_ema_len*2 weeks of daily bars for a stable EMA
+            cutoff = dt.date.today() - dt.timedelta(weeks=max(weekly_ema_len * 2, 60) + 10)
+            rows = self.db.execute(
+                select(DailyPrice.trading_date, DailyPrice.close)
+                .where(DailyPrice.symbol_id == symbol_id, DailyPrice.trading_date >= cutoff)
+                .order_by(DailyPrice.trading_date.asc())
+            ).all()
+            if len(rows) < weekly_ema_len * 5:  # ~5 trading days/week
+                return None
+
+            ser = pd.Series(
+                [float(c) for _, c in rows],
+                index=pd.to_datetime([d for d, _ in rows]),
+            )
+            weekly = ser.resample("W-FRI").last().dropna()
+            if len(weekly) < weekly_ema_len:
+                return None
+
+            ema = ta.ema(weekly, length=weekly_ema_len)
+            if ema is None or ema.dropna().empty:
+                return None
+
+            last_close = float(weekly.iloc[-1])
+            last_ema = float(ema.dropna().iloc[-1])
+            return "UP" if last_close >= last_ema else "DOWN"
+        except Exception as e:
+            logger.debug(f"weekly trend compute failed for symbol_id {symbol_id}: {e}")
+            return None
 
     def refresh_snapshot_for_symbol(self, symbol_id: int, nifty_21d_return: float | None = None) -> None:
         """Compiles the latest EOD prices and derived structures to upsert the screening snapshot for a symbol."""
@@ -29,9 +85,10 @@ class ScreeningService:
             if not symbol_obj or not symbol_obj.is_active:
                 return
 
-            # 2. Fetch latest 7 EOD prices — enough for NR7 + Inside Bar + pct change
+            # 2. Fetch latest 21 EOD prices — enough for NR7 + Inside Bar + pct change
+            #    plus rolling 1W/2W/3W/4W returns (5/10/15/20 trading days back).
             prices = self.db.scalars(
-                select(DailyPrice).filter_by(symbol_id=symbol_id).order_by(DailyPrice.trading_date.desc()).limit(7)
+                select(DailyPrice).filter_by(symbol_id=symbol_id).order_by(DailyPrice.trading_date.desc()).limit(21)
             ).all()
 
             if not prices:
@@ -144,6 +201,52 @@ class ScreeningService:
             )
             line_break_direction = lb.direction if lb else None
 
+            # 6b. MTF / risk fields (materialized from existing daily + weekly-resampled data)
+            mtf = self._mtf_thresholds()
+            atr_pct = None
+            vol_class = None
+            regime_bias = None
+            weekly_trend = None
+            mtf_confirmed = None
+            if ind:
+                atr_14 = float(ind.atr_14) if ind.atr_14 is not None else None
+                if atr_14 is not None and close_price > 0:
+                    atr_pct = (atr_14 / close_price) * 100.0
+                    if atr_pct < mtf["atr_low"]:
+                        vol_class = "LOW"
+                    elif atr_pct > mtf["atr_high"]:
+                        vol_class = "HIGH"
+                    else:
+                        vol_class = "MEDIUM"
+
+                regime_bias, _ = TradePlannerService.compute_bias(
+                    close=close_price,
+                    sma_50=float(ind.sma_50) if ind.sma_50 is not None else None,
+                    sma_200=float(ind.sma_200) if ind.sma_200 is not None else None,
+                    ema_21=float(ind.ema_21) if ind.ema_21 is not None else None,
+                    macd_histogram=float(ind.macd_histogram) if ind.macd_histogram is not None else None,
+                    rsi_14=float(ind.rsi_14) if ind.rsi_14 is not None else None,
+                    neutral_band_pct=mtf["bias_band"],
+                )
+
+            weekly_trend = self._compute_weekly_trend(symbol_id, mtf["weekly_ema"])
+            if regime_bias is not None and weekly_trend is not None:
+                mtf_confirmed = (regime_bias == "BULLISH" and weekly_trend == "UP")
+
+            # 6c. Rolling weekly returns (%) — 1W/2W/3W/4W = 5/10/15/20 trading days back.
+            #     prices[] is ordered newest→oldest, so prices[n] is n trading days ago.
+            def _ret(days_back: int) -> float | None:
+                if len(prices) > days_back:
+                    past = float(prices[days_back].close)
+                    if past > 0:
+                        return (close_price - past) / past * 100.0
+                return None
+
+            ret_1w = _ret(5)
+            ret_2w = _ret(10)
+            ret_3w = _ret(15)
+            ret_4w = _ret(20)
+
             # 7. Upsert the ScreeningSnapshot
             snapshot = self.db.scalar(select(ScreeningSnapshot).filter_by(symbol_id=symbol_id))
             if snapshot is None:
@@ -169,6 +272,15 @@ class ScreeningService:
                     is_gap_up=is_gap_up,
                     is_gap_down=is_gap_down,
                     rs_score_1m=rs_score_1m,
+                    atr_pct=atr_pct,
+                    vol_class=vol_class,
+                    regime_bias=regime_bias,
+                    weekly_trend=weekly_trend,
+                    mtf_confirmed=mtf_confirmed,
+                    ret_1w=ret_1w,
+                    ret_2w=ret_2w,
+                    ret_3w=ret_3w,
+                    ret_4w=ret_4w,
                 )
                 self.db.add(snapshot)
             else:
@@ -190,6 +302,15 @@ class ScreeningService:
                 snapshot.is_gap_up = is_gap_up
                 snapshot.is_gap_down = is_gap_down
                 snapshot.rs_score_1m = rs_score_1m
+                snapshot.atr_pct = atr_pct
+                snapshot.vol_class = vol_class
+                snapshot.regime_bias = regime_bias
+                snapshot.weekly_trend = weekly_trend
+                snapshot.mtf_confirmed = mtf_confirmed
+                snapshot.ret_1w = ret_1w
+                snapshot.ret_2w = ret_2w
+                snapshot.ret_3w = ret_3w
+                snapshot.ret_4w = ret_4w
 
             self.db.commit()
         except Exception as e:

@@ -11,6 +11,19 @@ from stocks.services.screening import ScreeningService
 router = APIRouter(prefix="/screeners", tags=["Stock Screening"])
 
 
+def _trade_setup(close: float | None, atr_pct: float | None) -> dict:
+    """ATR-based setup dict: stop = close - 1.5*ATR, target_1 = close + 1.5*ATR,
+    potential_gain_pct = 1.5*ATR% (upside to T1)."""
+    if close is None or atr_pct is None or close <= 0:
+        return {"stop_loss": None, "target_1": None, "potential_gain_pct": None}
+    atr_abs = atr_pct / 100.0 * close
+    return {
+        "stop_loss": round(close - 1.5 * atr_abs, 2),
+        "target_1": round(close + 1.5 * atr_abs, 2),
+        "potential_gain_pct": round(1.5 * atr_pct, 2),
+    }
+
+
 # Pydantic Request & Response Schemas
 class ScreeningParams(BaseModel):
     min_rsi: float | None = None
@@ -56,6 +69,14 @@ class ScreenerRowResponse(BaseModel):
     rs_score_1m: float | None = None
     weekly_avg_volume: float | None = None
     volume_breakout_ratio: float | None = None
+    ret_1w: float | None = None
+    ret_2w: float | None = None
+    ret_3w: float | None = None
+    ret_4w: float | None = None
+    atr_pct: float | None = None
+    stop_loss: float | None = None
+    target_1: float | None = None
+    potential_gain_pct: float | None = None
 
     class Config:
         from_attributes = True
@@ -129,6 +150,12 @@ def get_screening_results_get(
             "rs_score_1m": r.rs_score_1m,
             "weekly_avg_volume": getattr(r, "weekly_avg_volume", None),
             "volume_breakout_ratio": getattr(r, "volume_breakout_ratio", None),
+            "ret_1w": r.ret_1w,
+            "ret_2w": r.ret_2w,
+            "ret_3w": r.ret_3w,
+            "ret_4w": r.ret_4w,
+            "atr_pct": r.atr_pct,
+            **_trade_setup(float(r.close_price), r.atr_pct),
         }
         for r in results
     ]
@@ -183,6 +210,12 @@ def get_screening_results_post(params: ScreeningParams, db: Session = Depends(ge
             "rs_score_1m": r.rs_score_1m,
             "weekly_avg_volume": getattr(r, "weekly_avg_volume", None),
             "volume_breakout_ratio": getattr(r, "volume_breakout_ratio", None),
+            "ret_1w": r.ret_1w,
+            "ret_2w": r.ret_2w,
+            "ret_3w": r.ret_3w,
+            "ret_4w": r.ret_4w,
+            "atr_pct": r.atr_pct,
+            **_trade_setup(float(r.close_price), r.atr_pct),
         }
         for r in results
     ]

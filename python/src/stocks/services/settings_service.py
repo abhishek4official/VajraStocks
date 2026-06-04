@@ -68,6 +68,22 @@ DEFAULT_SETTINGS: list[tuple[str, str, str, str, str, bool]] = [
     ("PORTFOLIO", "default_currency",     "INR",  "string",  "Display currency symbol",                False),
     ("PORTFOLIO", "brokerage_pct",        "0.03", "float",   "Brokerage % per leg (e.g. 0.03 = 0.03%)", False),
     ("PORTFOLIO", "capital",              "0",    "float",   "Total trading capital (₹) for position sizing", False),
+    ("PORTFOLIO", "bias_neutral_band_pct","2.0",  "float",   "± band (%) around SMA200 treated as NEUTRAL bias", False),
+    # Discount broker charges
+    ("PORTFOLIO", "broker_name",          "Zerodha", "string","Discount broker name (display + import hint)", False),
+    ("PORTFOLIO", "flat_fee_per_order",   "20",   "float",   "Flat brokerage fee per order (₹); min(pct, flat)", False),
+    ("PORTFOLIO", "stt_pct",              "0.1",  "float",   "Securities Transaction Tax % (delivery)",  False),
+    ("PORTFOLIO", "include_charges_in_pnl","false","boolean","Show P&L net of brokerage + STT",          False),
+    # MTF / risk tuning
+    ("PORTFOLIO", "mtf_active_track",     "daily","string",  "Active MTF track: daily / weekly",         False),
+    ("PORTFOLIO", "daily_regime_ema",     "200",  "integer", "Daily regime filter EMA length (bars)",    False),
+    ("PORTFOLIO", "weekly_regime_ema",    "40",   "integer", "Weekly regime filter EMA length (weeks)",  False),
+    ("PORTFOLIO", "daily_atr_low_pct",    "2.0",  "float",   "ATR%% below this = LOW volatility",        False),
+    ("PORTFOLIO", "daily_atr_high_pct",   "5.0",  "float",   "ATR%% above this = HIGH volatility",        False),
+    ("PORTFOLIO", "max_bull_heat_pct",    "8.0",  "float",   "Max portfolio heat %% in a Bull regime",    False),
+    ("PORTFOLIO", "max_neutral_heat_pct", "6.0",  "float",   "Max portfolio heat %% in a Neutral regime", False),
+    ("PORTFOLIO", "max_bear_heat_pct",    "4.0",  "float",   "Max portfolio heat %% in a Bear regime",    False),
+    ("PORTFOLIO", "max_cluster_weight_pct","25.0","float",   "Max single-name/cluster weight %% of equity", False),
 
     # UI
     ("UI", "sync_poll_interval_ms",   "5000",  "integer", "Sync panel auto-refresh interval (ms)",          False),
