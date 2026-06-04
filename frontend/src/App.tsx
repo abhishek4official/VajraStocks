@@ -221,7 +221,7 @@ function Dashboard() {
               <span className="text-[10px]">Processing</span>
             </div>
           )}
-          <span className="text-[10px] text-slate-500 font-mono">Ver 1.0.0</span>
+          <span className="text-[10px] text-slate-500 font-mono">Ver {import.meta.env.VITE_APP_VERSION}</span>
         </div>
       </header>
 
