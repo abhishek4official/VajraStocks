@@ -262,67 +262,14 @@ jobs:
             | sed -n '2p' || true)
 
           if [[ -n "${PREV_TAG}" ]]; then
-            COMMITS=$(git log "${PREV_TAG}..HEAD" \
-              --pretty=format:"- %s (%h)" | head -40)
+            git log "${PREV_TAG}..HEAD" --pretty=format:"- %s (%h)" \
+              | head -40 > /tmp/commits.txt
           else
-            COMMITS=$(git log --pretty=format:"- %s (%h)" | head -40)
+            git log --pretty=format:"- %s (%h)" \
+              | head -40 > /tmp/commits.txt
           fi
 
-          cat > /tmp/notes.md << 'MDEOF'
-# VajraStocks vVERSION_PLACEHOLDER
-
-NSE Stock Analysis Platform — release **vVERSION_PLACEHOLDER**
-
-## What's Changed
-
-COMMITS_PLACEHOLDER
-
-## Downloads
-
-| Platform | File |
-|----------|------|
-| Windows  | `VajraStocks-Setup.exe` |
-| Linux (Debian/Ubuntu) | `VajraStocks.deb` |
-| Linux (Fedora/RHEL)   | `VajraStocks.rpm` |
-| Linux (Universal)     | `VajraStocks.AppImage` |
-| macOS                 | `VajraStocks.dmg` |
-
-## Installation
-
-### Windows
-Run `VajraStocks-Setup.exe` and follow the installer wizard.
-
-### Linux (.deb)
-```bash
-sudo dpkg -i VajraStocks.deb
-```
-
-### Linux (.rpm)
-```bash
-sudo rpm -i VajraStocks.rpm
-```
-
-### Linux (AppImage)
-```bash
-chmod +x VajraStocks.AppImage && ./VajraStocks.AppImage
-```
-
-### macOS
-Open `VajraStocks.dmg`, drag VajraStocks to Applications.
-
----
-*Generated automatically by GitHub Actions.*
-MDEOF
-
-          sed -i "s/VERSION_PLACEHOLDER/${VERSION}/g" /tmp/notes.md
-          python3 - "${COMMITS}" << 'PYEOF'
-import sys, pathlib
-commits = sys.argv[1] if len(sys.argv) > 1 else "- Initial release"
-content = pathlib.Path("/tmp/notes.md").read_text()
-content = content.replace("COMMITS_PLACEHOLDER", commits)
-pathlib.Path("/tmp/notes.md").write_text(content)
-PYEOF
-          cp /tmp/notes.md release/ReleaseNotes.md
+          python3 installer/gen_release_notes.py "${VERSION}" /tmp/commits.txt
 
       - name: Generate checksums
         run: |
