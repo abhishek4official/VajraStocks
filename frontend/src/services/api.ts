@@ -202,6 +202,8 @@ export interface ScreenerRow {
   is_gap_up?: boolean | null;
   is_gap_down?: boolean | null;
   rs_score_1m?: number | null;
+  regime_bias?: string | null;
+  weekly_trend?: string | null;
   weekly_avg_volume?: number | null;
   volume_breakout_ratio?: number | null;
   ret_1w?: number | null;

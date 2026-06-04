@@ -603,6 +603,9 @@ export const ScreenerPanel: React.FC = () => {
                 <th className="py-2 px-1.5 cursor-pointer hover:text-white transition" title="Price Percentage Change" onClick={() => handleSort('price_pct_change')}>
                   Chg% {renderSortIcon('price_pct_change')}
                 </th>
+                <th className="py-2 px-1.5 cursor-pointer hover:text-white transition" title="Composite Bias (5-tier: VERY_BULLISH / BULLISH / NEUTRAL / BEARISH / VERY_BEARISH) — sort by composite score" onClick={() => handleSort('composite_score' as any)}>
+                  Bias {renderSortIcon('composite_score' as any)}
+                </th>
                 <th className="py-2 px-1 text-right cursor-pointer hover:text-white transition" title="1-week rolling return" onClick={() => handleSort('ret_1w')}>
                   1W {renderSortIcon('ret_1w')}
                 </th>
@@ -679,7 +682,7 @@ export const ScreenerPanel: React.FC = () => {
             <tbody className="divide-y divide-slate-850">
               {filteredResults.length === 0 ? (
                 <tr>
-                  <td colSpan={29} className="py-10 text-center text-slate-500 text-xs">
+                  <td colSpan={30} className="py-10 text-center text-slate-500 text-xs">
                     {isLoading 
                       ? 'Executing database snapshot sweep...' 
                       : 'No stock matches found for the current criteria.'}
@@ -712,6 +715,41 @@ export const ScreenerPanel: React.FC = () => {
                       {/* Change */}
                       <td className={`py-2 px-1.5 font-mono ${isChangeBullish ? 'text-emerald-400' : 'text-rose-400'}`}>
                         {isChangeBullish ? '+' : ''}{formatNumber(row.price_pct_change)}%
+                      </td>
+
+                      {/* Bias chip */}
+                      <td className="py-2 px-1.5">
+                        {(() => {
+                          const bias = (row as any).regime_bias as string | null | undefined;
+                          const score = (row as any).composite_score as number | null | undefined;
+                          const trend = (row as any).trend_score_val as number | null | undefined;
+                          const vol   = (row as any).volume_score_val as number | null | undefined;
+                          const rs    = (row as any).rs_score_val as number | null | undefined;
+                          const mom   = (row as any).momentum_score_val as number | null | undefined;
+                          const tooltip = score != null
+                            ? `Score: ${score.toFixed(1)}\nTrend: ${trend?.toFixed(0) ?? '—'}  Volume: ${vol?.toFixed(0) ?? '—'}  RS: ${rs?.toFixed(0) ?? '—'}  Momentum: ${mom?.toFixed(0) ?? '—'}`
+                            : bias ?? '—';
+                          const cfg: Record<string, { bg: string; text: string; label: string }> = {
+                            VERY_BULLISH: { bg: 'bg-emerald-500/20 border-emerald-400/50', text: 'text-emerald-200', label: 'VB+' },
+                            BULLISH:      { bg: 'bg-emerald-500/10 border-emerald-500/30', text: 'text-emerald-400', label: 'Bull' },
+                            NEUTRAL:      { bg: 'bg-slate-700/40 border-slate-600/40',     text: 'text-slate-400',  label: 'Neut' },
+                            BEARISH:      { bg: 'bg-rose-500/10 border-rose-500/30',        text: 'text-rose-400',   label: 'Bear' },
+                            VERY_BEARISH: { bg: 'bg-rose-500/20 border-rose-400/50',        text: 'text-rose-200',   label: 'VB-' },
+                          };
+                          const c = bias ? (cfg[bias] ?? cfg['NEUTRAL']) : null;
+                          if (!c) return <span className="text-slate-600">—</span>;
+                          return (
+                            <span
+                              title={tooltip}
+                              className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[10px] font-bold whitespace-nowrap ${c.bg} ${c.text}`}
+                            >
+                              {c.label}
+                              {score != null && (
+                                <span className="opacity-70 font-mono">{score.toFixed(0)}</span>
+                              )}
+                            </span>
+                          );
+                        })()}
                       </td>
 
                       {/* Rolling weekly returns 1W/2W/3W/4W */}

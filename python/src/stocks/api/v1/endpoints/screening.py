@@ -220,6 +220,8 @@ class ScreenerRowResponse(BaseModel):
     is_gap_up: bool | None = None
     is_gap_down: bool | None = None
     rs_score_1m: float | None = None
+    regime_bias: str | None = None
+    weekly_trend: str | None = None
     weekly_avg_volume: float | None = None
     volume_breakout_ratio: float | None = None
     ret_1w: float | None = None
@@ -292,6 +294,8 @@ def _build_row(r, confl_by_symbol_id: dict, risk_per_trade: float) -> dict:
         "is_gap_up": r.is_gap_up,
         "is_gap_down": r.is_gap_down,
         "rs_score_1m": r.rs_score_1m,
+        "regime_bias": getattr(r, "regime_bias", None),
+        "weekly_trend": getattr(r, "weekly_trend", None),
         "weekly_avg_volume": getattr(r, "weekly_avg_volume", None),
         "volume_breakout_ratio": getattr(r, "volume_breakout_ratio", None),
         "ret_1w": r.ret_1w,
