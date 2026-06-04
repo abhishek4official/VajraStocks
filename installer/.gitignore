@@ -1,0 +1,9 @@
+# PyInstaller build artifacts
+/build/
+/dist/
+/release/
+staging-deb/
+staging-macos/
+rpm-build/
+appimagetool-x86_64.AppImage
+*.AppImage
