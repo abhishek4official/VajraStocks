@@ -31,13 +31,13 @@ def _bundle_root() -> Path:
     return Path(__file__).resolve().parent.parent
 
 
-def _data_dir() -> Path:
+def _app_dir() -> Path:
     """
-    User-writable directory for the SQLite database, logs, etc.
+    User-writable root for all VajraStocks user data.
 
-    • Windows:  %APPDATA%\\VajraStocks\\data
-    • macOS:    ~/Library/Application Support/VajraStocks/data
-    • Linux:    ~/.local/share/VajraStocks/data
+    • Windows:  %APPDATA%\\VajraStocks
+    • macOS:    ~/Library/Application Support/VajraStocks
+    • Linux:    ~/.local/share/VajraStocks
 
     Never the install dir (Program Files is read-only for normal users).
     """
@@ -48,9 +48,31 @@ def _data_dir() -> Path:
         base = Path.home() / "Library" / "Application Support"
     else:
         base = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
-    d = base / app_name / "data"
+    d = base / app_name
     d.mkdir(parents=True, exist_ok=True)
     return d
+
+
+def _data_dir() -> Path:
+    d = _app_dir() / "data"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _user_config(bundle: Path) -> Path:
+    """
+    Return a user-writable config.yaml path (%APPDATA%/VajraStocks/config.yaml).
+    On first run, copies the bundled default config there as a starting point.
+    Subsequent writes (e.g. Settings UI saves) update this file, never the
+    read-only bundle inside Program Files.
+    """
+    import shutil
+    user_cfg = _app_dir() / "config.yaml"
+    if not user_cfg.exists():
+        bundled = bundle / "config" / "config.yaml"
+        if bundled.exists():
+            shutil.copy2(bundled, user_cfg)
+    return user_cfg
 
 
 # ── Free-port finder ──────────────────────────────────────────────────────────
@@ -99,13 +121,16 @@ def main() -> None:
     os.environ.setdefault("VAJRA_DB_URL", sqlite_url)
     os.environ.setdefault("VAJRA_DATA_DIR", str(data))
 
-    # ── Alembic and config paths — used by main.py via env (see below)
+    # ── Alembic ini — read-only, lives in the bundle (no writes needed)
     alembic_ini = bundle / "alembic.ini"
     if alembic_ini.exists():
         os.environ.setdefault("VAJRA_ALEMBIC_INI", str(alembic_ini))
-    config_yaml = bundle / "config" / "config.yaml"
-    if config_yaml.exists():
-        os.environ.setdefault("VAJRA_CONFIG_YAML", str(config_yaml))
+
+    # ── config.yaml — must be user-writable (Settings UI saves changes here)
+    # Copy bundled default to %APPDATA%/VajraStocks/ on first run, then always
+    # point to the AppData copy so writes never hit the read-only install dir.
+    user_config = _user_config(bundle)
+    os.environ.setdefault("VAJRA_CONFIG_YAML", str(user_config))
 
     # ── Change cwd to bundle so any remaining relative paths resolve correctly
     os.chdir(bundle)
