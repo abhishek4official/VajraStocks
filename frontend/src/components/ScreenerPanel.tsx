@@ -86,7 +86,7 @@ export const ScreenerPanel: React.FC = () => {
   const [visibleCount, setVisibleCount] = useState(50);
   const PAGE_SIZE = 50;
   const [searchQuery, setSearchQuery] = useState('');
-  const [showFilters, setShowFilters] = useState(true);
+  const [showFilters, setShowFilters] = useState(false);
 
   useEffect(() => { runScreener(); }, []);
   // Reset to first page whenever results or search query updates
@@ -177,9 +177,10 @@ export const ScreenerPanel: React.FC = () => {
     if (screenerResults.length === 0) return;
 
     const headers = [
-      'Ticker', 'Company Name', 'Last EOD Price', 'Change %', 
-      'Weekly Avg Vol', 'Vol Breakout', 'RSI (14)', 'SMA 20', 
-      'SMA 50', 'SMA 200', 'MACD Trend', 'Heikin Ashi', 'Renko', 'Three Line Break', 'RS 1M', 'Stop', 'T1', 'Upside %', 'R:R'
+      'Ticker', 'Company Name', 'Last EOD Price', 'Change %',
+      'Weekly Avg Vol', 'Vol Breakout', 'RSI (14)', 'SMA 20',
+      'SMA 50', 'SMA 200', 'MACD Trend', 'Heikin Ashi', 'Renko', 'Three Line Break', 'RS 1M',
+      'Stop', 'T1', 'T2', 'T3', 'Upside %', 'R:R', 'TQS', 'Shares'
     ];
 
     const rows = filteredResults.map(row => [
@@ -200,8 +201,12 @@ export const ScreenerPanel: React.FC = () => {
       (row as any).rs_score_1m ?? '',
       row.stop_loss ?? '',
       row.target_1 ?? '',
+      row.target_2 ?? '',
+      row.target_3 ?? '',
       row.potential_gain_pct ?? '',
-      row.rr_ratio ?? ''
+      row.rr_ratio ?? '',
+      row.trade_quality_score ?? '',
+      row.position_size_shares ?? ''
     ]);
 
     const csvContent = [
@@ -613,14 +618,26 @@ export const ScreenerPanel: React.FC = () => {
                 <th className="py-2 px-1 text-right cursor-pointer hover:text-white transition" title="Stop Loss (Close - 1.5 * ATR)" onClick={() => handleSort('stop_loss')}>
                   Stop {renderSortIcon('stop_loss')}
                 </th>
-                <th className="py-2 px-1 text-right cursor-pointer hover:text-white transition" title="Target 1 (Close + 1.5 * ATR)" onClick={() => handleSort('target_1')}>
+                <th className="py-2 px-1 text-right cursor-pointer hover:text-white transition" title="Target 1 — strongest structural resistance above price" onClick={() => handleSort('target_1')}>
                   T1 {renderSortIcon('target_1')}
+                </th>
+                <th className="py-2 px-1 text-right cursor-pointer hover:text-white transition" title="Target 2 — next structural resistance above T1" onClick={() => handleSort('target_2' as any)}>
+                  T2 {renderSortIcon('target_2' as any)}
+                </th>
+                <th className="py-2 px-1 text-right cursor-pointer hover:text-white transition" title="Target 3 — third structural resistance" onClick={() => handleSort('target_3' as any)}>
+                  T3 {renderSortIcon('target_3' as any)}
                 </th>
                 <th className="py-2 px-1 text-right cursor-pointer hover:text-white transition" title="Potential Gain % to Target 1" onClick={() => handleSort('potential_gain_pct')}>
                   Upside {renderSortIcon('potential_gain_pct')}
                 </th>
                 <th className="py-2 px-1 text-right cursor-pointer hover:text-white transition" title="Risk-to-Reward Ratio" onClick={() => handleSort('rr_ratio')}>
                   R:R {renderSortIcon('rr_ratio')}
+                </th>
+                <th className="py-2 px-1 text-right cursor-pointer hover:text-white transition" title="Trade Quality Score (0–100): Trend + Momentum + RS + Volume + R:R" onClick={() => handleSort('trade_quality_score' as any)}>
+                  TQS {renderSortIcon('trade_quality_score' as any)}
+                </th>
+                <th className="py-2 px-1 text-right cursor-pointer hover:text-white transition" title="Suggested position size (shares) based on risk budget ÷ stop distance" onClick={() => handleSort('position_size_shares' as any)}>
+                  Shares {renderSortIcon('position_size_shares' as any)}
                 </th>
                 <th className="py-2 px-1.5 text-right cursor-pointer hover:text-white transition" title="Weekly Average Volume" onClick={() => handleSort('weekly_avg_volume')}>
                   Avg Vol {renderSortIcon('weekly_avg_volume')}
@@ -662,7 +679,7 @@ export const ScreenerPanel: React.FC = () => {
             <tbody className="divide-y divide-slate-850">
               {filteredResults.length === 0 ? (
                 <tr>
-                  <td colSpan={25} className="py-10 text-center text-slate-500 text-xs">
+                  <td colSpan={29} className="py-10 text-center text-slate-500 text-xs">
                     {isLoading 
                       ? 'Executing database snapshot sweep...' 
                       : 'No stock matches found for the current criteria.'}
@@ -713,6 +730,12 @@ export const ScreenerPanel: React.FC = () => {
                       <td className="py-2 px-1 text-right font-mono text-xs text-emerald-400/90">
                         {row.target_1 == null ? '—' : `₹${formatNumber(row.target_1, 1)}`}
                       </td>
+                      <td className="py-2 px-1 text-right font-mono text-xs text-emerald-400/60">
+                        {row.target_2 == null ? '—' : `₹${formatNumber(row.target_2, 1)}`}
+                      </td>
+                      <td className="py-2 px-1 text-right font-mono text-xs text-emerald-400/40">
+                        {row.target_3 == null ? '—' : `₹${formatNumber(row.target_3, 1)}`}
+                      </td>
                       <td className="py-2 px-1 text-right font-mono text-xs text-emerald-400">
                         {row.potential_gain_pct == null ? '—' : `+${row.potential_gain_pct.toFixed(1)}%`}
                       </td>
@@ -721,15 +744,35 @@ export const ScreenerPanel: React.FC = () => {
                       <td className="py-2 px-1 text-right font-mono text-xs">
                         {row.rr_ratio !== undefined && row.rr_ratio !== null ? (
                           <span className={`px-1 py-0.2 rounded font-bold ${
-                            row.rr_ratio >= 2.0 
-                              ? 'text-emerald-400 bg-emerald-950/20' 
-                              : row.rr_ratio >= 1.0 
-                              ? 'text-indigo-400 bg-[#121620]' 
+                            row.rr_ratio >= 2.0
+                              ? 'text-emerald-400 bg-emerald-950/20'
+                              : row.rr_ratio >= 1.0
+                              ? 'text-indigo-400 bg-[#121620]'
                               : 'text-rose-400 bg-rose-950/20'
                           }`}>
                             {row.rr_ratio.toFixed(2)}x
                           </span>
                         ) : <span className="text-slate-600">—</span>}
+                      </td>
+
+                      {/* Trade Quality Score */}
+                      <td className="py-2 px-1 text-right font-mono text-xs">
+                        {row.trade_quality_score != null ? (
+                          <span className={`px-1 rounded font-bold ${
+                            row.trade_quality_score >= 70
+                              ? 'text-emerald-400 bg-emerald-950/20'
+                              : row.trade_quality_score >= 50
+                              ? 'text-amber-400 bg-amber-950/20'
+                              : 'text-rose-400 bg-rose-950/20'
+                          }`}>
+                            {row.trade_quality_score.toFixed(0)}
+                          </span>
+                        ) : <span className="text-slate-600">—</span>}
+                      </td>
+
+                      {/* Position Size */}
+                      <td className="py-2 px-1 text-right font-mono text-xs text-purple-400">
+                        {row.position_size_shares != null ? row.position_size_shares.toLocaleString('en-IN') : '—'}
                       </td>
 
                       {/* Weekly Avg Vol */}

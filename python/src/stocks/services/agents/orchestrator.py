@@ -18,6 +18,7 @@ from stocks.config import Config
 from stocks.services.agents.llm_client import LLMClient
 from stocks.services.database import DatabaseService
 from stocks.services.quant.backtester import BacktestingService
+from stocks.services.quant.confluence_service import ConfluenceService
 
 # Import deterministic Python services
 from stocks.services.quant.planner import TradePlannerService
@@ -367,7 +368,6 @@ class Orchestrator:
 
         # Fetch/calculate confluence levels for support/resistance anchors
         from stocks.db.models import Symbol, SymbolConfluenceLevel
-        from stocks.services.quant.confluence_service import ConfluenceService
 
         sym = self.db.scalar(select(Symbol).filter_by(symbol=symbol))
         support = sma_200
@@ -385,12 +385,11 @@ class Orchestrator:
             resistances = [lvl for lvl in confluence_levels if lvl.level_type == "RESISTANCE"]
 
             supports_sorted = sorted(supports, key=lambda x: float(x.price), reverse=True)
-            resistances_sorted = sorted(resistances, key=lambda x: float(x.price))
-
             if supports_sorted:
                 support = float(supports_sorted[0].price)
-            if resistances_sorted:
-                resistance = float(resistances_sorted[0].price)
+            best_r1 = ConfluenceService.select_best_resistance(resistances, latest_price, atr_14)
+            if best_r1 is not None:
+                resistance = float(best_r1.price)
 
         # Pure Python Sizing and Stops math
         deterministic_plan = self.trade_planner.calculate_trade_plan(
@@ -707,7 +706,6 @@ class Orchestrator:
             sma_200 = indicator.sma_200 if indicator and indicator.sma_200 else cand["latest_price"] * 0.95
 
             from stocks.db.models import SymbolConfluenceLevel
-            from stocks.services.quant.confluence_service import ConfluenceService
 
             confluence_levels = self.db.scalars(
                 select(SymbolConfluenceLevel).filter_by(symbol_id=cand["sym_obj_id"])
@@ -720,10 +718,9 @@ class Orchestrator:
             resistances = [lvl for lvl in confluence_levels if lvl.level_type == "RESISTANCE"]
 
             supports_sorted = sorted(supports, key=lambda x: float(x.price), reverse=True)
-            resistances_sorted = sorted(resistances, key=lambda x: float(x.price))
-
             support = float(supports_sorted[0].price) if supports_sorted else sma_200
-            resistance = float(resistances_sorted[0].price) if resistances_sorted else cand["latest_price"] * 1.15
+            best_r1 = ConfluenceService.select_best_resistance(resistances, cand["latest_price"], atr_14)
+            resistance = float(best_r1.price) if best_r1 is not None else cand["latest_price"] * 1.15
 
             deterministic_plan = self.trade_planner.calculate_trade_plan(
                 symbol=symbol,

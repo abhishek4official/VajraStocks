@@ -124,12 +124,12 @@ def get_trade_plan(symbol: str, db: Session = Depends(get_db)):
     supports = [lvl for lvl in confluence_levels if lvl.level_type == "SUPPORT"]
     resistances = [lvl for lvl in confluence_levels if lvl.level_type == "RESISTANCE"]
 
-    # Select closest structural support/resistance or fallbacks
+    # Select structural support/resistance; T1 uses highest-strength resistance
     supports_sorted = sorted(supports, key=lambda x: float(x.price), reverse=True)
-    resistances_sorted = sorted(resistances, key=lambda x: float(x.price))
-
     support = float(supports_sorted[0].price) if supports_sorted else recent_low
-    resistance = float(resistances_sorted[0].price) if resistances_sorted else recent_high
+
+    best_r1 = ConfluenceService.select_best_resistance(resistances, close, atr_14)
+    resistance = float(best_r1.price) if best_r1 is not None else recent_high
 
     planner = TradePlannerService(risk_per_trade_inr=risk_amount)
     plan = planner.calculate_trade_plan(

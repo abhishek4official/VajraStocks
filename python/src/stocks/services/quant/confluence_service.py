@@ -276,3 +276,19 @@ class ConfluenceService:
         self.db.commit()
         logger.info(f"Calculated and saved {len(saved_entities)} confluence levels for symbol_id {symbol_id}.")
         return saved_entities
+
+    @staticmethod
+    def select_best_resistance(resistances: list, current_price: float, atr_abs: float = 0.0):
+        """Pick the highest-strength resistance that is meaningfully above current_price.
+
+        Filters out levels within 0.5×ATR of price (prevents R:R collapse at breakout),
+        then selects by strength_score DESC (tiebreak: nearest price).
+        Falls back to the nearest resistance if all levels are filtered out.
+        Returns None when the input list is empty.
+        """
+        if not resistances:
+            return None
+        min_gap = max(atr_abs * 0.5, current_price * 0.005)
+        valid = [r for r in resistances if float(r.price) > current_price + min_gap]
+        pool = valid if valid else resistances
+        return max(pool, key=lambda r: (r.strength_score, -float(r.price)))

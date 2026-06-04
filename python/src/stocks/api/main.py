@@ -19,6 +19,12 @@ def _resolve_config_yaml() -> Path:
     env = os.environ.get("VAJRA_CONFIG_YAML")
     if env:
         return Path(env)
+    # Installed build: %APPDATA%\VajraStocks\config.yaml (takes priority over dev tree)
+    appdata = os.environ.get("APPDATA", "")
+    if appdata:
+        appdata_cfg = Path(appdata) / "VajraStocks" / "config.yaml"
+        if appdata_cfg.exists():
+            return appdata_cfg
     # Dev / source mode: python/src/stocks/api/main.py → parents[3] = python/
     return Path(__file__).resolve().parents[3] / "config" / "config.yaml"
 
@@ -45,12 +51,12 @@ def _load_connection_string() -> str:
     Resolves the DB connection string with this priority:
       1. VAJRA_DB_URL  environment variable  (Docker / CI override)
       2. config.yaml   database.connection_string  ← primary source
-      3. SQLite default  sqlite:///data/vajra.db
+         Checked first at %APPDATA%\\VajraStocks\\config.yaml (installed build),
+         then at python/config/config.yaml (dev fallback).
+      3. SQLite default for a completely fresh install with no config yet.
 
-    config.yaml is the bootstrap file: it is always readable even when the DB
-    is unavailable (e.g. just after the user switched the connection string in
-    the Settings UI).  The Settings endpoint rewrites config.yaml whenever a
-    bootstrap setting changes so the next restart always uses the right DB.
+    No silent DB fallback — if initialize() fails the error propagates and the
+    server refuses to start with a clear log message.
     """
     # 1. Hard env-var override
     env_cs = os.getenv("VAJRA_DB_URL")
@@ -298,24 +304,9 @@ async def lifespan(app: FastAPI):
     connection_string = _load_connection_string()
     logger.info(f"Starting VajraStocks [db: {connection_string.split('?')[0]}]")
 
-    # ① + ② — connect (with SQLite fallback so the server always starts)
+    # ① + ② — connect; raise immediately on failure so the error is visible
     db_manager = DatabaseManager(connection_string)
-    try:
-        db_manager.initialize()
-    except Exception as primary_exc:
-        fallback = "sqlite:///data/vajra.db"
-        logger.error(
-            f"Failed to connect to configured database: {primary_exc}\n"
-            f"⚠️  Falling back to SQLite ({fallback}).\n"
-            f"Fix the connection string in Settings → Database, then restart."
-        )
-        # Write the fallback back to config.yaml so the NEXT restart also uses SQLite
-        write_bootstrap_config({
-            ("DATABASE", "db_connection_string"): fallback,
-            ("DATABASE", "db_provider"): "sqlite",
-        })
-        db_manager = DatabaseManager(fallback)
-        db_manager.initialize()   # SQLite always works
+    db_manager.initialize()
 
     # ③ — create any missing tables (idempotent)
     try:
@@ -361,7 +352,9 @@ async def lifespan(app: FastAPI):
 
     yield
 
-    # Clean up background scheduler
+    # Clean up: wait for any in-flight sync, then cancel the loop, then release DB
+    from stocks.services.scheduler import shutdown_scheduler
+    await shutdown_scheduler()
     logger.info("Stopping background scheduler task...")
     scheduler_task.cancel()
     try:
