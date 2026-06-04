@@ -188,6 +188,17 @@ class DatabaseService:
             self.db.rollback()
             logger.error(f"Failed to finalize sync job: {e}")
 
+    def is_sync_job_cancelled(self, job_id: int) -> bool:
+        """Checks if the sync job has been marked as CANCELLED."""
+        try:
+            job = self.db.get(SyncJob, job_id)
+            if job:
+                self.db.refresh(job)
+                return job.status == "CANCELLED"
+        except Exception as e:
+            logger.error(f"Failed to check if sync job is cancelled: {e}")
+        return False
+
     def get_latest_heikin_ashi(self, symbol_id: int) -> dict[str, Any] | None:
         """Queries the single latest Heikin-Ashi candle for a symbol."""
         row = self.db.scalar(

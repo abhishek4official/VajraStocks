@@ -64,6 +64,9 @@ class Symbol(Base):
     screening_snapshot: Mapped[Optional["ScreeningSnapshot"]] = relationship(
         "ScreeningSnapshot", back_populates="symbol_obj", uselist=False, cascade="all, delete-orphan"
     )
+    confluence_levels: Mapped[list["SymbolConfluenceLevel"]] = relationship(
+        "SymbolConfluenceLevel", back_populates="symbol_obj", cascade="all, delete-orphan"
+    )
 
 
 class DailyPrice(Base):
@@ -353,4 +356,25 @@ class PortfolioHolding(Base):
     __table_args__ = (
         UniqueConstraint("instrument", name="UQ_PortfolioHolding_Instrument"),
         Index("ix_portfolio_holdings_instrument", "instrument"),
+    )
+
+
+class SymbolConfluenceLevel(Base):
+    """Model representing cached backend-calculated Confluence Support and Resistance levels."""
+
+    __tablename__ = "symbol_confluence_levels"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    symbol_id: Mapped[int] = mapped_column(Integer, ForeignKey("symbols.id", ondelete="CASCADE"), nullable=False)
+    level_type: Mapped[str] = mapped_column(String(10), nullable=False)  # 'SUPPORT' or 'RESISTANCE'
+    price: Mapped[float] = mapped_column(Numeric(18, 4), nullable=False)
+    strength_score: Mapped[int] = mapped_column(Integer, nullable=False)
+    components: Mapped[str] = mapped_column(String(255), nullable=False)  # e.g. "SWING,HVN,EMA200"
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=func.now())
+
+    # Relationships
+    symbol_obj: Mapped["Symbol"] = relationship("Symbol", back_populates="confluence_levels")
+
+    __table_args__ = (
+        Index("ix_confluence_levels_symbol_type", "symbol_id", "level_type"),
     )

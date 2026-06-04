@@ -354,7 +354,20 @@ async def lifespan(app: FastAPI):
     app.state.db_manager = db_manager
     logger.info("Application startup complete.")
 
+    # ⑧ — start background daily scheduler (00:00 UTC / 5:30 AM IST sync & missed runs check)
+    import asyncio
+    from stocks.services.scheduler import run_scheduler
+    scheduler_task = asyncio.create_task(run_scheduler(db_manager))
+
     yield
+
+    # Clean up background scheduler
+    logger.info("Stopping background scheduler task...")
+    scheduler_task.cancel()
+    try:
+        await scheduler_task
+    except asyncio.CancelledError:
+        pass
 
     db_manager.dispose()
     logger.info("Application shutdown complete.")

@@ -365,9 +365,36 @@ class Orchestrator:
         atr_14 = msg["latest_indicators"].get("atr_14") or latest_price * 0.02
         sma_200 = msg["latest_indicators"].get("sma_200") or latest_price * 0.95
 
+        # Fetch/calculate confluence levels for support/resistance anchors
+        from stocks.db.models import Symbol, SymbolConfluenceLevel
+        from stocks.services.quant.confluence_service import ConfluenceService
+
+        sym = self.db.scalar(select(Symbol).filter_by(symbol=symbol))
+        support = sma_200
+        resistance = latest_price * 1.15
+
+        if sym:
+            confluence_levels = self.db.scalars(
+                select(SymbolConfluenceLevel).filter_by(symbol_id=sym.id)
+            ).all()
+            if not confluence_levels:
+                confl_service = ConfluenceService(self.db)
+                confluence_levels = confl_service.calculate_and_save_levels(sym.id)
+
+            supports = [lvl for lvl in confluence_levels if lvl.level_type == "SUPPORT"]
+            resistances = [lvl for lvl in confluence_levels if lvl.level_type == "RESISTANCE"]
+
+            supports_sorted = sorted(supports, key=lambda x: float(x.price), reverse=True)
+            resistances_sorted = sorted(resistances, key=lambda x: float(x.price))
+
+            if supports_sorted:
+                support = float(supports_sorted[0].price)
+            if resistances_sorted:
+                resistance = float(resistances_sorted[0].price)
+
         # Pure Python Sizing and Stops math
         deterministic_plan = self.trade_planner.calculate_trade_plan(
-            symbol=symbol, latest_price=latest_price, atr_14=atr_14, support=sma_200, resistance=latest_price * 1.15
+            symbol=symbol, latest_price=latest_price, atr_14=atr_14, support=support, resistance=resistance
         )
 
         prompt = (
@@ -679,12 +706,31 @@ class Orchestrator:
             atr_14 = indicator.atr_14 if indicator and indicator.atr_14 else cand["latest_price"] * 0.02
             sma_200 = indicator.sma_200 if indicator and indicator.sma_200 else cand["latest_price"] * 0.95
 
+            from stocks.db.models import SymbolConfluenceLevel
+            from stocks.services.quant.confluence_service import ConfluenceService
+
+            confluence_levels = self.db.scalars(
+                select(SymbolConfluenceLevel).filter_by(symbol_id=cand["sym_obj_id"])
+            ).all()
+            if not confluence_levels:
+                confl_service = ConfluenceService(self.db)
+                confluence_levels = confl_service.calculate_and_save_levels(cand["sym_obj_id"])
+
+            supports = [lvl for lvl in confluence_levels if lvl.level_type == "SUPPORT"]
+            resistances = [lvl for lvl in confluence_levels if lvl.level_type == "RESISTANCE"]
+
+            supports_sorted = sorted(supports, key=lambda x: float(x.price), reverse=True)
+            resistances_sorted = sorted(resistances, key=lambda x: float(x.price))
+
+            support = float(supports_sorted[0].price) if supports_sorted else sma_200
+            resistance = float(resistances_sorted[0].price) if resistances_sorted else cand["latest_price"] * 1.15
+
             deterministic_plan = self.trade_planner.calculate_trade_plan(
                 symbol=symbol,
                 latest_price=cand["latest_price"],
                 atr_14=atr_14,
-                support=sma_200,
-                resistance=cand["latest_price"] * 1.15,
+                support=support,
+                resistance=resistance,
             )
 
             prompt = f"Plan swing execution tactics for deterministic plan: {json.dumps(deterministic_plan)}."

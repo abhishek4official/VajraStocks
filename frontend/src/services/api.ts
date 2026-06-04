@@ -33,6 +33,13 @@ export interface TradePlan {
   has_indicators: boolean;
 }
 
+export interface ConfluenceLevel {
+  price: number;
+  level_type: 'SUPPORT' | 'RESISTANCE';
+  strength_score: number;
+  components: string;
+}
+
 export interface PortfolioHolding {
   instrument: string;
   qty: number;
@@ -60,6 +67,7 @@ export interface PortfolioHolding {
   ret_4w: number | null;
   target_1: number | null;
   potential_gain_pct: number | null;
+  rr_ratio?: number | null;
 }
 
 export interface ReplacementCandidate {
@@ -179,6 +187,7 @@ export interface ScreenerRow {
   stop_loss?: number | null;
   target_1?: number | null;
   potential_gain_pct?: number | null;
+  rr_ratio?: number | null;
 }
 
 export interface CorporateAction {
@@ -231,6 +240,12 @@ export const apiService = {
     } catch {
       return null;
     }
+  },
+
+  async getConfluenceLevels(symbol: string): Promise<ConfluenceLevel[]> {
+    const response = await fetch(`${BASE_URL}/symbols/${encodeURIComponent(symbol)}/confluence-levels`);
+    if (!response.ok) throw new Error(`Failed to fetch confluence levels for ${symbol}`);
+    return response.json();
   },
 
   // 2. Charts endpoints
@@ -423,6 +438,12 @@ export const apiService = {
     const query = statusFilter ? `?status_filter=${statusFilter}` : '';
     const response = await fetch(`${BASE_URL}/sync/status${query}`);
     if (!response.ok) throw new Error('Failed to fetch symbol sync status health');
+    return response.json();
+  },
+
+  async cancelSync(): Promise<{ status: string; message: string }> {
+    const response = await fetch(`${BASE_URL}/sync/cancel`, { method: 'POST' });
+    if (!response.ok) throw new Error('Failed to cancel active sync jobs');
     return response.json();
   }
 };

@@ -107,8 +107,12 @@ class TradePlannerService:
 
         mid_entry = (entry_lower + entry_upper) / 2.0
 
-        target_1 = round(mid_entry + (1.5 * atr_14), 2)
-        target_2 = round(mid_entry + (3.0 * atr_14), 2)
+        if resistance > mid_entry:
+            target_1 = round(resistance, 2)
+        else:
+            target_1 = round(mid_entry + (1.5 * atr_14), 2)
+
+        target_2 = round(target_1 + (1.5 * atr_14), 2)
 
         # Calculate Position Sizing
         risk_distance = mid_entry - stop_loss

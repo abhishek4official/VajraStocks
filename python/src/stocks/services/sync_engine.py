@@ -147,6 +147,20 @@ class SyncEngine:
 
                 # Split this group's symbols into downloader batches
                 for chunk_idx in range(0, len(symbols_list), batch_size):
+                    # Check for job cancellation
+                    if db_service.is_sync_job_cancelled(job.id):
+                        logger.warning(f"Sync job {job.run_id} cancelled by user.")
+                        db_service.finalize_sync_job(
+                            job.id, total_symbols, processed_symbols, failed_symbols, "CANCELLED", "Cancelled by user request."
+                        )
+                        return {
+                            "status": "CANCELLED",
+                            "job_id": job.run_id,
+                            "total_symbols": total_symbols,
+                            "processed_symbols": processed_symbols,
+                            "failed_symbols": failed_symbols,
+                            "records_inserted": records_inserted,
+                        }
                     chunk = symbols_list[chunk_idx : chunk_idx + batch_size]
                     tickers_chunk = [s.symbol for s in chunk]
                     symbols_by_ticker = {s.symbol: s for s in chunk}
@@ -202,6 +216,19 @@ class SyncEngine:
 
                         # Resilient Fallback: Download each ticker in the chunk individually
                         for symbol_obj in chunk:
+                            if db_service.is_sync_job_cancelled(job.id):
+                                logger.warning(f"Sync job {job.run_id} cancelled by user during fallback.")
+                                db_service.finalize_sync_job(
+                                    job.id, total_symbols, processed_symbols, failed_symbols, "CANCELLED", "Cancelled by user request."
+                                )
+                                return {
+                                    "status": "CANCELLED",
+                                    "job_id": job.run_id,
+                                    "total_symbols": total_symbols,
+                                    "processed_symbols": processed_symbols,
+                                    "failed_symbols": failed_symbols,
+                                    "records_inserted": records_inserted,
+                                }
                             ticker = symbol_obj.symbol
                             try:
                                 # Fetch individually
@@ -393,6 +420,13 @@ class SyncEngine:
             f"{len(indicators_to_save)} indicators, {len(ha_candles_to_save)} HA candles, "
             f"{len(renko_bricks_to_save)} Renko bricks, {len(line_breaks_to_save)} Line Break lines."
         )
+
+        try:
+            from stocks.services.quant.confluence_service import ConfluenceService
+            confluence_service = ConfluenceService(db_service.db)
+            confluence_service.calculate_and_save_levels(symbol_obj.id)
+        except Exception as confluence_err:
+            logger.error(f"[{symbol_obj.symbol}] Failed to calculate or save confluence levels: {confluence_err}")
 
     def _verify_and_update_symbol_sync_state(
         self, db_service: DatabaseService, symbol_obj: Any, ticker: str, global_max_date: datetime.date | None

@@ -24,34 +24,6 @@ interface PriceChartProps {
   onChartClick?: (price: number) => void;
 }
 
-/** Detect pivot highs/lows and return clustered S/R price levels. */
-function detectSRLevels(candles: { high: number; low: number; close: number }[], window = 3, maxLevels = 8): number[] {
-  if (candles.length < window * 2 + 1) return [];
-  const pivotHighs: number[] = [];
-  const pivotLows: number[] = [];
-
-  for (let i = window; i < candles.length - window; i++) {
-    const slice = candles.slice(i - window, i + window + 1);
-    const isHigh = candles[i].high === Math.max(...slice.map(c => c.high));
-    const isLow  = candles[i].low  === Math.min(...slice.map(c => c.low));
-    if (isHigh) pivotHighs.push(candles[i].high);
-    if (isLow)  pivotLows.push(candles[i].low);
-  }
-
-  // Cluster levels within 0.5% of each other, keep the most-touched
-  const all = [...pivotHighs, ...pivotLows];
-  const clusters: number[] = [];
-  for (const lvl of all) {
-    const nearby = clusters.find(c => Math.abs(c - lvl) / lvl < 0.005);
-    if (!nearby) clusters.push(lvl);
-  }
-
-  // Sort by distance from last close and return top N
-  const lastClose = candles[candles.length - 1]?.close ?? 0;
-  return clusters
-    .sort((a, b) => Math.abs(a - lastClose) - Math.abs(b - lastClose))
-    .slice(0, maxLevels);
-}
 
 /** Returns a UTC unix timestamp (seconds) for N days before today. */
 function daysAgoUTC(days: number): number {
@@ -78,6 +50,7 @@ export const PriceChart: React.FC<PriceChartProps> = ({
     renkoBricks, 
     lineBreakLines, 
     indicators,
+    confluenceLevels,
     activeSymbol
   } = useStockStore();
 
@@ -341,28 +314,32 @@ export const PriceChart: React.FC<PriceChartProps> = ({
       }
     }
 
-    // 6d. Auto Support & Resistance levels
-    if (overlays.has('sr') && primaryData.length > 10) {
-      const srcCandles = chartType === 'candles' ? candles
-        : chartType === 'heikin-ashi' ? heikinAshi : [];
-      if (srcCandles.length > 0) {
-        const levels = detectSRLevels(srcCandles);
-        const lastTs = primaryData[primaryData.length - 1]?.time as number;
-        const firstTs = primaryData[0]?.time as number;
-        for (const lvl of levels) {
-          const srSeries = mainChart.addSeries(LineSeries, {
-            color: 'rgba(251, 191, 36, 0.55)',
-            lineWidth: 1,
-            lineStyle: 1, // dashed
-            priceLineVisible: false,
-            lastValueVisible: false,
-            crosshairMarkerVisible: false,
-          });
-          srSeries.setData([
-            { time: firstTs as any, value: lvl },
-            { time: lastTs as any,  value: lvl },
-          ]);
+    // 6d. Auto Support & Resistance levels (Backend-computed Confluence Levels)
+    if (overlays.has('sr') && confluenceLevels && confluenceLevels.length > 0) {
+      for (const lvl of confluenceLevels) {
+        const isSupport = lvl.level_type === 'SUPPORT';
+        const color = isSupport
+          ? `rgba(16, 185, 129, ${0.25 + (lvl.strength_score / 100) * 0.55})` // green for support
+          : `rgba(239, 68, 68, ${0.25 + (lvl.strength_score / 100) * 0.55})`; // red/rose for resistance
+
+        let lineStyle = 1; // dashed
+        let lineWidth = 1;
+        if (lvl.strength_score >= 61) {
+          lineStyle = 0; // solid
+          lineWidth = 1.5;
+        } else if (lvl.strength_score <= 30) {
+          lineStyle = 2; // dotted
+          lineWidth = 1;
         }
+
+        mainSeries.createPriceLine({
+          price: lvl.price,
+          color: color,
+          lineWidth: lineWidth,
+          lineStyle: lineStyle as any,
+          axisLabelVisible: true,
+          title: `${isSupport ? 'Support' : 'Resist'} (Score ${lvl.strength_score} - ${lvl.components})`,
+        });
       }
     }
 
@@ -568,6 +545,7 @@ export const PriceChart: React.FC<PriceChartProps> = ({
     customLines,
     drawMode,
     activeSymbol,
+    confluenceLevels,
   ]);
 
   const { isLoading } = useStockStore();

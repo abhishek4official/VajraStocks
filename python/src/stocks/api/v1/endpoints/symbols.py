@@ -6,9 +6,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from stocks.api.deps import get_db
-from stocks.db.models import DailyIndicator, DailyPrice, Symbol, SymbolSyncState
+from stocks.db.models import DailyIndicator, DailyPrice, Symbol, SymbolSyncState, SymbolConfluenceLevel
 from stocks.services.quant.planner import TradePlannerService
 from stocks.services.settings_service import SettingsService
+from stocks.services.quant.confluence_service import ConfluenceService
 
 router = APIRouter(prefix="/symbols", tags=["Symbols"])
 
@@ -112,9 +113,27 @@ def get_trade_plan(symbol: str, db: Session = Depends(get_db)):
     brokerage_pct = settings.get_float("PORTFOLIO", "brokerage_pct", 0.03)
     band = settings.get_float("PORTFOLIO", "bias_neutral_band_pct", 2.0)
 
+    # Fetch/calculate confluence levels for support/resistance anchors
+    confluence_levels = db.scalars(
+        select(SymbolConfluenceLevel).filter_by(symbol_id=sym.id)
+    ).all()
+    if not confluence_levels:
+        confl_service = ConfluenceService(db)
+        confluence_levels = confl_service.calculate_and_save_levels(sym.id)
+
+    supports = [lvl for lvl in confluence_levels if lvl.level_type == "SUPPORT"]
+    resistances = [lvl for lvl in confluence_levels if lvl.level_type == "RESISTANCE"]
+
+    # Select closest structural support/resistance or fallbacks
+    supports_sorted = sorted(supports, key=lambda x: float(x.price), reverse=True)
+    resistances_sorted = sorted(resistances, key=lambda x: float(x.price))
+
+    support = float(supports_sorted[0].price) if supports_sorted else recent_low
+    resistance = float(resistances_sorted[0].price) if resistances_sorted else recent_high
+
     planner = TradePlannerService(risk_per_trade_inr=risk_amount)
     plan = planner.calculate_trade_plan(
-        symbol=sym.symbol, latest_price=close, atr_14=atr_14, support=recent_low, resistance=recent_high
+        symbol=sym.symbol, latest_price=close, atr_14=atr_14, support=support, resistance=resistance
     )
     bias, reasons = TradePlannerService.compute_bias(
         close=close,
@@ -145,6 +164,26 @@ def get_trade_plan(symbol: str, db: Session = Depends(get_db)):
         "brokerage_pct": brokerage_pct,
         "has_indicators": ind is not None,
     }
+
+
+@router.get("/{symbol}/confluence-levels")
+def get_confluence_levels(symbol: str, db: Session = Depends(get_db)):
+    """Retrieves the top pre-calculated Confluence Support and Resistance levels for a symbol."""
+    sym = _resolve_symbol(symbol, db)
+    levels = db.scalars(
+        select(SymbolConfluenceLevel)
+        .filter_by(symbol_id=sym.id)
+        .order_by(SymbolConfluenceLevel.price.asc())
+    ).all()
+    return [
+        {
+            "price": float(lvl.price),
+            "level_type": lvl.level_type,
+            "strength_score": lvl.strength_score,
+            "components": lvl.components,
+        }
+        for lvl in levels
+    ]
 
 
 @router.get("/{symbol}", response_model=SymbolDetailResponse)

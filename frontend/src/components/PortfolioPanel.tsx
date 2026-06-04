@@ -300,6 +300,7 @@ export const PortfolioPanel: React.FC = () => {
                 <th className="py-2.5 px-3 text-right font-semibold">ATR%</th>
                 <th className="py-2.5 px-3 text-right font-semibold">Risk · Stop</th>
                 <th className="py-2.5 px-3 text-right font-semibold" title="ATR-based first target (close + 1.5×ATR) and % upside">Target 1</th>
+                <th className="py-2.5 px-3 text-right font-semibold">R:R</th>
                 <th className="py-2.5 px-3 text-right font-semibold">RS</th>
                 <th className="py-2.5 pr-5 pl-3 text-center font-semibold"></th>
               </tr>
@@ -368,6 +369,19 @@ export const PortfolioPanel: React.FC = () => {
                       {h.target_1 !== null
                         ? <>₹{fmtINR0(h.target_1)}<span className="text-emerald-400/80 text-[10px]"> +{fmt(h.potential_gain_pct ?? 0, 1)}%</span></>
                         : '—'}
+                    </td>
+                    <td className="py-3 px-3 text-right font-mono text-xs">
+                      {h.rr_ratio !== undefined && h.rr_ratio !== null ? (
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                          h.rr_ratio >= 2.0 
+                            ? 'text-emerald-400 bg-emerald-950/20' 
+                            : h.rr_ratio >= 1.0 
+                            ? 'text-indigo-400 bg-[#121620]' 
+                            : 'text-rose-400 bg-rose-950/20'
+                        }`}>
+                          {h.rr_ratio.toFixed(2)}x
+                        </span>
+                      ) : '—'}
                     </td>
                     <td className={`py-3 px-3 text-right font-mono ${h.rs_score_1m !== null && h.rs_score_1m >= 1 ? 'text-emerald-400' : 'text-slate-400'}`}>
                       {h.rs_score_1m !== null ? fmt(h.rs_score_1m) : '—'}

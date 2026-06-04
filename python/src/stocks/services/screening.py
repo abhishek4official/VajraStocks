@@ -77,10 +77,9 @@ class ScreeningService:
             logger.debug(f"weekly trend compute failed for symbol_id {symbol_id}: {e}")
             return None
 
-    def refresh_snapshot_for_symbol(self, symbol_id: int, nifty_21d_return: float | None = None) -> None:
+    def refresh_snapshot_for_symbol(self, symbol_id: int, nifty_21d_return: float | None = None, commit: bool = True) -> None:
         """Compiles the latest EOD prices and derived structures to upsert the screening snapshot for a symbol."""
         try:
-            # 1. Fetch Symbol details
             symbol_obj = self.db.get(Symbol, symbol_id)
             if not symbol_obj or not symbol_obj.is_active:
                 return
@@ -311,10 +310,11 @@ class ScreeningService:
                 snapshot.ret_2w = ret_2w
                 snapshot.ret_3w = ret_3w
                 snapshot.ret_4w = ret_4w
-
-            self.db.commit()
+            if commit:
+                self.db.commit()
         except Exception as e:
-            self.db.rollback()
+            if commit:
+                self.db.rollback()
             logger.error(f"Failed to refresh screening snapshot for symbol_id {symbol_id}: {e}")
             raise e
 
@@ -358,15 +358,19 @@ class ScreeningService:
 
             refreshed_count = 0
             for sym in active_symbols:
-                self.refresh_snapshot_for_symbol(sym.id, nifty_21d_return=nifty_21d_return)
-                refreshed_count += 1
+                try:
+                    self.refresh_snapshot_for_symbol(sym.id, nifty_21d_return=nifty_21d_return, commit=False)
+                    refreshed_count += 1
+                except Exception as sym_err:
+                    logger.error(f"Error refreshing snapshot for symbol {sym.symbol}: {sym_err}")
 
+            self.db.commit()  # Single bulk commit at the end!
             logger.info(f"Successfully refreshed {refreshed_count} screening snapshots.")
             return refreshed_count
         except Exception as e:
+            self.db.rollback()
             logger.error(f"Failed to refresh all screening snapshots: {e}")
             raise e
-
     def query_screener(
         self,
         min_rsi: float | None = None,

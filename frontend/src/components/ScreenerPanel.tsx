@@ -85,13 +85,16 @@ export const ScreenerPanel: React.FC = () => {
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [visibleCount, setVisibleCount] = useState(50);
   const PAGE_SIZE = 50;
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showFilters, setShowFilters] = useState(true);
 
   useEffect(() => { runScreener(); }, []);
-  // Reset to first page whenever results update
-  useEffect(() => { setVisibleCount(PAGE_SIZE); }, [screenerResults]);
+  // Reset to first page whenever results or search query updates
+  useEffect(() => { setVisibleCount(PAGE_SIZE); }, [screenerResults, searchQuery]);
 
   const handleRunScreener = () => {
     runScreener();
+    setShowFilters(false);
   };
 
   // Navigate in-place to the Explorer Dashboard for the selected symbol
@@ -159,6 +162,16 @@ export const ScreenerPanel: React.FC = () => {
     });
   }, [screenerResults, sortField, sortDirection]);
 
+  // Filtered Results Memo (applies client-side search query)
+  const filteredResults = useMemo(() => {
+    if (!searchQuery.trim()) return sortedResults;
+    const query = searchQuery.toLowerCase().trim();
+    return sortedResults.filter(
+      row => row.symbol.toLowerCase().includes(query) || 
+             row.company_name.toLowerCase().includes(query)
+    );
+  }, [sortedResults, searchQuery]);
+
   // CSV Exporter
   const exportToCSV = () => {
     if (screenerResults.length === 0) return;
@@ -166,10 +179,10 @@ export const ScreenerPanel: React.FC = () => {
     const headers = [
       'Ticker', 'Company Name', 'Last EOD Price', 'Change %', 
       'Weekly Avg Vol', 'Vol Breakout', 'RSI (14)', 'SMA 20', 
-      'SMA 50', 'SMA 200', 'MACD Trend', 'Heikin Ashi', 'Renko', 'Three Line Break'
+      'SMA 50', 'SMA 200', 'MACD Trend', 'Heikin Ashi', 'Renko', 'Three Line Break', 'RS 1M', 'Stop', 'T1', 'Upside %', 'R:R'
     ];
 
-    const rows = sortedResults.map(row => [
+    const rows = filteredResults.map(row => [
       row.symbol.replace('.NS', ''),
       `"${row.company_name.replace(/"/g, '""')}"`,
       row.close_price,
@@ -183,7 +196,12 @@ export const ScreenerPanel: React.FC = () => {
       row.macd_trend ?? '',
       row.ha_direction ?? '',
       row.renko_direction ?? '',
-      row.line_break_direction ?? ''
+      row.line_break_direction ?? '',
+      (row as any).rs_score_1m ?? '',
+      row.stop_loss ?? '',
+      row.target_1 ?? '',
+      row.potential_gain_pct ?? '',
+      row.rr_ratio ?? ''
     ]);
 
     const csvContent = [
@@ -215,6 +233,17 @@ export const ScreenerPanel: React.FC = () => {
           </p>
         </div>
         <div className="flex items-center gap-3">
+          <button
+            onClick={() => setShowFilters(!showFilters)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition cursor-pointer border ${
+              showFilters 
+                ? 'bg-purple-950/40 border-purple-500 text-purple-200' 
+                : 'bg-slate-800 border-slate-700 text-slate-300 hover:text-white hover:bg-slate-700'
+            }`}
+          >
+            <Filter className="w-4 h-4" />
+            {showFilters ? 'Hide Filters' : 'Show Filters'}
+          </button>
           <button
             onClick={exportToCSV}
             disabled={screenerResults.length === 0}
@@ -256,6 +285,7 @@ export const ScreenerPanel: React.FC = () => {
                 ...p.filters,
               });
               runScreener();
+              setShowFilters(false);
             }}
             disabled={isLoading}
             className="flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-800/80 bg-[#121620]/30 hover:bg-[#121620]/70 hover:border-purple-500/40 disabled:opacity-40 transition cursor-pointer text-left"
@@ -272,397 +302,448 @@ export const ScreenerPanel: React.FC = () => {
         ))}
       </div>
 
-      {/* Advanced Filter Inputs Card */}
-      <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-13 gap-4 p-4 rounded-xl border border-slate-800/80 bg-[#121620]/30">
-        
-        {/* Weekly Avg Volume */}
-        <div className="flex flex-col gap-1.5">
-          <label className="text-xs font-semibold text-slate-400">Min Weekly Avg Vol</label>
-          <input
-            type="number"
-            placeholder="No Limit"
-            value={screenerFilters.min_weekly_avg_volume !== undefined ? screenerFilters.min_weekly_avg_volume : ''}
-            onChange={(e) => setScreenerFilters({ 
-              min_weekly_avg_volume: e.target.value === '' ? undefined : Number(e.target.value) 
-            })}
-            className="w-full px-3 py-1.5 text-sm rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
-          />
-        </div>
+      {/* Organized Filter Grid (Toggleable) */}
+      {showFilters && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 p-5 rounded-xl border border-slate-800/80 bg-[#121620]/30 shadow-inner">
+          
+          {/* Column 1: Price & Volume */}
+          <div className="flex flex-col gap-4 lg:border-r border-slate-850 lg:pr-4">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-purple-400 flex items-center gap-1.5 mb-1 select-none">
+              <BarChart2 className="w-3.5 h-3.5 text-purple-500" /> Price & Volume
+            </h4>
+            
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] font-semibold text-slate-400">Min Weekly Avg Vol</label>
+              <input
+                type="number"
+                placeholder="No Limit"
+                value={screenerFilters.min_weekly_avg_volume !== undefined ? screenerFilters.min_weekly_avg_volume : ''}
+                onChange={(e) => setScreenerFilters({ 
+                  min_weekly_avg_volume: e.target.value === '' ? undefined : Number(e.target.value) 
+                })}
+                className="w-full px-3 py-1.5 text-xs rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
+              />
+            </div>
 
-        {/* Volume Breakout Dropdown */}
-        <div className="flex flex-col gap-1.5">
-          <label className="text-xs font-semibold text-slate-400">Volume Breakout</label>
-          <select
-            value={screenerFilters.volume_breakout || 'ANY'}
-            onChange={(e) => setScreenerFilters({ 
-              volume_breakout: e.target.value === 'ANY' ? undefined : e.target.value as any 
-            })}
-            className="w-full px-3 py-1.5 text-sm rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
-          >
-            <option value="ANY">Any Volume</option>
-            <option value="1.5X">1.5x Breakout</option>
-            <option value="2.0X">2.0x Breakout</option>
-            <option value="3.0X">3.0x Breakout</option>
-          </select>
-        </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] font-semibold text-slate-400">Volume Breakout</label>
+              <select
+                value={screenerFilters.volume_breakout || 'ANY'}
+                onChange={(e) => setScreenerFilters({ 
+                  volume_breakout: e.target.value === 'ANY' ? undefined : e.target.value as any 
+                })}
+                className="w-full px-3 py-1.5 text-xs rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
+              >
+                <option value="ANY">Any Volume</option>
+                <option value="1.5X">1.5x Breakout</option>
+                <option value="2.0X">2.0x Breakout</option>
+                <option value="3.0X">3.0x Breakout</option>
+              </select>
+            </div>
 
-        {/* Price Range */}
-        <div className="flex flex-col gap-1.5">
-          <label className="text-xs font-semibold text-slate-400">Min Price (₹)</label>
-          <input
-            type="number"
-            placeholder="No Limit"
-            value={screenerFilters.min_price !== undefined ? screenerFilters.min_price : ''}
-            onChange={(e) => setScreenerFilters({ min_price: e.target.value === '' ? undefined : Number(e.target.value) })}
-            className="w-full px-3 py-1.5 text-sm rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
-          />
-        </div>
-
-        <div className="flex flex-col gap-1.5">
-          <label className="text-xs font-semibold text-slate-400">Max Price (₹)</label>
-          <input
-            type="number"
-            placeholder="No Limit"
-            value={screenerFilters.max_price !== undefined ? screenerFilters.max_price : ''}
-            onChange={(e) => setScreenerFilters({ max_price: e.target.value === '' ? undefined : Number(e.target.value) })}
-            className="w-full px-3 py-1.5 text-sm rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
-          />
-        </div>
-
-        {/* RSI Range */}
-        <div className="flex flex-col gap-1.5">
-          <label className="text-xs font-semibold text-slate-400">Min RSI (14)</label>
-          <input
-            type="number"
-            placeholder="No Limit"
-            value={screenerFilters.min_rsi !== undefined ? screenerFilters.min_rsi : ''}
-            onChange={(e) => setScreenerFilters({ 
-              min_rsi: e.target.value === '' ? undefined : Number(e.target.value) 
-            })}
-            className="w-full px-3 py-1.5 text-sm rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
-          />
-        </div>
-
-        <div className="flex flex-col gap-1.5">
-          <label className="text-xs font-semibold text-slate-400">Max RSI (14)</label>
-          <input
-            type="number"
-            placeholder="No Limit"
-            value={screenerFilters.max_rsi !== undefined ? screenerFilters.max_rsi : ''}
-            onChange={(e) => setScreenerFilters({ 
-              max_rsi: e.target.value === '' ? undefined : Number(e.target.value) 
-            })}
-            className="w-full px-3 py-1.5 text-sm rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
-          />
-        </div>
-
-        {/* SMA 20 Cross */}
-        <div className="flex flex-col gap-1.5">
-          <label className="text-xs font-semibold text-slate-400">SMA 20 Cross</label>
-          <select
-            value={screenerFilters.sma_20_cross || 'ANY'}
-            onChange={(e) => setScreenerFilters({ 
-              sma_20_cross: e.target.value === 'ANY' ? undefined : e.target.value as any 
-            })}
-            className="w-full px-3 py-1.5 text-sm rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
-          >
-            <option value="ANY">Any Position</option>
-            <option value="ABOVE">Above SMA 20</option>
-            <option value="BELOW">Below SMA 20</option>
-          </select>
-        </div>
-
-        {/* SMA 50 Cross */}
-        <div className="flex flex-col gap-1.5">
-          <label className="text-xs font-semibold text-slate-400">SMA 50 Cross</label>
-          <select
-            value={screenerFilters.sma_50_cross || 'ANY'}
-            onChange={(e) => setScreenerFilters({ 
-              sma_50_cross: e.target.value === 'ANY' ? undefined : e.target.value as any 
-            })}
-            className="w-full px-3 py-1.5 text-sm rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
-          >
-            <option value="ANY">Any Position</option>
-            <option value="ABOVE">Above SMA 50</option>
-            <option value="BELOW">Below SMA 50</option>
-          </select>
-        </div>
-
-        {/* SMA 200 Cross */}
-        <div className="flex flex-col gap-1.5">
-          <label className="text-xs font-semibold text-slate-400">SMA 200 Cross</label>
-          <select
-            value={screenerFilters.sma_200_cross || 'ANY'}
-            onChange={(e) => setScreenerFilters({ 
-              sma_200_cross: e.target.value === 'ANY' ? undefined : e.target.value as any 
-            })}
-            className="w-full px-3 py-1.5 text-sm rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
-          >
-            <option value="ANY">Any Position</option>
-            <option value="ABOVE">Above SMA 200</option>
-            <option value="BELOW">Below SMA 200</option>
-          </select>
-        </div>
-
-        {/* MACD Trend */}
-        <div className="flex flex-col gap-1.5">
-          <label className="text-xs font-semibold text-slate-400">MACD Trend</label>
-          <select
-            value={screenerFilters.macd_trend || 'ANY'}
-            onChange={(e) => setScreenerFilters({ 
-              macd_trend: e.target.value === 'ANY' ? undefined : e.target.value as any 
-            })}
-            className="w-full px-3 py-1.5 text-sm rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
-          >
-            <option value="ANY">Any Trend</option>
-            <option value="BULLISH">Bullish (MACD &gt; Sig)</option>
-            <option value="BEARISH">Bearish (MACD &lt; Sig)</option>
-          </select>
-        </div>
-
-        {/* Heikin-Ashi Direction */}
-        <div className="flex flex-col gap-1.5">
-          <label className="text-xs font-semibold text-slate-400">Heikin Ashi Trend</label>
-          <select
-            value={screenerFilters.ha_dir || 'ANY'}
-            onChange={(e) => setScreenerFilters({ 
-              ha_dir: e.target.value === 'ANY' ? undefined : e.target.value as any 
-            })}
-            className="w-full px-3 py-1.5 text-sm rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
-          >
-            <option value="ANY">Any Trend</option>
-            <option value="UP">Bullish (UP)</option>
-            <option value="DOWN">Bearish (DOWN)</option>
-          </select>
-        </div>
-
-        {/* Renko Direction */}
-        <div className="flex flex-col gap-1.5">
-          <label className="text-xs font-semibold text-slate-400">Renko Brick</label>
-          <select
-            value={screenerFilters.renko_dir || 'ANY'}
-            onChange={(e) => setScreenerFilters({ 
-              renko_dir: e.target.value === 'ANY' ? undefined : e.target.value as any 
-            })}
-            className="w-full px-3 py-1.5 text-sm rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
-          >
-            <option value="ANY">Any Direction</option>
-            <option value="UP">Bullish (UP)</option>
-            <option value="DOWN">Bearish (DOWN)</option>
-          </select>
-        </div>
-
-        {/* Line Break Direction */}
-        <div className="flex flex-col gap-1.5">
-          <label className="text-xs font-semibold text-slate-400">Three Line Break</label>
-          <select
-            value={screenerFilters.lb_dir || 'ANY'}
-            onChange={(e) => setScreenerFilters({
-              lb_dir: e.target.value === 'ANY' ? undefined : e.target.value as any
-            })}
-            className="w-full px-3 py-1.5 text-sm rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
-          >
-            <option value="ANY">Any Direction</option>
-            <option value="UP">Bullish (UP)</option>
-            <option value="DOWN">Bearish (DOWN)</option>
-          </select>
-        </div>
-
-        {/* Pattern flags */}
-        <div className="flex flex-col gap-1.5 justify-end">
-          <label className="text-xs font-semibold text-slate-400">Patterns</label>
-          <div className="flex flex-col gap-1.5">
-            {([
-              { key: 'only_nr7' as const,       label: 'NR7 only'       },
-              { key: 'only_inside_bar' as const, label: 'Inside Bar'     },
-              { key: 'only_gap_up' as const,     label: 'Gap Up (>1%)'   },
-              { key: 'only_gap_down' as const,   label: 'Gap Down (>1%)' },
-            ]).map(({ key, label }) => (
-              <label key={key} className="flex items-center gap-2 cursor-pointer">
+            <div className="grid grid-cols-2 gap-2">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[11px] font-semibold text-slate-400">Min Price (₹)</label>
                 <input
-                  type="checkbox"
-                  checked={!!screenerFilters[key]}
-                  onChange={(e) => setScreenerFilters({ [key]: e.target.checked || undefined })}
-                  className="accent-purple-500"
+                  type="number"
+                  placeholder="No Limit"
+                  value={screenerFilters.min_price !== undefined ? screenerFilters.min_price : ''}
+                  onChange={(e) => setScreenerFilters({ min_price: e.target.value === '' ? undefined : Number(e.target.value) })}
+                  className="w-full px-3 py-1.5 text-xs rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
                 />
-                <span className="text-xs text-slate-300">{label}</span>
-              </label>
-            ))}
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[11px] font-semibold text-slate-400">Max Price (₹)</label>
+                <input
+                  type="number"
+                  placeholder="No Limit"
+                  value={screenerFilters.max_price !== undefined ? screenerFilters.max_price : ''}
+                  onChange={(e) => setScreenerFilters({ max_price: e.target.value === '' ? undefined : Number(e.target.value) })}
+                  className="w-full px-3 py-1.5 text-xs rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Column 2: Moving Averages & RSI */}
+          <div className="flex flex-col gap-4 lg:border-r border-slate-850 lg:pr-4">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-purple-400 flex items-center gap-1.5 mb-1 select-none">
+              <Zap className="w-3.5 h-3.5 text-purple-500" /> Averages & RSI
+            </h4>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[11px] font-semibold text-slate-400">Min RSI (14)</label>
+                <input
+                  type="number"
+                  placeholder="No Limit"
+                  value={screenerFilters.min_rsi !== undefined ? screenerFilters.min_rsi : ''}
+                  onChange={(e) => setScreenerFilters({ 
+                    min_rsi: e.target.value === '' ? undefined : Number(e.target.value) 
+                  })}
+                  className="w-full px-3 py-1.5 text-xs rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[11px] font-semibold text-slate-400">Max RSI (14)</label>
+                <input
+                  type="number"
+                  placeholder="No Limit"
+                  value={screenerFilters.max_rsi !== undefined ? screenerFilters.max_rsi : ''}
+                  onChange={(e) => setScreenerFilters({ 
+                    max_rsi: e.target.value === '' ? undefined : Number(e.target.value) 
+                  })}
+                  className="w-full px-3 py-1.5 text-xs rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] font-semibold text-slate-400">SMA 20 Cross</label>
+              <select
+                value={screenerFilters.sma_20_cross || 'ANY'}
+                onChange={(e) => setScreenerFilters({ 
+                  sma_20_cross: e.target.value === 'ANY' ? undefined : e.target.value as any 
+                })}
+                className="w-full px-3 py-1.5 text-xs rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
+              >
+                <option value="ANY">Any Position</option>
+                <option value="ABOVE">Above SMA 20</option>
+                <option value="BELOW">Below SMA 20</option>
+              </select>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] font-semibold text-slate-400">SMA 50 Cross</label>
+              <select
+                value={screenerFilters.sma_50_cross || 'ANY'}
+                onChange={(e) => setScreenerFilters({ 
+                  sma_50_cross: e.target.value === 'ANY' ? undefined : e.target.value as any 
+                })}
+                className="w-full px-3 py-1.5 text-xs rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
+              >
+                <option value="ANY">Any Position</option>
+                <option value="ABOVE">Above SMA 50</option>
+                <option value="BELOW">Below SMA 50</option>
+              </select>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] font-semibold text-slate-400">SMA 200 Cross</label>
+              <select
+                value={screenerFilters.sma_200_cross || 'ANY'}
+                onChange={(e) => setScreenerFilters({ 
+                  sma_200_cross: e.target.value === 'ANY' ? undefined : e.target.value as any 
+                })}
+                className="w-full px-3 py-1.5 text-xs rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
+              >
+                <option value="ANY">Any Position</option>
+                <option value="ABOVE">Above SMA 200</option>
+                <option value="BELOW">Below SMA 200</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Column 3: Trend Signals */}
+          <div className="flex flex-col gap-4 lg:border-r border-slate-850 lg:pr-4">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-purple-400 flex items-center gap-1.5 mb-1 select-none">
+              <Eye className="w-3.5 h-3.5 text-purple-500" /> Trend Signals
+            </h4>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] font-semibold text-slate-400">MACD Trend</label>
+              <select
+                value={screenerFilters.macd_trend || 'ANY'}
+                onChange={(e) => setScreenerFilters({ 
+                  macd_trend: e.target.value === 'ANY' ? undefined : e.target.value as any 
+                })}
+                className="w-full px-3 py-1.5 text-xs rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
+              >
+                <option value="ANY">Any Trend</option>
+                <option value="BULLISH">Bullish (MACD &gt; Sig)</option>
+                <option value="BEARISH">Bearish (MACD &lt; Sig)</option>
+              </select>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] font-semibold text-slate-400">Heikin Ashi Trend</label>
+              <select
+                value={screenerFilters.ha_dir || 'ANY'}
+                onChange={(e) => setScreenerFilters({ 
+                  ha_dir: e.target.value === 'ANY' ? undefined : e.target.value as any 
+                })}
+                className="w-full px-3 py-1.5 text-xs rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
+              >
+                <option value="ANY">Any Trend</option>
+                <option value="UP">Bullish (UP)</option>
+                <option value="DOWN">Bearish (DOWN)</option>
+              </select>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] font-semibold text-slate-400">Renko Brick</label>
+              <select
+                value={screenerFilters.renko_dir || 'ANY'}
+                onChange={(e) => setScreenerFilters({ 
+                  renko_dir: e.target.value === 'ANY' ? undefined : e.target.value as any 
+                })}
+                className="w-full px-3 py-1.5 text-xs rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
+              >
+                <option value="ANY">Any Direction</option>
+                <option value="UP">Bullish (UP)</option>
+                <option value="DOWN">Bearish (DOWN)</option>
+              </select>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] font-semibold text-slate-400">Three Line Break</label>
+              <select
+                value={screenerFilters.lb_dir || 'ANY'}
+                onChange={(e) => setScreenerFilters({
+                  lb_dir: e.target.value === 'ANY' ? undefined : e.target.value as any
+                })}
+                className="w-full px-3 py-1.5 text-xs rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
+              >
+                <option value="ANY">Any Direction</option>
+                <option value="UP">Bullish (UP)</option>
+                <option value="DOWN">Bearish (DOWN)</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Column 4: Strength & Patterns */}
+          <div className="flex flex-col gap-4">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-purple-400 flex items-center gap-1.5 mb-1 select-none">
+              <Filter className="w-3.5 h-3.5 text-purple-500" /> Patterns & RS
+            </h4>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] font-semibold text-slate-400">Min RS vs NIFTY</label>
+              <input
+                type="number"
+                step="0.1"
+                placeholder="e.g. 1.2"
+                value={screenerFilters.min_rs_1m !== undefined ? screenerFilters.min_rs_1m : ''}
+                onChange={(e) => setScreenerFilters({ min_rs_1m: e.target.value === '' ? undefined : Number(e.target.value) })}
+                className="w-full px-3 py-1.5 text-xs rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
+              />
+              <span className="text-[10px] text-slate-500">1.0 = matches NIFTY · &gt;1.2 = outperforming</span>
+            </div>
+
+            <div className="flex flex-col gap-1.5 mt-1.5">
+              <label className="text-[11px] font-semibold text-slate-400">Patterns</label>
+              <div className="grid grid-cols-2 gap-x-2 gap-y-3 mt-1">
+                {([
+                  { key: 'only_nr7' as const,       label: 'NR7 only'       },
+                  { key: 'only_inside_bar' as const, label: 'Inside Bar'     },
+                  { key: 'only_gap_up' as const,     label: 'Gap Up (>1%)'   },
+                  { key: 'only_gap_down' as const,   label: 'Gap Down (>1%)' },
+                ]).map(({ key, label }) => (
+                  <label key={key} className="flex items-center gap-2 cursor-pointer select-none group">
+                    <input
+                      type="checkbox"
+                      checked={!!screenerFilters[key]}
+                      onChange={(e) => setScreenerFilters({ [key]: e.target.checked || undefined })}
+                      className="accent-purple-500 w-3.5 h-3.5 cursor-pointer rounded"
+                    />
+                    <span className="text-xs text-slate-300 group-hover:text-white transition">{label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
-
-        {/* RS Score filter */}
-        <div className="flex flex-col gap-1.5 justify-end">
-          <label className="text-xs font-semibold text-slate-400">Min RS vs NIFTY</label>
-          <input
-            type="number"
-            step="0.1"
-            placeholder="e.g. 1.2"
-            value={screenerFilters.min_rs_1m !== undefined ? screenerFilters.min_rs_1m : ''}
-            onChange={(e) => setScreenerFilters({ min_rs_1m: e.target.value === '' ? undefined : Number(e.target.value) })}
-            className="w-full px-3 py-1.5 text-sm rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
-          />
-          <span className="text-[10px] text-slate-500">1.0 = matches NIFTY · &gt;1.2 = outperforming</span>
-        </div>
-      </div>
+      )}
 
       {/* Results Grid Table */}
       <div className="flex-1 bg-[#121620]/60 rounded-xl border border-slate-800/80 p-4 overflow-hidden flex flex-col min-h-[300px]">
-        <div className="flex items-center justify-between pb-3 border-b border-slate-800 mb-3 shrink-0">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800 mb-3 shrink-0">
           <h3 className="text-sm font-bold text-white tracking-wide flex items-center gap-1.5">
             <BarChart2 className="w-4 h-4 text-purple-400" />
             Matching Stocks
             <span className="font-mono text-xs text-slate-400 font-normal">
-              ({sortedResults.length.toLocaleString()} result{sortedResults.length !== 1 ? 's' : ''})
+              ({filteredResults.length.toLocaleString()} result{filteredResults.length !== 1 ? 's' : ''})
             </span>
           </h3>
-          {isLoading && <RefreshCw className="w-4 h-4 text-purple-400 animate-spin" />}
+          <div className="flex items-center gap-3">
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Search ticker or company..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-48 sm:w-64 pl-8 pr-3 py-1 text-xs rounded bg-slate-900 border border-slate-800 text-white placeholder-slate-500 focus:outline-none focus:border-purple-500 transition"
+              />
+              <svg className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-1/2 -translate-y-1/2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </div>
+            {isLoading && <RefreshCw className="w-3.5 h-3.5 text-purple-400 animate-spin" />}
+          </div>
         </div>
 
         <div className="flex-1 overflow-auto flex flex-col">
-          <table className="w-full border-collapse text-left text-sm text-slate-300">
+          <table className="min-w-max w-full border-collapse text-left text-xs text-slate-300">
             <thead>
-              <tr className="border-b border-slate-800 text-xs text-slate-400 uppercase tracking-wider font-mono select-none">
-                <th className="py-2.5 px-3 cursor-pointer hover:text-white transition" onClick={() => handleSort('symbol')}>
+              <tr className="border-b border-slate-800 text-xs text-slate-400 uppercase tracking-wider font-mono select-none whitespace-nowrap">
+                <th className="py-2 px-1.5 cursor-pointer hover:text-white transition" onClick={() => handleSort('symbol')}>
                   Ticker {renderSortIcon('symbol')}
                 </th>
-                <th className="py-2.5 px-3 cursor-pointer hover:text-white transition" onClick={() => handleSort('company_name')}>
-                  Company Name {renderSortIcon('company_name')}
+                <th className="py-2 px-1.5 cursor-pointer hover:text-white transition" title="Company Name" onClick={() => handleSort('company_name')}>
+                  Company {renderSortIcon('company_name')}
                 </th>
-                <th className="py-2.5 px-3 cursor-pointer hover:text-white transition" onClick={() => handleSort('close_price')}>
-                  Last EOD Price {renderSortIcon('close_price')}
+                <th className="py-2 px-1.5 cursor-pointer hover:text-white transition" title="Last End of Day Price" onClick={() => handleSort('close_price')}>
+                  Price {renderSortIcon('close_price')}
                 </th>
-                <th className="py-2.5 px-3 cursor-pointer hover:text-white transition" onClick={() => handleSort('price_pct_change')}>
-                  Change % {renderSortIcon('price_pct_change')}
+                <th className="py-2 px-1.5 cursor-pointer hover:text-white transition" title="Price Percentage Change" onClick={() => handleSort('price_pct_change')}>
+                  Chg% {renderSortIcon('price_pct_change')}
                 </th>
-                <th className="py-2.5 px-2 text-right cursor-pointer hover:text-white transition" title="1-week return" onClick={() => handleSort('ret_1w')}>
+                <th className="py-2 px-1 text-right cursor-pointer hover:text-white transition" title="1-week rolling return" onClick={() => handleSort('ret_1w')}>
                   1W {renderSortIcon('ret_1w')}
                 </th>
-                <th className="py-2.5 px-2 text-right cursor-pointer hover:text-white transition" title="2-week return" onClick={() => handleSort('ret_2w')}>
+                <th className="py-2 px-1 text-right cursor-pointer hover:text-white transition" title="2-week rolling return" onClick={() => handleSort('ret_2w')}>
                   2W {renderSortIcon('ret_2w')}
                 </th>
-                <th className="py-2.5 px-2 text-right cursor-pointer hover:text-white transition" title="3-week return" onClick={() => handleSort('ret_3w')}>
+                <th className="py-2 px-1 text-right cursor-pointer hover:text-white transition" title="3-week rolling return" onClick={() => handleSort('ret_3w')}>
                   3W {renderSortIcon('ret_3w')}
                 </th>
-                <th className="py-2.5 px-2 text-right cursor-pointer hover:text-white transition" title="4-week return" onClick={() => handleSort('ret_4w')}>
+                <th className="py-2 px-1 text-right cursor-pointer hover:text-white transition" title="4-week rolling return" onClick={() => handleSort('ret_4w')}>
                   4W {renderSortIcon('ret_4w')}
                 </th>
-                <th className="py-2.5 px-2 text-right cursor-pointer hover:text-white transition" title="Stop-loss = close − 1.5×ATR" onClick={() => handleSort('stop_loss')}>
+                <th className="py-2 px-1 text-right cursor-pointer hover:text-white transition" title="Stop Loss (Close - 1.5 * ATR)" onClick={() => handleSort('stop_loss')}>
                   Stop {renderSortIcon('stop_loss')}
                 </th>
-                <th className="py-2.5 px-2 text-right cursor-pointer hover:text-white transition" title="Target 1 = close + 1.5×ATR" onClick={() => handleSort('target_1')}>
+                <th className="py-2 px-1 text-right cursor-pointer hover:text-white transition" title="Target 1 (Close + 1.5 * ATR)" onClick={() => handleSort('target_1')}>
                   T1 {renderSortIcon('target_1')}
                 </th>
-                <th className="py-2.5 px-2 text-right cursor-pointer hover:text-white transition" title="Potential gain % to Target 1" onClick={() => handleSort('potential_gain_pct')}>
+                <th className="py-2 px-1 text-right cursor-pointer hover:text-white transition" title="Potential Gain % to Target 1" onClick={() => handleSort('potential_gain_pct')}>
                   Upside {renderSortIcon('potential_gain_pct')}
                 </th>
-                <th className="py-2.5 px-3 cursor-pointer hover:text-white transition" onClick={() => handleSort('weekly_avg_volume')}>
-                  Weekly Avg Vol {renderSortIcon('weekly_avg_volume')}
+                <th className="py-2 px-1 text-right cursor-pointer hover:text-white transition" title="Risk-to-Reward Ratio" onClick={() => handleSort('rr_ratio')}>
+                  R:R {renderSortIcon('rr_ratio')}
                 </th>
-                <th className="py-2.5 px-3 text-center cursor-pointer hover:text-white transition" onClick={() => handleSort('volume_breakout_ratio')}>
-                  Vol Breakout {renderSortIcon('volume_breakout_ratio')}
+                <th className="py-2 px-1.5 text-right cursor-pointer hover:text-white transition" title="Weekly Average Volume" onClick={() => handleSort('weekly_avg_volume')}>
+                  Avg Vol {renderSortIcon('weekly_avg_volume')}
                 </th>
-                <th className="py-2.5 px-3 text-center cursor-pointer hover:text-white transition" onClick={() => handleSort('rsi_14')}>
-                  RSI (14) {renderSortIcon('rsi_14')}
+                <th className="py-2 px-1.5 text-center cursor-pointer hover:text-white transition" title="Volume Breakout Ratio" onClick={() => handleSort('volume_breakout_ratio')}>
+                  Vol Brk {renderSortIcon('volume_breakout_ratio')}
                 </th>
-                <th className="py-2.5 px-3 text-center cursor-pointer hover:text-white transition" onClick={() => handleSort('sma_20_cross_direction')}>
-                  SMA 20 {renderSortIcon('sma_20_cross_direction')}
+                <th className="py-2 px-1.5 text-center cursor-pointer hover:text-white transition" title="Relative Strength Index (14)" onClick={() => handleSort('rsi_14')}>
+                  RSI {renderSortIcon('rsi_14')}
                 </th>
-                <th className="py-2.5 px-3 text-center cursor-pointer hover:text-white transition" onClick={() => handleSort('sma_50_cross_direction')}>
-                  SMA 50 {renderSortIcon('sma_50_cross_direction')}
+                <th className="py-2 px-1.5 text-center cursor-pointer hover:text-white transition" title="SMA 20 position" onClick={() => handleSort('sma_20_cross_direction')}>
+                  S20 {renderSortIcon('sma_20_cross_direction')}
                 </th>
-                <th className="py-2.5 px-3 text-center cursor-pointer hover:text-white transition" onClick={() => handleSort('sma_200_cross_direction')}>
-                  SMA 200 {renderSortIcon('sma_200_cross_direction')}
+                <th className="py-2 px-1.5 text-center cursor-pointer hover:text-white transition" title="SMA 50 position" onClick={() => handleSort('sma_50_cross_direction')}>
+                  S50 {renderSortIcon('sma_50_cross_direction')}
                 </th>
-                <th className="py-2.5 px-3 text-center cursor-pointer hover:text-white transition" onClick={() => handleSort('macd_trend')}>
-                  MACD Trend {renderSortIcon('macd_trend')}
+                <th className="py-2 px-1.5 text-center cursor-pointer hover:text-white transition" title="SMA 200 position" onClick={() => handleSort('sma_200_cross_direction')}>
+                  S200 {renderSortIcon('sma_200_cross_direction')}
                 </th>
-                <th className="py-2.5 px-3 text-center cursor-pointer hover:text-white transition" onClick={() => handleSort('ha_direction')}>
-                  Heikin Ashi {renderSortIcon('ha_direction')}
+                <th className="py-2 px-1.5 text-center cursor-pointer hover:text-white transition" title="MACD Trend (BULLISH / BEARISH)" onClick={() => handleSort('macd_trend')}>
+                  MACD {renderSortIcon('macd_trend')}
                 </th>
-                <th className="py-2.5 px-3 text-center cursor-pointer hover:text-white transition" onClick={() => handleSort('renko_direction')}>
+                <th className="py-2 px-1.5 text-center cursor-pointer hover:text-white transition" title="Heikin Ashi Direction (UP / DOWN)" onClick={() => handleSort('ha_direction')}>
+                  HA {renderSortIcon('ha_direction')}
+                </th>
+                <th className="py-2 px-1.5 text-center cursor-pointer hover:text-white transition" title="Renko Brick Direction (UP / DOWN)" onClick={() => handleSort('renko_direction')}>
                   Renko {renderSortIcon('renko_direction')}
                 </th>
-                <th className="py-2.5 px-3 text-center cursor-pointer hover:text-white transition" onClick={() => handleSort('line_break_direction')}>
-                  Three Line Break {renderSortIcon('line_break_direction')}
+                <th className="py-2 px-1.5 text-center cursor-pointer hover:text-white transition" title="Three Line Break Direction (UP / DOWN)" onClick={() => handleSort('line_break_direction')}>
+                  TLB {renderSortIcon('line_break_direction')}
                 </th>
-                <th className="py-2.5 px-3 text-center cursor-pointer hover:text-white transition" onClick={() => handleSort('rs_score_1m' as any)}>
+                <th className="py-2 px-1.5 text-center cursor-pointer hover:text-white transition" title="1-Month Relative Strength vs NIFTY 50" onClick={() => handleSort('rs_score_1m' as any)}>
                   RS 1M {renderSortIcon('rs_score_1m' as any)}
                 </th>
-                <th className="py-2.5 px-3 text-center">Patterns</th>
-                <th className="py-2.5 px-3 text-right">Actions</th>
+                <th className="py-2 px-1.5 text-center" title="Pattern triggers">Patterns</th>
+                <th className="py-2 px-1.5 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-850">
-              {sortedResults.length === 0 ? (
+              {filteredResults.length === 0 ? (
                 <tr>
-                  <td colSpan={22} className="py-12 text-center text-slate-500 text-sm">
+                  <td colSpan={25} className="py-10 text-center text-slate-500 text-xs">
                     {isLoading 
                       ? 'Executing database snapshot sweep...' 
-                      : 'No stock matches found for the current filter criteria.'}
+                      : 'No stock matches found for the current criteria.'}
                   </td>
                 </tr>
               ) : (
-                sortedResults.slice(0, visibleCount).map((row) => {
+                filteredResults.slice(0, visibleCount).map((row) => {
                   const isChangeBullish = (row.price_pct_change || 0) >= 0;
                   const isHaBullish = row.ha_direction === 'UP';
                   const isRenkoBullish = row.renko_direction === 'UP';
                   const isLbBullish = row.line_break_direction === 'UP';
                   
                   return (
-                    <tr key={row.symbol_id} className="hover:bg-slate-900/40 transition">
+                    <tr key={row.symbol_id} className="hover:bg-slate-900/40 transition whitespace-nowrap text-xs">
                       {/* Ticker */}
-                      <td className="py-3 px-3 font-bold text-white tracking-wide font-mono">
+                      <td className="py-2 px-1.5 font-bold text-white font-mono">
                         {row.symbol.replace('.NS', '')}
                       </td>
                       
                       {/* Company Name */}
-                      <td className="py-3 px-3 text-slate-400 truncate max-w-[150px]" title={row.company_name}>
+                      <td className="py-2 px-1.5 text-slate-400 truncate max-w-[100px]" title={row.company_name}>
                         {row.company_name}
                       </td>
                       
                       {/* Price */}
-                      <td className="py-3 px-3 font-mono font-semibold">
+                      <td className="py-2 px-1.5 font-mono font-semibold">
                         ₹{formatNumber(row.close_price)}
                       </td>
                       
                       {/* Change */}
-                      <td className={`py-3 px-3 font-mono ${isChangeBullish ? 'text-emerald-400' : 'text-rose-400'}`}>
+                      <td className={`py-2 px-1.5 font-mono ${isChangeBullish ? 'text-emerald-400' : 'text-rose-400'}`}>
                         {isChangeBullish ? '+' : ''}{formatNumber(row.price_pct_change)}%
                       </td>
 
                       {/* Rolling weekly returns 1W/2W/3W/4W */}
                       {[row.ret_1w, row.ret_2w, row.ret_3w, row.ret_4w].map((r, i) => (
-                        <td key={i} className={`py-3 px-2 text-right font-mono text-xs ${
-                          r === null || r === undefined ? 'text-slate-600' : r >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                        <td key={i} className={`py-2 px-1 text-right font-mono text-xs ${
+                          r === null || r === undefined ? 'text-slate-650' : r >= 0 ? 'text-emerald-400' : 'text-rose-400'
                         }`}>
                           {r === null || r === undefined ? '—' : `${r >= 0 ? '+' : ''}${r.toFixed(1)}%`}
                         </td>
                       ))}
 
                       {/* ATR-based trade setup: Stop / Target 1 / Upside% */}
-                      <td className="py-3 px-2 text-right font-mono text-xs text-rose-400/80">
-                        {row.stop_loss == null ? '—' : `₹${formatNumber(row.stop_loss)}`}
+                      <td className="py-2 px-1 text-right font-mono text-xs text-rose-400/80">
+                        {row.stop_loss == null ? '—' : `₹${formatNumber(row.stop_loss, 1)}`}
                       </td>
-                      <td className="py-3 px-2 text-right font-mono text-xs text-emerald-400/90">
-                        {row.target_1 == null ? '—' : `₹${formatNumber(row.target_1)}`}
+                      <td className="py-2 px-1 text-right font-mono text-xs text-emerald-400/90">
+                        {row.target_1 == null ? '—' : `₹${formatNumber(row.target_1, 1)}`}
                       </td>
-                      <td className="py-3 px-2 text-right font-mono text-xs text-emerald-400">
+                      <td className="py-2 px-1 text-right font-mono text-xs text-emerald-400">
                         {row.potential_gain_pct == null ? '—' : `+${row.potential_gain_pct.toFixed(1)}%`}
                       </td>
 
+                      {/* R:R Ratio */}
+                      <td className="py-2 px-1 text-right font-mono text-xs">
+                        {row.rr_ratio !== undefined && row.rr_ratio !== null ? (
+                          <span className={`px-1 py-0.2 rounded font-bold ${
+                            row.rr_ratio >= 2.0 
+                              ? 'text-emerald-400 bg-emerald-950/20' 
+                              : row.rr_ratio >= 1.0 
+                              ? 'text-indigo-400 bg-[#121620]' 
+                              : 'text-rose-400 bg-rose-950/20'
+                          }`}>
+                            {row.rr_ratio.toFixed(2)}x
+                          </span>
+                        ) : <span className="text-slate-600">—</span>}
+                      </td>
+
                       {/* Weekly Avg Vol */}
-                      <td className="py-3 px-3 font-mono text-slate-300">
+                      <td className="py-2 px-1.5 text-right font-mono text-slate-350">
                         {formatVolume(row.weekly_avg_volume)}
                       </td>
                       
                       {/* Volume Breakout Badge */}
-                      <td className="py-3 px-3 text-center">
-                        <span className={`font-mono text-xs px-2 py-0.5 rounded border inline-block ${
+                      <td className="py-2 px-1.5 text-center">
+                        <span className={`font-mono text-xs px-1 py-0.2 rounded border inline-block ${
                           (row.volume_breakout_ratio || 0) >= 3.0
-                            ? 'text-rose-400 bg-rose-950/30 border-rose-500/50 shadow-[0_0_8px_rgba(244,63,94,0.15)] font-bold animate-pulse'
+                            ? 'text-rose-400 bg-rose-950/30 border-rose-500/50 font-bold'
                             : (row.volume_breakout_ratio || 0) >= 2.0
-                            ? 'text-purple-400 bg-purple-950/30 border-purple-500/30 shadow-[0_0_8px_rgba(168,85,247,0.15)] font-semibold'
+                            ? 'text-purple-400 bg-purple-950/30 border-purple-500/30 font-semibold'
                             : (row.volume_breakout_ratio || 0) >= 1.5
                             ? 'text-indigo-400 bg-indigo-950/30 border-indigo-500/30 font-medium'
                             : 'text-slate-400 bg-slate-900/50 border-slate-800'
@@ -672,95 +753,101 @@ export const ScreenerPanel: React.FC = () => {
                       </td>
                       
                       {/* RSI */}
-                      <td className="py-3 px-3 text-center">
-                        <span className={`font-mono inline-block px-2 py-0.5 rounded text-xs border ${
+                      <td className="py-2 px-1.5 text-center">
+                        <span className={`font-mono inline-block px-1 py-0.2 rounded text-xs border ${
                           (row.rsi_14 || 0) >= 70 
                             ? 'text-rose-400 bg-rose-950/20 border-rose-900/30 font-bold' 
                             : (row.rsi_14 || 0) <= 30 && row.rsi_14 !== null
                             ? 'text-emerald-400 bg-emerald-950/20 border-emerald-900/30 font-bold'
                             : 'text-slate-300 bg-slate-900/50 border-slate-800'
                         }`}>
-                          {formatNumber(row.rsi_14)}
+                          {formatNumber(row.rsi_14, 1)}
                         </span>
                       </td>
                       
                       {/* SMA 20 */}
-                      <td className="py-3 px-3 text-center">
-                        <span className={`text-xs px-2 py-0.5 rounded border ${
-                          row.sma_20_cross_direction === 'ABOVE'
-                            ? 'text-indigo-400 bg-indigo-950/20 border-indigo-900/30'
-                            : 'text-amber-400 bg-amber-950/20 border-amber-900/30'
-                        }`}>
-                          {row.sma_20_cross_direction || 'UNKNOWN'}
-                        </span>
+                      <td className="py-2 px-1.5 text-center font-mono">
+                        {row.sma_20_cross_direction === 'ABOVE' ? (
+                          <span className="text-indigo-400 font-bold" title="Above SMA 20">▲</span>
+                        ) : row.sma_20_cross_direction === 'BELOW' ? (
+                          <span className="text-amber-500 font-bold" title="Below SMA 20">▼</span>
+                        ) : (
+                          <span className="text-slate-600">—</span>
+                        )}
                       </td>
 
                       {/* SMA 50 */}
-                      <td className="py-3 px-3 text-center">
-                        <span className={`text-xs px-2 py-0.5 rounded border ${
-                          row.sma_50_cross_direction === 'ABOVE'
-                            ? 'text-indigo-400 bg-indigo-950/20 border-indigo-900/30'
-                            : 'text-amber-400 bg-amber-950/20 border-amber-900/30'
-                        }`}>
-                          {row.sma_50_cross_direction || 'UNKNOWN'}
-                        </span>
+                      <td className="py-2 px-1.5 text-center font-mono">
+                        {row.sma_50_cross_direction === 'ABOVE' ? (
+                          <span className="text-indigo-400 font-bold" title="Above SMA 50">▲</span>
+                        ) : row.sma_50_cross_direction === 'BELOW' ? (
+                          <span className="text-amber-500 font-bold" title="Below SMA 50">▼</span>
+                        ) : (
+                          <span className="text-slate-600">—</span>
+                        )}
                       </td>
 
                       {/* SMA 200 */}
-                      <td className="py-3 px-3 text-center">
-                        <span className={`text-xs px-2 py-0.5 rounded border ${
-                          row.sma_200_cross_direction === 'ABOVE'
-                            ? 'text-indigo-400 bg-indigo-950/20 border-indigo-900/30'
-                            : 'text-amber-400 bg-amber-950/20 border-amber-900/30'
-                        }`}>
-                          {row.sma_200_cross_direction || 'UNKNOWN'}
-                        </span>
+                      <td className="py-2 px-1.5 text-center font-mono">
+                        {row.sma_200_cross_direction === 'ABOVE' ? (
+                          <span className="text-indigo-400 font-bold" title="Above SMA 200">▲</span>
+                        ) : row.sma_200_cross_direction === 'BELOW' ? (
+                          <span className="text-amber-500 font-bold" title="Below SMA 200">▼</span>
+                        ) : (
+                          <span className="text-slate-600">—</span>
+                        )}
                       </td>
 
                       {/* MACD Trend */}
-                      <td className="py-3 px-3 text-center">
-                        <span className={`text-xs px-2 py-0.5 rounded border ${
-                          row.macd_trend === 'BULLISH'
-                            ? 'text-emerald-400 bg-emerald-950/20 border-emerald-900/30'
-                            : 'text-rose-400 bg-rose-950/20 border-rose-900/30'
-                        }`}>
-                          {row.macd_trend || 'UNKNOWN'}
-                        </span>
+                      <td className="py-2 px-1.5 text-center font-mono">
+                        {row.macd_trend === 'BULLISH' ? (
+                          <span className="text-emerald-400 font-bold animate-pulse" title="MACD Bullish">▲</span>
+                        ) : row.macd_trend === 'BEARISH' ? (
+                          <span className="text-rose-400 font-bold" title="MACD Bearish">▼</span>
+                        ) : (
+                          <span className="text-slate-600">—</span>
+                        )}
                       </td>
                       
                       {/* HA */}
-                      <td className="py-3 px-3 text-center">
-                        <span className={`text-xs px-2 py-0.5 rounded ${
-                          isHaBullish ? 'text-emerald-400 bg-emerald-950/25' : 'text-rose-400 bg-rose-950/25'
-                        }`}>
-                          {row.ha_direction || 'NONE'}
-                        </span>
+                      <td className="py-2 px-1.5 text-center font-mono">
+                        {isHaBullish ? (
+                          <span className="text-emerald-400 font-bold" title="HA Bullish (UP)">▲</span>
+                        ) : row.ha_direction === 'DOWN' ? (
+                          <span className="text-rose-400 font-bold" title="HA Bearish (DOWN)">▼</span>
+                        ) : (
+                          <span className="text-slate-600">—</span>
+                        )}
                       </td>
 
                       {/* Renko */}
-                      <td className="py-3 px-3 text-center">
-                        <span className={`text-xs px-2 py-0.5 rounded ${
-                          isRenkoBullish ? 'text-emerald-400 bg-emerald-950/25' : 'text-rose-400 bg-rose-950/25'
-                        }`}>
-                          {row.renko_direction || 'NONE'}
-                        </span>
+                      <td className="py-2 px-1.5 text-center font-mono">
+                        {isRenkoBullish ? (
+                          <span className="text-emerald-400 font-bold" title="Renko Bullish (UP)">▲</span>
+                        ) : row.renko_direction === 'DOWN' ? (
+                          <span className="text-rose-400 font-bold" title="Renko Bearish (DOWN)">▼</span>
+                        ) : (
+                          <span className="text-slate-600">—</span>
+                        )}
                       </td>
 
                       {/* Three Line Break */}
-                      <td className="py-3 px-3 text-center">
-                        <span className={`text-xs px-2 py-0.5 rounded ${
-                          isLbBullish ? 'text-emerald-400 bg-emerald-950/25' : 'text-rose-400 bg-rose-950/25'
-                        }`}>
-                          {row.line_break_direction || 'NONE'}
-                        </span>
+                      <td className="py-2 px-1.5 text-center font-mono">
+                        {isLbBullish ? (
+                          <span className="text-emerald-400 font-bold" title="Three Line Break Bullish (UP)">▲</span>
+                        ) : row.line_break_direction === 'DOWN' ? (
+                          <span className="text-rose-400 font-bold" title="Three Line Break Bearish (DOWN)">▼</span>
+                        ) : (
+                          <span className="text-slate-600">—</span>
+                        )}
                       </td>
                       
                       {/* RS Score */}
-                      <td className="py-3 px-3 text-center">
+                      <td className="py-2 px-1.5 text-center">
                         {(row as any).rs_score_1m != null ? (
-                          <span className={`font-mono text-xs px-2 py-0.5 rounded border ${
+                          <span className={`font-mono text-xs px-1 py-0.2 rounded border ${
                             (row as any).rs_score_1m >= 1.2 ? 'text-emerald-400 bg-emerald-950/20 border-emerald-900/30'
-                            : (row as any).rs_score_1m >= 0.8 ? 'text-slate-300 bg-slate-900/40 border-slate-800'
+                            : (row as any).rs_score_1m >= 0.8 ? 'text-slate-350 bg-slate-900/40 border-slate-800'
                             : 'text-rose-400 bg-rose-950/20 border-rose-900/30'
                           }`}>
                             {((row as any).rs_score_1m as number).toFixed(2)}x
@@ -768,48 +855,48 @@ export const ScreenerPanel: React.FC = () => {
                         ) : <span className="text-slate-600">—</span>}
                       </td>
                       {/* Patterns / Signals */}
-                      <td className="py-3 px-3 text-center">
+                      <td className="py-2 px-1.5 text-center">
                         <div className="flex flex-wrap gap-1 justify-center items-center">
                           {row.is_nr7 && (
-                            <span className="text-[10px] font-bold text-amber-400 bg-amber-950/25 border border-amber-900/30 px-1.5 py-0.5 rounded">
+                            <span className="text-[10px] font-bold text-amber-400 bg-amber-950/25 border border-amber-900/30 px-1 py-0.5 rounded">
                               NR7
                             </span>
                           )}
                           {row.is_inside_bar && (
-                            <span className="text-[10px] font-bold text-indigo-400 bg-indigo-950/25 border border-indigo-900/30 px-1.5 py-0.5 rounded">
-                              Inside Bar
+                            <span className="text-[10px] font-bold text-indigo-400 bg-indigo-950/25 border border-indigo-900/30 px-1 py-0.5 rounded">
+                              Inside
                             </span>
                           )}
                           {row.is_gap_up && (
-                            <span className="text-[10px] font-bold text-emerald-400 bg-emerald-950/25 border border-emerald-900/30 px-1.5 py-0.5 rounded">
-                              ↑ Gap Up
+                            <span className="text-[10px] font-bold text-emerald-400 bg-emerald-950/25 border border-emerald-900/30 px-1 py-0.5 rounded">
+                              Gap+
                             </span>
                           )}
                           {row.is_gap_down && (
-                            <span className="text-[10px] font-bold text-rose-400 bg-rose-950/25 border border-rose-900/30 px-1.5 py-0.5 rounded">
-                              ↓ Gap Down
+                            <span className="text-[10px] font-bold text-rose-400 bg-rose-950/25 border border-rose-900/30 px-1 py-0.5 rounded">
+                              Gap-
                             </span>
                           )}
                           {!row.is_nr7 && !row.is_inside_bar && !row.is_gap_up && !row.is_gap_down && (
-                            <span className="text-slate-700">—</span>
+                            <span className="text-slate-650">—</span>
                           )}
                         </div>
                       </td>
                       {/* Actions */}
-                      <td className="py-3 px-3 text-right">
-                        <div className="flex items-center gap-1.5 justify-end">
+                      <td className="py-2 px-1.5 text-right">
+                        <div className="flex items-center gap-1 justify-end">
                           <button
                             onClick={() => handleAddToWatchlist(row.symbol)}
                             title="Add to Watchlist"
-                            className="p-1 px-2 rounded bg-slate-900 border border-slate-800 hover:border-indigo-500/80 text-slate-500 hover:text-indigo-400 text-xs flex items-center gap-1 transition cursor-pointer"
+                            className="p-0.5 px-1 rounded bg-slate-900 border border-slate-800 hover:border-indigo-500/80 text-slate-500 hover:text-indigo-400 text-xs flex items-center transition cursor-pointer"
                           >
-                            <Bookmark className="w-3 h-3" />
+                            <Bookmark className="w-2.5 h-2.5" />
                           </button>
                           <button
                             onClick={() => handleSelectScreenerMatch(row.symbol)}
-                            className="p-1 px-2.5 rounded bg-slate-900 border border-slate-800 hover:border-purple-500/80 text-slate-400 hover:text-white text-xs flex items-center gap-1.5 transition cursor-pointer"
+                            className="p-0.5 px-1.5 rounded bg-slate-900 border border-slate-800 hover:border-purple-500/80 text-slate-400 hover:text-white text-xs flex items-center gap-1 transition cursor-pointer"
                           >
-                            <Eye className="w-3.5 h-3.5" />
+                            <Eye className="w-3 h-3" />
                             Inspect
                           </button>
                         </div>
@@ -821,26 +908,26 @@ export const ScreenerPanel: React.FC = () => {
             </tbody>
           </table>
           {/* Pagination footer */}
-          {sortedResults.length > PAGE_SIZE && (
-            <div className="shrink-0 flex items-center justify-between px-4 py-3 border-t border-slate-800 bg-[#0c0f17]">
+          {filteredResults.length > PAGE_SIZE && (
+            <div className="shrink-0 flex items-center justify-between px-4 py-2 border-t border-slate-800 bg-[#0c0f17] mt-2">
               <span className="text-xs text-slate-500">
-                Showing <span className="text-slate-300 font-semibold">{Math.min(visibleCount, sortedResults.length).toLocaleString()}</span> of <span className="text-slate-300 font-semibold">{sortedResults.length.toLocaleString()}</span> results
+                Showing <span className="text-slate-300 font-semibold">{Math.min(visibleCount, filteredResults.length).toLocaleString()}</span> of <span className="text-slate-300 font-semibold">{filteredResults.length.toLocaleString()}</span> results
               </span>
               <div className="flex gap-2">
-                {visibleCount < sortedResults.length && (
+                {visibleCount < filteredResults.length && (
                   <button
-                    onClick={() => setVisibleCount(v => Math.min(v + PAGE_SIZE, sortedResults.length))}
-                    className="px-3 py-1.5 text-xs font-bold bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white rounded-lg transition cursor-pointer"
+                    onClick={() => setVisibleCount(v => Math.min(v + PAGE_SIZE, filteredResults.length))}
+                    className="px-2.5 py-1 text-xs font-bold bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white rounded transition cursor-pointer"
                   >
-                    Load {Math.min(PAGE_SIZE, sortedResults.length - visibleCount)} More
+                    Load {Math.min(PAGE_SIZE, filteredResults.length - visibleCount)} More
                   </button>
                 )}
-                {visibleCount < sortedResults.length && (
+                {visibleCount < filteredResults.length && (
                   <button
-                    onClick={() => setVisibleCount(sortedResults.length)}
-                    className="px-3 py-1.5 text-xs font-bold bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-400 hover:text-white rounded-lg transition cursor-pointer"
+                    onClick={() => setVisibleCount(filteredResults.length)}
+                    className="px-2.5 py-1 text-xs font-bold bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-400 hover:text-white rounded transition cursor-pointer"
                   >
-                    Load All ({sortedResults.length.toLocaleString()})
+                    Load All ({filteredResults.length.toLocaleString()})
                   </button>
                 )}
               </div>

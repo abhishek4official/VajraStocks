@@ -9,11 +9,12 @@ from __future__ import annotations
 import csv
 import re
 
+from collections import defaultdict
 from loguru import logger
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from stocks.db.models import PortfolioHolding, ScreeningSnapshot, Symbol
+from stocks.db.models import PortfolioHolding, ScreeningSnapshot, Symbol, SymbolConfluenceLevel
 from stocks.services.settings_service import SettingsService
 
 # Column-name aliases (matched as substrings, lower-cased) — mirrors the old
@@ -161,8 +162,9 @@ class PortfolioService:
 
         rows = self.db.scalars(select(PortfolioHolding).order_by(PortfolioHolding.instrument.asc())).all()
 
-        # Batch-load snapshots for the held symbols
+        # Batch-load snapshots and confluence levels for the held symbols
         snap_by_instr: dict[str, ScreeningSnapshot] = {}
+        confl_by_symbol_id: dict[int, list[SymbolConfluenceLevel]] = defaultdict(list)
         if rows:
             instruments = {r.instrument for r in rows}
             ns_symbols = {f"{i}.NS" for i in instruments} | instruments
@@ -171,6 +173,14 @@ class PortfolioService:
             ).all()
             for sn in snaps:
                 snap_by_instr[sn.symbol.replace(".NS", "")] = sn
+
+            symbol_ids = [r.symbol_id for r in rows if r.symbol_id is not None]
+            if symbol_ids:
+                confl_levels = self.db.scalars(
+                    select(SymbolConfluenceLevel).where(SymbolConfluenceLevel.symbol_id.in_(symbol_ids))
+                ).all()
+                for lvl in confl_levels:
+                    confl_by_symbol_id[lvl.symbol_id].append(lvl)
 
         holdings: list[dict] = []
         total_invested = total_current = total_open_risk = 0.0
@@ -185,17 +195,46 @@ class PortfolioService:
             pnl = current_val - invested
             return_pct = (pnl / invested * 100.0) if invested else 0.0
 
-            # Per-position open risk via ATR stop (1.5x ATR below LTP),
-            # plus an ATR-based first target (T1 = LTP + 1.5x ATR).
+            # Get cached confluence levels
+            symbol_levels = confl_by_symbol_id.get(r.symbol_id, [])
+            pos_supports = [lvl for lvl in symbol_levels if lvl.level_type == "SUPPORT"]
+            pos_resistances = [lvl for lvl in symbol_levels if lvl.level_type == "RESISTANCE"]
+
+            pos_supports_sorted = sorted(pos_supports, key=lambda x: float(x.price), reverse=True)
+            pos_resistances_sorted = sorted(pos_resistances, key=lambda x: float(x.price))
+
+            support_val = float(pos_supports_sorted[0].price) if pos_supports_sorted else None
+            resistance_val = float(pos_resistances_sorted[0].price) if pos_resistances_sorted else None
+
+            # Per-position open risk via confluence support, plus a structural resistance target
             atr_pct = float(snap.atr_pct) if snap and snap.atr_pct is not None else None
-            stop = open_risk = target_1 = potential_gain_pct = None
+            stop = open_risk = target_1 = potential_gain_pct = rr_ratio = None
             if atr_pct is not None and ltp > 0:
                 atr_abs = atr_pct / 100.0 * ltp
-                stop = round(ltp - 1.5 * atr_abs, 2)
+                
+                # Structural support stop-loss
+                if support_val is not None:
+                    stop = round(support_val - 1.5 * atr_abs, 2)
+                    if stop >= ltp:
+                        stop = round(ltp - 2.0 * atr_abs, 2)
+                else:
+                    stop = round(ltp - 1.5 * atr_abs, 2)
+
                 open_risk = round(float(r.qty) * (ltp - stop), 2)
                 total_open_risk += open_risk
-                target_1 = round(ltp + 1.5 * atr_abs, 2)
-                potential_gain_pct = round(1.5 * atr_pct, 2)
+                
+                # Structural resistance target
+                if resistance_val is not None:
+                    target_1 = round(resistance_val, 2)
+                else:
+                    target_1 = round(ltp + 1.5 * atr_abs, 2)
+                    
+                potential_gain_pct = round(((target_1 - ltp) / ltp * 100.0), 2) if ltp > 0 else 0.0
+
+                # Structural Reward-to-Risk ratio
+                risk_per_share = ltp - stop
+                reward_per_share = target_1 - ltp
+                rr_ratio = round(reward_per_share / risk_per_share, 2) if risk_per_share > 0 else 0.0
 
             if snap and snap.sma_200_cross_direction == "ABOVE":
                 above_sma200 += 1
@@ -241,6 +280,7 @@ class PortfolioService:
                     "ret_4w": round(float(snap.ret_4w), 2) if snap and snap.ret_4w is not None else None,
                     "target_1": target_1,
                     "potential_gain_pct": potential_gain_pct,
+                    "rr_ratio": rr_ratio,
                 }
             )
 
@@ -324,16 +364,50 @@ class PortfolioService:
             .order_by(ScreeningSnapshot.rsi_14.desc())
             .limit(limit)
         ).all()
+        # Batch-load confluence levels for candidates
+        cand_symbol_ids = [sn.symbol_id for sn in rows]
+        confl_by_cand_id = defaultdict(list)
+        if cand_symbol_ids:
+            cand_levels = self.db.scalars(
+                select(SymbolConfluenceLevel).where(SymbolConfluenceLevel.symbol_id.in_(cand_symbol_ids))
+            ).all()
+            for lvl in cand_levels:
+                confl_by_cand_id[lvl.symbol_id].append(lvl)
+
         out = []
         for sn in rows:
             close = round(float(sn.close_price), 2)
             atr_pct = round(float(sn.atr_pct), 2) if sn.atr_pct is not None else None
+            
+            cand_levels = confl_by_cand_id.get(sn.symbol_id, [])
+            cand_supports = [lvl for lvl in cand_levels if lvl.level_type == "SUPPORT"]
+            cand_resistances = [lvl for lvl in cand_levels if lvl.level_type == "RESISTANCE"]
+
+            cand_supports_sorted = sorted(cand_supports, key=lambda x: float(x.price), reverse=True)
+            cand_resistances_sorted = sorted(cand_resistances, key=lambda x: float(x.price))
+
+            support_val = float(cand_supports_sorted[0].price) if cand_supports_sorted else None
+            resistance_val = float(cand_resistances_sorted[0].price) if cand_resistances_sorted else None
+
             stop = target_1 = gain = None
             if atr_pct is not None and close > 0:
                 atr_abs = atr_pct / 100.0 * close
-                stop = round(close - 1.5 * atr_abs, 2)
-                target_1 = round(close + 1.5 * atr_abs, 2)
-                gain = round(1.5 * atr_pct, 2)
+                
+                # Structural stop-loss
+                if support_val is not None:
+                    stop = round(support_val - 1.5 * atr_abs, 2)
+                    if stop >= close:
+                        stop = round(close - 2.0 * atr_abs, 2)
+                else:
+                    stop = round(close - 1.5 * atr_abs, 2)
+
+                # Structural target
+                if resistance_val is not None:
+                    target_1 = round(resistance_val, 2)
+                else:
+                    target_1 = round(close + 1.5 * atr_abs, 2)
+
+                gain = round(((target_1 - close) / close * 100.0), 2) if close > 0 else 0.0
             out.append(
                 {
                     "symbol": sn.symbol.replace(".NS", ""),

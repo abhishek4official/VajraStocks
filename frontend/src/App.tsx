@@ -138,6 +138,7 @@ function Dashboard() {
     const handleKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement).tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA') return; // don't fire inside inputs
+      if (e.ctrlKey || e.metaKey || e.altKey) return; // bypass if modifier keys are active (e.g. Ctrl+C)
       const { setActiveTab } = useStockStore.getState();
       switch (e.key.toLowerCase()) {
         case 'e': setActiveTab('explorer');    break;

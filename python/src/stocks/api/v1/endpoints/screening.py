@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from stocks.api.deps import get_db
@@ -11,16 +12,51 @@ from stocks.services.screening import ScreeningService
 router = APIRouter(prefix="/screeners", tags=["Stock Screening"])
 
 
-def _trade_setup(close: float | None, atr_pct: float | None) -> dict:
-    """ATR-based setup dict: stop = close - 1.5*ATR, target_1 = close + 1.5*ATR,
-    potential_gain_pct = 1.5*ATR% (upside to T1)."""
-    if close is None or atr_pct is None or close <= 0:
-        return {"stop_loss": None, "target_1": None, "potential_gain_pct": None}
-    atr_abs = atr_pct / 100.0 * close
+def _structural_trade_setup(close: float | None, atr_pct: float | None, symbol_levels: list) -> dict:
+    """Calculates trade setup using structural confluence levels from database."""
+    if close is None or close <= 0:
+        return {"stop_loss": None, "target_1": None, "potential_gain_pct": None, "rr_ratio": None}
+        
+    atr_abs = atr_pct / 100.0 * close if (atr_pct is not None and atr_pct > 0) else 0.0
+    
+    # Filter support and resistance
+    pos_supports = [lvl for lvl in symbol_levels if lvl.level_type == "SUPPORT"]
+    pos_resistances = [lvl for lvl in symbol_levels if lvl.level_type == "RESISTANCE"]
+    
+    pos_supports_sorted = sorted(pos_supports, key=lambda x: float(x.price), reverse=True)
+    pos_resistances_sorted = sorted(pos_resistances, key=lambda x: float(x.price))
+    
+    support_val = float(pos_supports_sorted[0].price) if pos_supports_sorted else None
+    resistance_val = float(pos_resistances_sorted[0].price) if pos_resistances_sorted else None
+    
+    # Stop loss
+    if atr_abs > 0:
+        if support_val is not None:
+            stop = round(support_val - 1.5 * atr_abs, 2)
+            if stop >= close:
+                stop = round(close - 2.0 * atr_abs, 2)
+        else:
+            stop = round(close - 1.5 * atr_abs, 2)
+    else:
+        stop = round(close, 2)
+        
+    # Target 1
+    if resistance_val is not None:
+        target_1 = round(resistance_val, 2)
+    else:
+        target_1 = round(close + 1.5 * atr_abs, 2) if atr_abs > 0 else round(close, 2)
+        
+    potential_gain_pct = round(((target_1 - close) / close * 100.0), 2) if close > 0 else 0.0
+    
+    risk = close - stop
+    reward = target_1 - close
+    rr_ratio = round(reward / risk, 2) if risk > 0 else 0.0
+    
     return {
-        "stop_loss": round(close - 1.5 * atr_abs, 2),
-        "target_1": round(close + 1.5 * atr_abs, 2),
-        "potential_gain_pct": round(1.5 * atr_pct, 2),
+        "stop_loss": stop,
+        "target_1": target_1,
+        "potential_gain_pct": potential_gain_pct,
+        "rr_ratio": rr_ratio,
     }
 
 
@@ -77,6 +113,7 @@ class ScreenerRowResponse(BaseModel):
     stop_loss: float | None = None
     target_1: float | None = None
     potential_gain_pct: float | None = None
+    rr_ratio: float | None = None
 
     class Config:
         from_attributes = True
@@ -125,6 +162,24 @@ def get_screening_results_get(
         limit=limit,
     )
 
+    # Load confluence levels in bulk to prevent N+1 queries
+    from collections import defaultdict
+    from stocks.db.models import SymbolConfluenceLevel
+    
+    symbol_ids = [r.symbol_id for r in results]
+    confl_by_symbol_id = defaultdict(list)
+    if symbol_ids:
+        chunk_size = 1000
+        confl_levels = []
+        for i in range(0, len(symbol_ids), chunk_size):
+            chunk = symbol_ids[i : i + chunk_size]
+            chunk_levels = db.scalars(
+                select(SymbolConfluenceLevel).where(SymbolConfluenceLevel.symbol_id.in_(chunk))
+            ).all()
+            confl_levels.extend(chunk_levels)
+        for lvl in confl_levels:
+            confl_by_symbol_id[lvl.symbol_id].append(lvl)
+
     return [
         {
             "symbol_id": r.symbol_id,
@@ -155,7 +210,11 @@ def get_screening_results_get(
             "ret_3w": r.ret_3w,
             "ret_4w": r.ret_4w,
             "atr_pct": r.atr_pct,
-            **_trade_setup(float(r.close_price), r.atr_pct),
+            **_structural_trade_setup(
+                float(r.close_price),
+                r.atr_pct,
+                confl_by_symbol_id.get(r.symbol_id, [])
+            ),
         }
         for r in results
     ]
@@ -185,6 +244,24 @@ def get_screening_results_post(params: ScreeningParams, db: Session = Depends(ge
         limit=params.limit,
     )
 
+    # Load confluence levels in bulk to prevent N+1 queries
+    from collections import defaultdict
+    from stocks.db.models import SymbolConfluenceLevel
+    
+    symbol_ids = [r.symbol_id for r in results]
+    confl_by_symbol_id = defaultdict(list)
+    if symbol_ids:
+        chunk_size = 1000
+        confl_levels = []
+        for i in range(0, len(symbol_ids), chunk_size):
+            chunk = symbol_ids[i : i + chunk_size]
+            chunk_levels = db.scalars(
+                select(SymbolConfluenceLevel).where(SymbolConfluenceLevel.symbol_id.in_(chunk))
+            ).all()
+            confl_levels.extend(chunk_levels)
+        for lvl in confl_levels:
+            confl_by_symbol_id[lvl.symbol_id].append(lvl)
+
     return [
         {
             "symbol_id": r.symbol_id,
@@ -215,7 +292,11 @@ def get_screening_results_post(params: ScreeningParams, db: Session = Depends(ge
             "ret_3w": r.ret_3w,
             "ret_4w": r.ret_4w,
             "atr_pct": r.atr_pct,
-            **_trade_setup(float(r.close_price), r.atr_pct),
+            **_structural_trade_setup(
+                float(r.close_price),
+                r.atr_pct,
+                confl_by_symbol_id.get(r.symbol_id, [])
+            ),
         }
         for r in results
     ]
