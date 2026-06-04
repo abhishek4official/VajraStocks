@@ -219,6 +219,7 @@ class ScreeningService:
             volume_score_val = None
             rs_score_val = None
             momentum_score_val = None
+            macd_hist_prev = None
 
             if ind:
                 atr_14 = float(ind.atr_14) if ind.atr_14 is not None else None
@@ -280,6 +281,17 @@ class ScreeningService:
             ret_3w = _ret(15)
             ret_4w = _ret(20)
 
+            # 6c-ii. Volume breakout ratio — today's volume vs 20-day average
+            weekly_avg_volume = None
+            volume_breakout_ratio = None
+            if len(prices) >= 2:
+                vols = [float(p.volume) for p in prices[1:21]]  # exclude today
+                if vols:
+                    avg_vol = sum(vols) / len(vols)
+                    weekly_avg_volume = round(avg_vol, 0)
+                    if avg_vol > 0:
+                        volume_breakout_ratio = round(volume / avg_vol, 2)
+
             # 6d. Composite scorer — now has all inputs
             if ind:
                 from stocks.services.quant.composite_scorer import compute_composite
@@ -300,7 +312,7 @@ class ScreeningService:
                     adx_14=adx_14_snap,
                     plus_di=float(ind.plus_di) if getattr(ind, "plus_di", None) is not None else None,
                     minus_di=float(ind.minus_di) if getattr(ind, "minus_di", None) is not None else None,
-                    volume_breakout_ratio=vbr,
+                    volume_breakout_ratio=volume_breakout_ratio,
                     obv_trend=obv_trend,
                     delivery_pct=None,
                     rs_score_1m=rs_score_1m,
@@ -308,8 +320,9 @@ class ScreeningService:
                     ret_4w=ret_4w,
                     rsi_14=float(ind.rsi_14) if ind.rsi_14 is not None else None,
                     macd_histogram=float(ind.macd_histogram) if ind.macd_histogram is not None else None,
-                    macd_histogram_prev=macd_hist_prev if 'macd_hist_prev' in dir() else None,
+                    macd_histogram_prev=macd_hist_prev,
                     stoch_k=float(ind.stoch_k) if getattr(ind, "stoch_k", None) is not None else None,
+                    supertrend_dir=supertrend_dir_snap,
                 )
                 regime_bias = cs.bias
                 composite_score = cs.composite_score
@@ -360,6 +373,8 @@ class ScreeningService:
                     obv_trend=obv_trend,
                     supertrend_dir=supertrend_dir_snap,
                     stoch_state=stoch_state,
+                    weekly_avg_volume=weekly_avg_volume,
+                    volume_breakout_ratio=volume_breakout_ratio,
                     composite_score=composite_score,
                     trend_score_val=trend_score_val,
                     volume_score_val=volume_score_val,
@@ -400,6 +415,8 @@ class ScreeningService:
                 snapshot.obv_trend = obv_trend
                 snapshot.supertrend_dir = supertrend_dir_snap
                 snapshot.stoch_state = stoch_state
+                snapshot.weekly_avg_volume = weekly_avg_volume
+                snapshot.volume_breakout_ratio = volume_breakout_ratio
                 snapshot.composite_score = composite_score
                 snapshot.trend_score_val = trend_score_val
                 snapshot.volume_score_val = volume_score_val

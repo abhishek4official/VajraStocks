@@ -47,6 +47,7 @@ def score_trend(
     adx_14: float | None,
     plus_di: float | None,
     minus_di: float | None,
+    supertrend_dir: str | None = None,
 ) -> tuple[float, list[str]]:
     """
     Points:
@@ -58,6 +59,8 @@ def score_trend(
       ADX ≥ 40               10 pts
       ADX ≥ 25                5 pts
       DI+ > DI-               5 pts  (directional confirmation when ADX strong)
+      Supertrend UP            5 pts  (ATR trailing stop not breached)
+      Supertrend DOWN         -5 pts
     """
     pts = 0.0
     reasons: list[str] = []
@@ -114,6 +117,14 @@ def score_trend(
                 pts += 5
                 reasons.append(f"DI+ {plus_di:.0f} > DI- {minus_di:.0f} (+5)")
 
+    # Supertrend direction — price above/below ATR trailing stop
+    if supertrend_dir == "UP":
+        pts += 5
+        reasons.append("Supertrend UP — above ATR stop (+5)")
+    elif supertrend_dir == "DOWN":
+        pts = max(0.0, pts - 5)
+        reasons.append("Supertrend DOWN — below ATR stop (-5)")
+
     return _cap(pts), reasons
 
 
@@ -124,25 +135,29 @@ def score_volume(
 ) -> tuple[float, list[str]]:
     """
     Points:
-      OBV trend UP            35 pts
-      Vol breakout ≥ 2x       35 pts
-      Vol breakout ≥ 1.5x     20 pts
-      Vol breakout ≥ 1.2x     10 pts
-      Delivery % ≥ 60%        30 pts   (placeholder = 15 when absent)
+      OBV trend UP            35 pts  (neutral=17 when data absent)
+      Vol breakout ≥ 2x       35 pts  (neutral=17 when data absent)
+      Delivery % ≥ 60%        30 pts  (placeholder=15 when absent)
       Delivery % ≥ 40%        15 pts
+
+    When both OBV and VBR are unavailable, the score falls back to 40 (neutral)
+    so missing data does not punish the composite.
     """
     pts = 0.0
     reasons: list[str] = []
+    obv_missing = obv_trend is None or obv_trend == "FLAT"
+    vbr_missing = volume_breakout_ratio is None
 
     if obv_trend == "UP":
         pts += 35
         reasons.append("OBV trend UP (+35)")
     elif obv_trend == "DOWN":
         reasons.append("OBV trend DOWN (0)")
-    else:
-        reasons.append("OBV trend FLAT/unknown (0)")
+    elif obv_missing:
+        pts += 17  # neutral when data not yet available
+        reasons.append("OBV trend: insufficient data — neutral (+17)")
 
-    if volume_breakout_ratio is not None:
+    if not vbr_missing:
         vbr = float(volume_breakout_ratio)
         if vbr >= 2.0:
             pts += 35
@@ -154,21 +169,24 @@ def score_volume(
             pts += 10
             reasons.append(f"Volume {vbr:.1f}x average (+10)")
         else:
-            reasons.append(f"Volume {vbr:.1f}x average (0)")
+            reasons.append(f"Volume {vbr:.1f}x average — in-line (0)")
+    else:
+        pts += 17  # neutral when data not yet available
+        reasons.append("Volume breakout ratio: insufficient data — neutral (+17)")
 
     # Delivery % — placeholder = 15 (neutral) when data not available
     if delivery_pct is not None:
         if delivery_pct >= 60:
             pts += 30
-            reasons.append(f"Delivery {delivery_pct:.0f}% ≥ 60% (+30)")
+            reasons.append(f"Delivery {delivery_pct:.0f}% >= 60% (+30)")
         elif delivery_pct >= 40:
             pts += 15
-            reasons.append(f"Delivery {delivery_pct:.0f}% ≥ 40% (+15)")
+            reasons.append(f"Delivery {delivery_pct:.0f}% >= 40% (+15)")
         else:
             reasons.append(f"Delivery {delivery_pct:.0f}% < 40% (0)")
     else:
-        pts += 15  # neutral placeholder when delivery data absent
-        reasons.append("Delivery %: data unavailable — neutral placeholder (+15)")
+        pts += 15
+        reasons.append("Delivery %: data unavailable — neutral (+15)")
 
     return _cap(pts), reasons
 
@@ -321,9 +339,10 @@ def compute_composite(
     macd_histogram: float | None,
     macd_histogram_prev: float | None = None,
     stoch_k: float | None = None,
+    supertrend_dir: str | None = None,
 ) -> CompositeResult:
     """Compute the full 4-component composite score and derive 5-tier bias."""
-    trend, t_reasons = score_trend(close, ema_20, sma_50, sma_200, ema_21, adx_14, plus_di, minus_di)
+    trend, t_reasons = score_trend(close, ema_20, sma_50, sma_200, ema_21, adx_14, plus_di, minus_di, supertrend_dir)
     volume, v_reasons = score_volume(volume_breakout_ratio, obv_trend, delivery_pct)
     rs, r_reasons = score_rs(rs_score_1m, ret_1w, ret_4w)
     momentum, m_reasons = score_momentum(rsi_14, macd_histogram, macd_histogram_prev, stoch_k)

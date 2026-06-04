@@ -327,6 +327,10 @@ class ScreeningSnapshot(Base):
     supertrend_dir: Mapped[str | None] = mapped_column(String(10), nullable=True)        # UP / DOWN
     stoch_state: Mapped[str | None] = mapped_column(String(15), nullable=True)           # OVERBOUGHT / OVERSOLD / NEUTRAL
 
+    # Volume profile
+    weekly_avg_volume: Mapped[float | None] = mapped_column(Float, nullable=True)
+    volume_breakout_ratio: Mapped[float | None] = mapped_column(Float, nullable=True)
+
     # Composite scoring (0-100 per component + weighted total)
     composite_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     trend_score_val: Mapped[float | None] = mapped_column(Float, nullable=True)

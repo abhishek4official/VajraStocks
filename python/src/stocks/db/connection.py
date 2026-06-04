@@ -262,6 +262,9 @@ class DatabaseManager:
             ("screening_snapshots", "obv_trend",            "VARCHAR(10)",  "VARCHAR(10)"),
             ("screening_snapshots", "supertrend_dir",       "VARCHAR(10)",  "VARCHAR(10)"),
             ("screening_snapshots", "stoch_state",          "VARCHAR(15)",  "VARCHAR(15)"),
+            # Volume profile
+            ("screening_snapshots", "weekly_avg_volume",    "FLOAT",        "FLOAT"),
+            ("screening_snapshots", "volume_breakout_ratio","FLOAT",        "FLOAT"),
             # Composite score columns
             ("screening_snapshots", "composite_score",      "FLOAT",        "FLOAT"),
             ("screening_snapshots", "trend_score_val",      "FLOAT",        "FLOAT"),
