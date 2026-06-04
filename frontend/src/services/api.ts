@@ -93,6 +93,10 @@ export interface ReplacementCandidate {
   potential_gain_pct: number | null;
   rr_ratio?: number | null;
   position_size_shares?: number | null;
+  adx_14?: number | null;
+  trend_strength_class?: string | null;
+  obv_trend?: string | null;
+  supertrend_dir?: string | null;
 }
 
 export interface PortfolioAggregates {
@@ -115,6 +119,9 @@ export interface PortfolioAggregates {
   max_cluster_pct: number;
   weak_holdings: string[];
   replacement_candidates: ReplacementCandidate[];
+  correlation_clusters: { pair: [string, string]; rho: number }[];
+  portfolio_beta: number | null;
+  diversification_score: number | null;
 }
 
 export interface PortfolioData {
