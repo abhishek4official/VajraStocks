@@ -34,39 +34,30 @@ jobs:
             echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
           fi
 
-  # ── 2. Build frontend once, share across platform jobs ────────────────────
-  build-frontend:
-    name: Build Frontend
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+  # ── Shared build steps (used as YAML anchor) ──────────────────────────────
+  # Frontend + backend are built together inside each platform job so the
+  # final PyInstaller bundle contains everything in one pass.
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-
-      - name: Install & build
-        working-directory: frontend
-        run: |
-          npm ci
-          npm run build
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: frontend-dist
-          path: frontend/dist/
-          retention-days: 1
-
-  # ── 3. Windows — PyInstaller + Inno Setup ────────────────────────────────
+  # ── 2. Windows — frontend + PyInstaller + Inno Setup ─────────────────────
   build-windows:
     name: Build Windows Installer
-    needs: [version, build-frontend]
+    needs: version
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
 
+      # ── Frontend ────────────────────────────────────────────────────────────
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Build frontend
+        working-directory: frontend
+        run: |
+          npm install
+          npm run build
+
+      # ── Backend ─────────────────────────────────────────────────────────────
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
@@ -77,25 +68,21 @@ jobs:
           enable-cache: true
           cache-dependency-glob: python/uv.lock
 
-      - name: Download frontend dist
-        uses: actions/download-artifact@v4
-        with:
-          name: frontend-dist
-          path: frontend/dist/
-
       - name: Install backend deps
         working-directory: python
-        run: uv sync --frozen --all-groups
+        run: uv sync --frozen
 
       - name: Install PyInstaller
         working-directory: python
         run: uv pip install "pyinstaller>=6.14.0"
 
+      # ── Bundle ───────────────────────────────────────────────────────────────
       - name: Bundle with PyInstaller
         working-directory: python
         run: uv run pyinstaller ..\installer\vajrastocks.spec --distpath ..\dist --workpath ..\build
 
-      - name: Install Inno Setup (if not present)
+      # ── Installer ────────────────────────────────────────────────────────────
+      - name: Install Inno Setup
         shell: pwsh
         run: |
           $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
@@ -118,14 +105,26 @@ jobs:
           path: release/VajraStocks-Setup.exe
           retention-days: 1
 
-  # ── 4. Linux — .deb, .rpm, AppImage ──────────────────────────────────────
+  # ── 3. Linux — frontend + PyInstaller + deb / rpm / AppImage ─────────────
   build-linux:
     name: Build Linux Packages
-    needs: [version, build-frontend]
+    needs: version
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
+      # ── Frontend ────────────────────────────────────────────────────────────
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Build frontend
+        working-directory: frontend
+        run: |
+          npm install
+          npm run build
+
+      # ── Backend ─────────────────────────────────────────────────────────────
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
@@ -139,33 +138,23 @@ jobs:
       - name: Install system packages
         run: |
           sudo apt-get update -qq
-          # unixodbc-dev: pyodbc build headers
-          # rpm: rpmbuild for .rpm packaging
-          # patchelf: required by PyInstaller on Linux for binary patching
-          # imagemagick: used by build-appimage.sh placeholder icon generation
-          # fuse + libfuse2/libfuse2t64: required to run appimagetool (itself an AppImage)
-          #   Ubuntu 22.04 uses libfuse2; Ubuntu 24.04 (current ubuntu-latest) uses libfuse2t64
           sudo apt-get install -y unixodbc-dev rpm patchelf imagemagick fuse
           sudo apt-get install -y libfuse2 2>/dev/null || sudo apt-get install -y libfuse2t64
 
-      - name: Download frontend dist
-        uses: actions/download-artifact@v4
-        with:
-          name: frontend-dist
-          path: frontend/dist/
-
       - name: Install backend deps
         working-directory: python
-        run: uv sync --frozen --all-groups
+        run: uv sync --frozen
 
       - name: Install PyInstaller
         working-directory: python
         run: uv pip install "pyinstaller>=6.14.0"
 
+      # ── Bundle ───────────────────────────────────────────────────────────────
       - name: Bundle with PyInstaller
         working-directory: python
         run: uv run pyinstaller ../installer/vajrastocks.spec --distpath ../dist --workpath ../build
 
+      # ── Packages ─────────────────────────────────────────────────────────────
       - name: Build .deb
         run: bash installer/linux/build-deb.sh ${{ needs.version.outputs.version }}
 
@@ -184,14 +173,26 @@ jobs:
             release/VajraStocks.AppImage
           retention-days: 1
 
-  # ── 5. macOS — PyInstaller + create-dmg ──────────────────────────────────
+  # ── 4. macOS — frontend + PyInstaller + DMG ───────────────────────────────
   build-macos:
     name: Build macOS DMG
-    needs: [version, build-frontend]
+    needs: version
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
 
+      # ── Frontend ────────────────────────────────────────────────────────────
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Build frontend
+        working-directory: frontend
+        run: |
+          npm install
+          npm run build
+
+      # ── Backend ─────────────────────────────────────────────────────────────
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
@@ -202,24 +203,18 @@ jobs:
           enable-cache: true
           cache-dependency-glob: python/uv.lock
 
-      - name: Download frontend dist
-        uses: actions/download-artifact@v4
-        with:
-          name: frontend-dist
-          path: frontend/dist/
-
       - name: Install system deps
-        run: |
-          brew install unixodbc create-dmg
+        run: brew install unixodbc create-dmg
 
       - name: Install backend deps
         working-directory: python
-        run: uv sync --frozen --all-groups
+        run: uv sync --frozen
 
       - name: Install PyInstaller
         working-directory: python
         run: uv pip install "pyinstaller>=6.14.0"
 
+      # ── Bundle ───────────────────────────────────────────────────────────────
       - name: Bundle with PyInstaller
         working-directory: python
         run: uv run pyinstaller ../installer/vajrastocks.spec --distpath ../dist --workpath ../build
@@ -233,7 +228,7 @@ jobs:
           path: release/VajraStocks.dmg
           retention-days: 1
 
-  # ── 6. Publish GitHub Release ─────────────────────────────────────────────
+  # ── 5. Publish GitHub Release ─────────────────────────────────────────────
   publish-release:
     name: Publish GitHub Release
     needs: [version, build-windows, build-linux, build-macos]
@@ -273,7 +268,6 @@ jobs:
             COMMITS=$(git log --pretty=format:"- %s (%h)" | head -40)
           fi
 
-          # Write to a temp file first to avoid heredoc indentation issues
           cat > /tmp/notes.md << 'MDEOF'
 # VajraStocks vVERSION_PLACEHOLDER
 
@@ -320,11 +314,9 @@ Open `VajraStocks.dmg`, drag VajraStocks to Applications.
 *Generated automatically by GitHub Actions.*
 MDEOF
 
-          # Replace placeholders (sed is safe here — no shell interpretation)
           sed -i "s/VERSION_PLACEHOLDER/${VERSION}/g" /tmp/notes.md
-          # Insert commit list (use Python to safely handle special chars)
           python3 - "${COMMITS}" << 'PYEOF'
-import sys, pathlib, re
+import sys, pathlib
 commits = sys.argv[1] if len(sys.argv) > 1 else "- Initial release"
 content = pathlib.Path("/tmp/notes.md").read_text()
 content = content.replace("COMMITS_PLACEHOLDER", commits)
