@@ -157,6 +157,56 @@ class DatabaseManager:
         except Exception as e:
             raise DatabaseExecutionError(f"Failed to create tables: {e}") from e
 
+    def ensure_columns(self) -> None:
+        """Adds columns missing from EXISTING tables (idempotent, dialect-aware).
+
+        ``Base.metadata.create_all`` only creates missing *tables* — it never
+        ALTERs an existing one. New columns added to a model (e.g. the MTF/risk
+        fields on ``screening_snapshots``) must be patched in here so they work
+        on the live MSSQL/Postgres database, not just fresh SQLite installs.
+        """
+        if self.engine is None:
+            raise DatabaseConnectionError("DatabaseManager not initialised. Call initialize() first.")
+
+        from sqlalchemy import inspect as sa_inspect
+
+        dialect = self.engine.dialect.name  # 'mssql' / 'sqlite' / 'postgresql'
+        # (table, column, generic_type, mssql_type)
+        specs = [
+            ("screening_snapshots", "atr_pct",       "FLOAT",        "FLOAT"),
+            ("screening_snapshots", "vol_class",     "VARCHAR(10)",  "VARCHAR(10)"),
+            ("screening_snapshots", "regime_bias",   "VARCHAR(10)",  "VARCHAR(10)"),
+            ("screening_snapshots", "weekly_trend",  "VARCHAR(10)",  "VARCHAR(10)"),
+            ("screening_snapshots", "mtf_confirmed", "BOOLEAN",      "BIT"),
+            ("screening_snapshots", "ret_1w",        "FLOAT",        "FLOAT"),
+            ("screening_snapshots", "ret_2w",        "FLOAT",        "FLOAT"),
+            ("screening_snapshots", "ret_3w",        "FLOAT",        "FLOAT"),
+            ("screening_snapshots", "ret_4w",        "FLOAT",        "FLOAT"),
+        ]
+        insp = sa_inspect(self.engine)
+        existing_by_table: dict[str, set[str]] = {}
+        for table, col, generic_type, mssql_type in specs:
+            if table not in existing_by_table:
+                try:
+                    existing_by_table[table] = {c["name"] for c in insp.get_columns(table)}
+                except Exception:
+                    existing_by_table[table] = set()  # table absent — create_all will build it
+
+            cols = existing_by_table[table]
+            if not cols or col in cols:
+                continue  # table not present yet, or column already exists
+
+            col_type = mssql_type if dialect == "mssql" else generic_type
+            add_kw = "ADD" if dialect == "mssql" else "ADD COLUMN"
+            ddl = f"ALTER TABLE {table} {add_kw} {col} {col_type}"
+            try:
+                with self.engine.begin() as conn:
+                    conn.execute(text(ddl))
+                cols.add(col)
+                logger.info(f"ensure_columns: added {table}.{col} ({col_type})")
+            except Exception as e:
+                logger.warning(f"ensure_columns: could not add {table}.{col}: {e}")
+
     def get_session(self):
         """Returns a new isolated database session."""
         if self.session_factory is None:

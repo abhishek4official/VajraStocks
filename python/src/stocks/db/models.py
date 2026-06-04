@@ -287,6 +287,19 @@ class ScreeningSnapshot(Base):
     # Relative Strength vs NIFTY 50
     rs_score_1m: Mapped[float | None] = mapped_column(Float, nullable=True)    # (stock 21D return) / (NIFTY 21D return)
 
+    # MTF / Risk fields (materialized from daily + weekly-resampled data)
+    atr_pct: Mapped[float | None] = mapped_column(Float, nullable=True)         # ATR(14) / close * 100
+    vol_class: Mapped[str | None] = mapped_column(String(10), nullable=True)    # LOW / MEDIUM / HIGH
+    regime_bias: Mapped[str | None] = mapped_column(String(10), nullable=True)  # BULLISH / NEUTRAL / BEARISH (multi-factor)
+    weekly_trend: Mapped[str | None] = mapped_column(String(10), nullable=True) # UP / DOWN (weekly close vs 40-wk EMA)
+    mtf_confirmed: Mapped[bool | None] = mapped_column(Boolean, nullable=True)  # daily bias confirmed by weekly trend
+
+    # Rolling weekly returns (%), 1 week = 5 trading days
+    ret_1w: Mapped[float | None] = mapped_column(Float, nullable=True)
+    ret_2w: Mapped[float | None] = mapped_column(Float, nullable=True)
+    ret_3w: Mapped[float | None] = mapped_column(Float, nullable=True)
+    ret_4w: Mapped[float | None] = mapped_column(Float, nullable=True)
+
     updated_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now())
 
     # Relationships
@@ -314,3 +327,30 @@ class AppSetting(Base):
     updated_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now())
 
     __table_args__ = (UniqueConstraint("category", "key", name="UQ_AppSetting_Category_Key"),)
+
+
+class PortfolioHolding(Base):
+    """A single imported portfolio position (e.g. from a Zerodha holdings CSV).
+
+    Replaces the previous browser-localStorage portfolio store — the backend is
+    now the single source of truth for holdings and all derived risk metrics.
+    """
+
+    __tablename__ = "portfolio_holdings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    instrument: Mapped[str] = mapped_column(String(50), nullable=False)          # raw ticker e.g. RELIANCE
+    symbol_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("symbols.id", ondelete="SET NULL"), nullable=True
+    )  # resolved match into the synced universe (nullable — may not exist)
+    qty: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    avg_cost: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    ltp_imported: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)  # LTP from the CSV snapshot
+    invested: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    source: Mapped[str] = mapped_column(String(30), nullable=False, default="zerodha_csv")
+    imported_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("instrument", name="UQ_PortfolioHolding_Instrument"),
+        Index("ix_portfolio_holdings_instrument", "instrument"),
+    )

@@ -14,6 +14,90 @@ export interface SymbolDetail {
   last_error_message?: string | null;
 }
 
+export interface TradePlan {
+  symbol: string;
+  bias: 'BULLISH' | 'NEUTRAL' | 'BEARISH';
+  reasons: string[];
+  entry: number;
+  atr_14: number;
+  stop_loss: number;
+  target_1: number;
+  target_2: number;
+  entry_zone: string;
+  position_size_shares: number;
+  risk_reward_ratio: number;
+  sma_200: number | null;
+  rsi_14: number | null;
+  risk_per_trade: number;
+  brokerage_pct: number;
+  has_indicators: boolean;
+}
+
+export interface PortfolioHolding {
+  instrument: string;
+  qty: number;
+  avg_cost: number;
+  ltp: number;
+  ltp_source: 'synced' | 'imported';
+  invested: number;
+  current_val: number;
+  pnl: number;
+  return_pct: number;
+  bias: 'BULLISH' | 'NEUTRAL' | 'BEARISH' | null;
+  mtf_confirmed: boolean | null;
+  weekly_trend: 'UP' | 'DOWN' | null;
+  atr_pct: number | null;
+  vol_class: 'LOW' | 'MEDIUM' | 'HIGH' | null;
+  rs_score_1m: number | null;
+  stop: number | null;
+  open_risk: number | null;
+  matched: boolean;
+  weak: boolean;
+  weak_reason: string | null;
+  ret_1w: number | null;
+  ret_2w: number | null;
+  ret_3w: number | null;
+  ret_4w: number | null;
+}
+
+export interface ReplacementCandidate {
+  symbol: string;
+  company_name: string;
+  close_price: number;
+  rsi_14: number | null;
+  atr_pct: number | null;
+  vol_class: 'LOW' | 'MEDIUM' | 'HIGH' | null;
+  bias: 'BULLISH' | 'NEUTRAL' | 'BEARISH' | null;
+  weekly_trend: 'UP' | 'DOWN' | null;
+}
+
+export interface PortfolioAggregates {
+  total_invested: number;
+  total_current: number;
+  total_pnl: number;
+  total_return_pct: number;
+  net_pnl: number;
+  charges: number;
+  include_charges: boolean;
+  positions: number;
+  open_risk: number;
+  heat_pct: number;
+  heat_limit: number;
+  heat_base: number;
+  heat_base_is_capital: boolean;
+  regime: 'BULL' | 'NEUTRAL' | 'BEAR';
+  breadth_pct: number;
+  clusters: { instrument: string; weight_pct: number }[];
+  max_cluster_pct: number;
+  weak_holdings: string[];
+  replacement_candidates: ReplacementCandidate[];
+}
+
+export interface PortfolioData {
+  holdings: PortfolioHolding[];
+  aggregates: PortfolioAggregates;
+}
+
 export interface CandleData {
   time: string; // YYYY-MM-DD
   open: number;
@@ -78,6 +162,10 @@ export interface ScreenerRow {
   rs_score_1m?: number | null;
   weekly_avg_volume?: number | null;
   volume_breakout_ratio?: number | null;
+  ret_1w?: number | null;
+  ret_2w?: number | null;
+  ret_3w?: number | null;
+  ret_4w?: number | null;
 }
 
 export interface CorporateAction {
@@ -119,6 +207,17 @@ export const apiService = {
     const response = await fetch(`${BASE_URL}/symbols/${symbol}`);
     if (!response.ok) throw new Error(`Symbol ${symbol} not found`);
     return response.json();
+  },
+
+  /** Backend-computed trade plan + multi-factor bias (single source of truth). */
+  async getTradePlan(symbol: string): Promise<TradePlan | null> {
+    try {
+      const response = await fetch(`${BASE_URL}/symbols/${encodeURIComponent(symbol)}/trade-plan`);
+      if (!response.ok) return null;   // not synced / no data — render nothing
+      return response.json();
+    } catch {
+      return null;
+    }
   },
 
   // 2. Charts endpoints
@@ -256,6 +355,29 @@ export const apiService = {
     const response = await fetch(`${BASE_URL}/corporate-actions/${symbol}`);
     if (!response.ok) throw new Error('Failed to fetch corporate actions');
     return response.json();
+  },
+
+  // 5b. Portfolio endpoints (backend-computed)
+  async importPortfolio(file: File): Promise<PortfolioData> {
+    const fd = new FormData();
+    fd.append('file', file);
+    const response = await fetch(`${BASE_URL}/portfolio/import`, { method: 'POST', body: fd });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.detail || 'Failed to import portfolio CSV');
+    }
+    return response.json();
+  },
+
+  async getPortfolio(): Promise<PortfolioData> {
+    const response = await fetch(`${BASE_URL}/portfolio`);
+    if (!response.ok) throw new Error('Failed to load portfolio');
+    return response.json();
+  },
+
+  async clearPortfolio(): Promise<void> {
+    const response = await fetch(`${BASE_URL}/portfolio`, { method: 'DELETE' });
+    if (!response.ok) throw new Error('Failed to clear portfolio');
   },
 
   // 6. Synchronization endpoints

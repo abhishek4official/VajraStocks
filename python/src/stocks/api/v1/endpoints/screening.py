@@ -56,6 +56,10 @@ class ScreenerRowResponse(BaseModel):
     rs_score_1m: float | None = None
     weekly_avg_volume: float | None = None
     volume_breakout_ratio: float | None = None
+    ret_1w: float | None = None
+    ret_2w: float | None = None
+    ret_3w: float | None = None
+    ret_4w: float | None = None
 
     class Config:
         from_attributes = True
@@ -129,6 +133,10 @@ def get_screening_results_get(
             "rs_score_1m": r.rs_score_1m,
             "weekly_avg_volume": getattr(r, "weekly_avg_volume", None),
             "volume_breakout_ratio": getattr(r, "volume_breakout_ratio", None),
+            "ret_1w": r.ret_1w,
+            "ret_2w": r.ret_2w,
+            "ret_3w": r.ret_3w,
+            "ret_4w": r.ret_4w,
         }
         for r in results
     ]
@@ -183,6 +191,10 @@ def get_screening_results_post(params: ScreeningParams, db: Session = Depends(ge
             "rs_score_1m": r.rs_score_1m,
             "weekly_avg_volume": getattr(r, "weekly_avg_volume", None),
             "volume_breakout_ratio": getattr(r, "volume_breakout_ratio", None),
+            "ret_1w": r.ret_1w,
+            "ret_2w": r.ret_2w,
+            "ret_3w": r.ret_3w,
+            "ret_4w": r.ret_4w,
         }
         for r in results
     ]

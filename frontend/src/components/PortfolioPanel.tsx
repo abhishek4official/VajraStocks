@@ -1,12 +1,22 @@
-import React, { useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import { useStockStore } from '../store/useStockStore';
-import { Upload, Trash2, TrendingUp, TrendingDown, IndianRupee, BarChart2 } from 'lucide-react';
-import type { PortfolioHolding } from '../store/useStockStore';
+import {
+  Upload, Trash2, TrendingUp, TrendingDown, Minus, BarChart2, ShieldAlert,
+  Wallet, Gauge, PieChart, ArrowUpRight, ArrowDownRight, Sparkles, RefreshCw,
+} from 'lucide-react';
+import type { PortfolioHolding } from '../services/api';
 
 export const PortfolioPanel: React.FC = () => {
-  const { portfolioHoldings, importPortfolioCSV, clearPortfolio, setSelectedSymbol, setActiveTab, niftyCandles } = useStockStore();
+  const {
+    portfolio, portfolioLoading, fetchPortfolio, importPortfolioFile, clearPortfolio,
+    setSelectedSymbol, setActiveTab, niftyCandles,
+  } = useStockStore();
 
-  // NIFTY 1Y return for benchmark comparison
+  useEffect(() => { fetchPortfolio(); }, [fetchPortfolio]);
+
+  const holdings = portfolio?.holdings ?? [];
+  const agg = portfolio?.aggregates ?? null;
+
   const niftyReturn = useMemo(() => {
     if (!niftyCandles.length) return null;
     const cutoff = new Date(); cutoff.setFullYear(cutoff.getFullYear() - 1);
@@ -16,28 +26,12 @@ export const PortfolioPanel: React.FC = () => {
     if (!old || old.close === 0) return null;
     return (latest.close - old.close) / old.close * 100;
   }, [niftyCandles]);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // ── Aggregate stats ────────────────────────────────────────────────────────
-
-  const totalInvested = portfolioHoldings.reduce((s, h) => s + h.invested, 0);
-  const totalCurrent = portfolioHoldings.reduce((s, h) => s + h.currentVal, 0);
-  const totalPnL = totalCurrent - totalInvested;
-  const totalReturnPct = totalInvested > 0 ? (totalPnL / totalInvested) * 100 : 0;
-
-  const isBullish = totalPnL >= 0;
-
-  // ── CSV import ─────────────────────────────────────────────────────────────
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const text = ev.target?.result as string;
-      if (text) importPortfolioCSV(text);
-    };
-    reader.readAsText(file);
+    if (file) importPortfolioFile(file);
     e.target.value = '';
   };
 
@@ -47,262 +41,396 @@ export const PortfolioPanel: React.FC = () => {
     setActiveTab('explorer');
   };
 
-  // ── Helpers ────────────────────────────────────────────────────────────────
-
+  // ── Formatters ───────────────────────────────────────────────────────────
   const fmt = (n: number, dec = 2) => n.toFixed(dec);
   const fmtINR = (n: number) =>
     new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
+  const fmtINR0 = (n: number) =>
+    new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(n);
+  const signed = (n: number, dec = 2) => `${n >= 0 ? '+' : ''}${fmt(n, dec)}`;
+  const pnlText = (v: number) => (v >= 0 ? 'text-emerald-400' : 'text-rose-400');
 
-  const pnlClass = (v: number) =>
-    v >= 0 ? 'text-emerald-400' : 'text-rose-400';
-
-  // ── Allocation mini-bar ────────────────────────────────────────────────────
-
-  const allocationBars = portfolioHoldings.map(h => ({
-    label: h.instrument,
-    pct: totalCurrent > 0 ? (h.currentVal / totalCurrent) * 100 : 0,
-    bullish: h.pnl >= 0,
-  }));
+  const biasChip = (bias: string | null) => {
+    if (bias === 'BULLISH') return { c: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/25', Icon: TrendingUp };
+    if (bias === 'BEARISH') return { c: 'text-rose-400 bg-rose-500/10 border-rose-500/25', Icon: TrendingDown };
+    return { c: 'text-slate-400 bg-slate-500/10 border-slate-600/30', Icon: Minus };
+  };
+  const biasAccent = (bias: string | null) =>
+    bias === 'BULLISH' ? 'bg-emerald-500' : bias === 'BEARISH' ? 'bg-rose-500' : 'bg-slate-600';
+  const volText = (v: string | null) =>
+    v === 'LOW' ? 'text-emerald-400' : v === 'HIGH' ? 'text-rose-400' : 'text-amber-400';
 
   const COLORS = [
     'bg-purple-500', 'bg-indigo-500', 'bg-blue-500', 'bg-cyan-500',
     'bg-teal-500', 'bg-emerald-500', 'bg-amber-500', 'bg-rose-500',
+    'bg-fuchsia-500', 'bg-sky-500',
   ];
 
-  return (
-    <div className="flex-1 flex flex-col gap-5 p-5 overflow-y-auto max-h-full">
-
-      {/* ── Header ──────────────────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-        <div>
-          <h2 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
-            <IndianRupee className="w-5 h-5 text-purple-500" />
-            Portfolio
-          </h2>
-          <p className="text-xs text-slate-400 mt-1">
-            Import your Zerodha holdings CSV to track positions and P&amp;L.
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <input ref={fileInputRef} type="file" accept=".csv" className="hidden" onChange={handleFileChange} />
+  // ── Header (always shown) ──────────────────────────────────────────────────
+  const header = (
+    <div className="flex items-start justify-between gap-4 flex-wrap">
+      <div>
+        <h2 className="text-2xl font-bold text-white tracking-tight flex items-center gap-2.5">
+          <span className="p-1.5 rounded-lg bg-purple-600/15 border border-purple-500/30 text-purple-400">
+            <Wallet className="w-5 h-5" />
+          </span>
+          Portfolio
+        </h2>
+        <p className="text-xs text-slate-400 mt-1.5">
+          Backend-computed risk &amp; multi-timeframe signals on your Zerodha holdings.
+        </p>
+      </div>
+      <div className="flex items-center gap-2">
+        <input ref={fileInputRef} type="file" accept=".csv" className="hidden" onChange={handleFileChange} />
+        <button
+          onClick={() => fetchPortfolio()}
+          disabled={portfolioLoading}
+          title="Refresh"
+          className="p-2.5 rounded-lg border border-slate-800 hover:bg-slate-800/60 text-slate-400 hover:text-white transition cursor-pointer"
+        >
+          <RefreshCw className={`w-4 h-4 ${portfolioLoading ? 'animate-spin' : ''}`} />
+        </button>
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          className="flex items-center gap-2 px-4 py-2.5 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-sm font-bold transition cursor-pointer shadow-lg shadow-purple-900/30"
+        >
+          <Upload className="w-4 h-4" />
+          Import CSV
+        </button>
+        {holdings.length > 0 && (
           <button
-            onClick={() => fileInputRef.current?.click()}
-            className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-sm font-bold transition cursor-pointer shadow-lg shadow-purple-900/20"
+            onClick={clearPortfolio}
+            title="Clear portfolio"
+            className="p-2.5 rounded-lg bg-slate-800/60 hover:bg-rose-950/60 border border-slate-700 hover:border-rose-900 text-slate-400 hover:text-rose-400 transition cursor-pointer"
           >
-            <Upload className="w-4 h-4" />
-            Import CSV
+            <Trash2 className="w-4 h-4" />
           </button>
-          {portfolioHoldings.length > 0 && (
+        )}
+      </div>
+    </div>
+  );
+
+  if (holdings.length === 0 || !agg) {
+    return (
+      <div className="flex-1 flex flex-col gap-6 p-6 overflow-y-auto max-h-full">
+        {header}
+        <div className="flex-1 flex flex-col items-center justify-center text-slate-500 py-20 gap-4">
+          <div className="p-5 rounded-2xl bg-slate-900/40 border border-slate-800">
+            <BarChart2 className="w-12 h-12 text-slate-700" />
+          </div>
+          <div className="text-center space-y-1.5">
+            <p className="font-semibold text-slate-300">{portfolioLoading ? 'Loading portfolio…' : 'No portfolio loaded'}</p>
+            <p className="text-xs text-slate-500 max-w-sm">
+              Export your holdings from <span className="text-slate-400">Zerodha Console → Portfolio → Holdings → Download</span>, then import the CSV here.
+            </p>
+          </div>
+          {!portfolioLoading && (
             <button
-              onClick={clearPortfolio}
-              className="flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-rose-950/60 border border-slate-700 hover:border-rose-900 text-slate-400 hover:text-rose-400 rounded-lg text-sm font-bold transition cursor-pointer"
+              onClick={() => fileInputRef.current?.click()}
+              className="mt-1 px-5 py-2.5 bg-purple-600 hover:bg-purple-500 text-white rounded-xl text-sm font-bold transition cursor-pointer"
             >
-              <Trash2 className="w-4 h-4" />
-              Clear
+              Import Zerodha CSV
             </button>
           )}
         </div>
       </div>
+    );
+  }
 
-      {portfolioHoldings.length === 0 ? (
-        /* ── Empty state ──────────────────────────────────────────────────── */
-        <div className="flex-1 flex flex-col items-center justify-center text-slate-500 py-20 gap-4">
-          <BarChart2 className="w-14 h-14 text-slate-700" />
-          <div className="text-center space-y-1">
-            <p className="font-semibold text-slate-400">No portfolio loaded</p>
-            <p className="text-xs text-slate-500 max-w-xs">
-              Export your holdings from Zerodha Console → Portfolio → Holdings → Download CSV, then import it here.
-            </p>
-          </div>
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            className="mt-2 px-5 py-2.5 bg-purple-600 hover:bg-purple-500 text-white rounded-xl text-sm font-bold transition cursor-pointer"
-          >
-            Import Zerodha CSV
-          </button>
-        </div>
-      ) : (
-        <>
-          {/* ── Summary Cards ──────────────────────────────────────────────── */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {[
-              { label: 'Total Invested', value: `₹${fmtINR(totalInvested)}`, sub: null, color: 'text-white' },
-              { label: 'Current Value', value: `₹${fmtINR(totalCurrent)}`, sub: null, color: 'text-white' },
-              {
-                label: 'Net P&L',
-                value: `${isBullish ? '+' : ''}₹${fmtINR(totalPnL)}`,
-                sub: null,
-                color: isBullish ? 'text-emerald-400' : 'text-rose-400',
-              },
-              {
-                label: 'Return',
-                value: `${isBullish ? '+' : ''}${fmt(totalReturnPct)}%`,
-                sub: `${portfolioHoldings.length} positions`,
-                color: isBullish ? 'text-emerald-400' : 'text-rose-400',
-              },
-            ].map(({ label, value, sub, color }) => (
-              <div key={label} className="p-4 rounded-xl border border-slate-800/80 bg-[#121620]/40">
-                <p className="text-xs text-slate-400 font-medium">{label}</p>
-                <p className={`text-lg font-extrabold mt-1 font-mono ${color}`}>{value}</p>
-                {sub && <p className="text-[10px] text-slate-500 mt-0.5">{sub}</p>}
+  const pnl = agg.include_charges ? agg.net_pnl : agg.total_pnl;
+  const pnlUp = pnl >= 0;
+  const alpha = niftyReturn !== null ? agg.total_return_pct - niftyReturn : null;
+
+  // Heat gauge scale (limit sits at ~62% of the track so the danger zone is visible)
+  const heatScaleMax = Math.max(agg.heat_limit * 1.6, agg.heat_pct * 1.1, 1);
+  const heatFill = Math.min((agg.heat_pct / heatScaleMax) * 100, 100);
+  const limitPos = Math.min((agg.heat_limit / heatScaleMax) * 100, 100);
+  const heatOver = agg.heat_pct > agg.heat_limit;
+  const heatColor = heatOver ? 'bg-rose-500' : agg.heat_pct > agg.heat_limit * 0.75 ? 'bg-amber-500' : 'bg-emerald-500';
+
+  const regimeStyle =
+    agg.regime === 'BULL' ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30'
+    : agg.regime === 'BEAR' ? 'text-rose-400 bg-rose-500/10 border-rose-500/30'
+    : 'text-amber-400 bg-amber-500/10 border-amber-500/30';
+
+  const allocation = [...holdings]
+    .sort((a, b) => b.current_val - a.current_val)
+    .map((h, i) => ({
+      label: h.instrument,
+      pct: agg.total_current > 0 ? (h.current_val / agg.total_current) * 100 : 0,
+      color: COLORS[i % COLORS.length],
+    }));
+
+  const sectionLabel = (text: string, Icon: React.ElementType) => (
+    <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+      <Icon className="w-3.5 h-3.5" /> {text}
+    </div>
+  );
+
+  return (
+    <div className="flex-1 flex flex-col gap-4 p-6 overflow-y-auto max-h-full">
+      {header}
+
+      {/* ── Hero: Value + Risk ─────────────────────────────────────────────── */}
+      <div className="shrink-0 grid grid-cols-1 lg:grid-cols-3 gap-4">
+
+        {/* Value hero */}
+        <div className="lg:col-span-2 relative overflow-hidden rounded-2xl border border-slate-800/80 bg-gradient-to-br from-[#15131f] via-[#121620] to-[#0e1016] px-5 py-4">
+          <div className="absolute -top-16 -right-10 w-48 h-48 bg-purple-600/10 blur-3xl rounded-full pointer-events-none" />
+          <div className="relative flex items-center justify-between gap-6 h-full flex-wrap">
+            {/* Value */}
+            <div className="shrink-0">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Current Value</span>
+              <div className="flex items-end gap-2.5 mt-1 flex-wrap">
+                <span className="text-3xl font-extrabold text-white font-mono tracking-tight leading-none">₹{fmtINR0(agg.total_current)}</span>
+                <span className={`flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-lg border ${pnlUp ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/25' : 'text-rose-400 bg-rose-500/10 border-rose-500/25'}`}>
+                  {pnlUp ? <ArrowUpRight className="w-3.5 h-3.5" /> : <ArrowDownRight className="w-3.5 h-3.5" />}
+                  {signed(agg.total_return_pct)}%
+                </span>
               </div>
+            </div>
+
+            {/* Inline stats */}
+            <div className="flex items-center gap-6 sm:gap-8">
+              {[
+                { label: 'Invested', value: `₹${fmtINR0(agg.total_invested)}`, color: 'text-slate-200' },
+                { label: agg.include_charges ? 'Net P&L' : 'P&L', value: `${pnlUp ? '+' : ''}₹${fmtINR0(pnl)}`, color: pnlText(pnl) },
+                {
+                  label: 'Alpha vs NIFTY',
+                  value: alpha !== null ? `${signed(alpha)}%` : '—',
+                  color: alpha === null ? 'text-slate-500' : alpha >= 0 ? 'text-purple-300' : 'text-amber-400',
+                },
+                { label: 'Positions', value: String(agg.positions), color: 'text-slate-200' },
+              ].map(({ label, value, color }) => (
+                <div key={label}>
+                  <p className="text-[10px] uppercase tracking-wide text-slate-500">{label}</p>
+                  <p className={`text-sm font-extrabold font-mono mt-0.5 ${color}`}>{value}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Risk & Regime */}
+        <div className="rounded-2xl border border-slate-800/80 bg-[#121620]/50 px-4 py-3.5 flex flex-col gap-2.5">
+          <div className="flex items-center justify-between">
+            {sectionLabel('Risk & Regime', ShieldAlert)}
+            <span className={`text-[11px] font-bold px-2 py-0.5 rounded-md border ${regimeStyle}`}>{agg.regime}</span>
+          </div>
+
+          {/* Heat gauge */}
+          <div>
+            <div className="flex items-end justify-between mb-1.5">
+              <span className="text-xs text-slate-400 flex items-center gap-1.5"><Gauge className="w-3.5 h-3.5" /> Portfolio Heat</span>
+              <span className={`text-sm font-mono font-bold ${heatOver ? 'text-rose-400' : 'text-emerald-400'}`}>
+                {fmt(agg.heat_pct)}% <span className="text-[10px] text-slate-500 font-normal">/ {fmt(agg.heat_limit, 0)}%</span>
+              </span>
+            </div>
+            <div className="relative h-2 bg-slate-900 rounded-full">
+              <div className={`h-full rounded-full transition-all ${heatColor}`} style={{ width: `${heatFill}%` }} />
+              <div className="absolute -top-0.5 -bottom-0.5 w-px bg-slate-400/70" style={{ left: `${limitPos}%` }} title={`${fmt(agg.heat_limit, 0)}% cap`} />
+            </div>
+            {heatOver && (
+              <p className="text-[10px] text-rose-400 mt-1.5">Above {agg.regime.toLowerCase()}-market limit — pause new buys.</p>
+            )}
+          </div>
+
+          {/* mini stats */}
+          <div className="grid grid-cols-2 gap-2.5">
+            <div className="rounded-lg bg-slate-900/40 border border-slate-800/60 px-2.5 py-2">
+              <p className="text-[10px] uppercase tracking-wide text-slate-500">Open Risk</p>
+              <p className="text-sm font-bold font-mono text-slate-200 mt-0.5">₹{fmtINR0(agg.open_risk)}</p>
+            </div>
+            <div className="rounded-lg bg-slate-900/40 border border-slate-800/60 px-2.5 py-2">
+              <p className="text-[10px] uppercase tracking-wide text-slate-500">Breadth &gt;200d</p>
+              <p className="text-sm font-bold font-mono text-slate-200 mt-0.5">{fmt(agg.breadth_pct, 0)}%</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Allocation ─────────────────────────────────────────────────────── */}
+      <div className="shrink-0 rounded-2xl border border-slate-800/80 bg-[#121620]/40 px-5 py-3.5">
+        <div className="flex items-center justify-between mb-3">
+          {sectionLabel('Allocation by Value', PieChart)}
+          {agg.clusters.length > 0 && (
+            <span className="text-[10px] text-amber-400 flex items-center gap-1">
+              <ShieldAlert className="w-3 h-3" />
+              Concentration: {agg.clusters.map(c => `${c.instrument} ${c.weight_pct}%`).join(' · ')} (cap {fmt(agg.max_cluster_pct, 0)}%)
+            </span>
+          )}
+        </div>
+        <div className="flex h-3 rounded-full overflow-hidden gap-0.5">
+          {allocation.map(bar => (
+            <div key={bar.label} className={`${bar.color} transition-all`} style={{ width: `${bar.pct}%` }} title={`${bar.label}: ${bar.pct.toFixed(1)}%`} />
+          ))}
+        </div>
+        <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-3">
+          {allocation.map(bar => (
+            <div key={bar.label} className="flex items-center gap-1.5 text-[11px] text-slate-400">
+              <span className={`w-2 h-2 rounded-full ${bar.color}`} />
+              {bar.label} <span className="text-slate-600 font-mono">{bar.pct.toFixed(1)}%</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Holdings table ─────────────────────────────────────────────────── */}
+      <div className="shrink-0 rounded-2xl border border-slate-800/80 bg-[#121620]/50 overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-800/70">
+          {sectionLabel('Holdings', BarChart2)}
+          <span className="text-xs text-slate-500 font-mono">{holdings.length}</span>
+        </div>
+        <div className="overflow-auto">
+          <table className="w-full border-collapse text-sm">
+            <thead className="sticky top-0 z-10">
+              <tr className="bg-[#0e1016] text-[10px] text-slate-500 uppercase tracking-wider font-semibold">
+                <th className="py-2.5 pl-5 pr-3 text-left font-semibold">Instrument</th>
+                <th className="py-2.5 px-3 text-right font-semibold">Qty</th>
+                <th className="py-2.5 px-3 text-right font-semibold">Avg · LTP</th>
+                <th className="py-2.5 px-3 text-right font-semibold">Cur. Value</th>
+                <th className="py-2.5 px-3 text-right font-semibold">P&amp;L</th>
+                <th className="py-2.5 px-3 text-right font-semibold">Return</th>
+                <th className="py-2.5 px-2 text-right font-semibold" title="1-week return">1W</th>
+                <th className="py-2.5 px-2 text-right font-semibold" title="2-week return">2W</th>
+                <th className="py-2.5 px-2 text-right font-semibold" title="3-week return">3W</th>
+                <th className="py-2.5 px-2 text-right font-semibold" title="4-week return">4W</th>
+                <th className="py-2.5 px-3 text-center font-semibold">Bias</th>
+                <th className="py-2.5 px-3 text-center font-semibold">MTF</th>
+                <th className="py-2.5 px-3 text-right font-semibold">ATR%</th>
+                <th className="py-2.5 px-3 text-right font-semibold">Risk · Stop</th>
+                <th className="py-2.5 px-3 text-right font-semibold">RS</th>
+                <th className="py-2.5 pr-5 pl-3 text-center font-semibold"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {holdings.map((h: PortfolioHolding) => {
+                const bull = h.pnl >= 0;
+                const { c: biasC, Icon: BiasIcon } = biasChip(h.bias);
+                return (
+                  <tr key={h.instrument} className={`border-t border-slate-800/50 hover:bg-slate-800/25 transition ${h.weak ? 'bg-amber-950/[0.07]' : ''}`}>
+                    <td className="py-3 pl-0 pr-3">
+                      <div className="flex items-stretch">
+                        <span className={`w-1 rounded-full mr-3 ${biasAccent(h.bias)}`} />
+                        <div className="flex items-center gap-1.5 py-0.5">
+                          <span className="font-bold text-white font-mono tracking-wide">{h.instrument}</span>
+                          {!h.matched && <span className="text-[9px] text-amber-500" title="Not in synced universe">⚠</span>}
+                          {h.weak && (
+                            <span className="text-[8px] font-bold px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/30 text-amber-400" title={h.weak_reason ?? ''}>
+                              ROTATE
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="py-3 px-3 text-right font-mono text-slate-300">{h.qty.toLocaleString('en-IN')}</td>
+                    <td className="py-3 px-3 text-right font-mono text-slate-400 whitespace-nowrap">
+                      ₹{fmtINR(h.avg_cost)}<span className="text-slate-600"> · </span>
+                      <span className="text-slate-200" title={h.ltp_source === 'imported' ? 'From CSV (not synced)' : 'Latest synced close'}>
+                        ₹{fmtINR(h.ltp)}{h.ltp_source === 'imported' && <span className="text-[9px] text-amber-500">*</span>}
+                      </span>
+                    </td>
+                    <td className="py-3 px-3 text-right font-mono text-white">₹{fmtINR0(h.current_val)}</td>
+                    <td className={`py-3 px-3 text-right font-mono font-semibold ${pnlText(h.pnl)}`}>
+                      {bull ? '+' : ''}₹{fmtINR0(h.pnl)}
+                    </td>
+                    <td className={`py-3 px-3 text-right font-mono font-semibold ${pnlText(h.return_pct)}`}>
+                      {signed(h.return_pct)}%
+                    </td>
+                    {[h.ret_1w, h.ret_2w, h.ret_3w, h.ret_4w].map((r, i) => (
+                      <td key={i} className={`py-3 px-2 text-right font-mono text-xs ${r === null ? 'text-slate-600' : pnlText(r)}`}>
+                        {r === null ? '—' : `${signed(r, 1)}%`}
+                      </td>
+                    ))}
+                    <td className="py-3 px-3 text-center">
+                      {h.bias ? (
+                        <span className={`inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-md border ${biasC}`}>
+                          <BiasIcon className="w-2.5 h-2.5" />{h.bias}
+                        </span>
+                      ) : <span className="text-slate-600">—</span>}
+                    </td>
+                    <td className="py-3 px-3 text-center">
+                      {h.mtf_confirmed === null ? <span className="text-slate-600">—</span>
+                        : h.mtf_confirmed
+                          ? <span className="inline-flex w-5 h-5 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-400 text-xs" title="Daily bias confirmed by weekly trend">✓</span>
+                          : <span className="inline-flex w-5 h-5 items-center justify-center rounded-full bg-slate-700/40 text-slate-500 text-xs" title={`Weekly trend: ${h.weekly_trend ?? 'n/a'}`}>✗</span>}
+                    </td>
+                    <td className={`py-3 px-3 text-right font-mono ${volText(h.vol_class)}`} title={h.vol_class ?? ''}>
+                      {h.atr_pct !== null ? `${fmt(h.atr_pct)}%` : '—'}
+                    </td>
+                    <td className="py-3 px-3 text-right font-mono text-slate-300 whitespace-nowrap">
+                      {h.open_risk !== null
+                        ? <>₹{fmtINR0(h.open_risk)}<span className="text-slate-600 text-[10px]"> @{fmtINR0(h.stop ?? 0)}</span></>
+                        : '—'}
+                    </td>
+                    <td className={`py-3 px-3 text-right font-mono ${h.rs_score_1m !== null && h.rs_score_1m >= 1 ? 'text-emerald-400' : 'text-slate-400'}`}>
+                      {h.rs_score_1m !== null ? fmt(h.rs_score_1m) : '—'}
+                    </td>
+                    <td className="py-3 pr-5 pl-3 text-center">
+                      <button
+                        onClick={() => handleInspect(h.instrument)}
+                        className="px-2.5 py-1 rounded-md bg-slate-900 border border-slate-800 hover:border-purple-500/80 text-slate-400 hover:text-white text-xs transition cursor-pointer"
+                      >
+                        View
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        <p className="text-[10px] text-slate-600 px-5 py-3 border-t border-slate-800/50">
+          <span className="text-amber-500">*</span> LTP from CSV (symbol not synced). Bias, MTF and risk are computed server-side from synced EOD data.
+        </p>
+      </div>
+
+      {/* ── Rotation candidates ────────────────────────────────────────────── */}
+      <div className="shrink-0 rounded-2xl border border-slate-800/80 bg-[#121620]/40 p-5">
+        <div className="flex items-center justify-between mb-1">
+          {sectionLabel('Rotation Candidates', Sparkles)}
+          {agg.weak_holdings.length > 0 && (
+            <span className="text-[10px] text-amber-400">
+              {agg.weak_holdings.length} weak position{agg.weak_holdings.length > 1 ? 's' : ''}: {agg.weak_holdings.join(', ')}
+            </span>
+          )}
+        </div>
+        <p className="text-[11px] text-slate-500 mb-4">
+          Strong bullish, weekly-confirmed names you don't hold (non-high-volatility), ranked by momentum — to rotate weak positions into.
+        </p>
+        {agg.replacement_candidates.length === 0 ? (
+          <p className="text-xs text-slate-600 py-6 text-center">
+            No qualifying candidates right now — the broad market regime is {agg.regime.toLowerCase()}.
+          </p>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {agg.replacement_candidates.map((c, i) => (
+              <button
+                key={c.symbol}
+                onClick={() => handleInspect(c.symbol)}
+                className="group text-left p-3.5 rounded-xl bg-slate-900/40 border border-slate-800/70 hover:border-emerald-500/40 hover:bg-emerald-950/10 transition cursor-pointer"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-mono text-slate-600">#{i + 1}</span>
+                    <span className="text-sm font-bold text-white font-mono group-hover:text-emerald-300 transition">{c.symbol}</span>
+                  </div>
+                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded border text-emerald-400 bg-emerald-500/10 border-emerald-500/25">
+                    {c.bias}
+                  </span>
+                </div>
+                <p className="text-[10px] text-slate-500 truncate mt-1">{c.company_name}</p>
+                <div className="flex items-center gap-3 mt-2.5 text-[10px] font-mono text-slate-400">
+                  <span className="text-slate-300">₹{fmtINR0(c.close_price)}</span>
+                  {c.rsi_14 !== null && <span>RSI {c.rsi_14}</span>}
+                  {c.atr_pct !== null && <span className={volText(c.vol_class)}>ATR {fmt(c.atr_pct)}%</span>}
+                  <span className="ml-auto text-emerald-400/70 flex items-center gap-0.5"><TrendingUp className="w-3 h-3" />{c.weekly_trend}</span>
+                </div>
+              </button>
             ))}
           </div>
-
-          {/* ── Benchmark vs NIFTY ────────────────────────────────────────── */}
-          {niftyReturn !== null && (
-            <div className="p-4 rounded-xl border border-slate-800/80 bg-[#121620]/30 flex items-center justify-between gap-4">
-              <div className="text-xs text-slate-400">
-                <span className="font-semibold text-slate-300">Portfolio vs NIFTY 50</span>
-                <span className="ml-2 text-slate-500">(1-Year return)</span>
-              </div>
-              <div className="flex items-center gap-6">
-                <div className="text-center">
-                  <p className="text-[10px] text-slate-500">Your Portfolio</p>
-                  <p className={`text-sm font-extrabold font-mono ${totalReturnPct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                    {totalReturnPct >= 0 ? '+' : ''}{totalReturnPct.toFixed(2)}%
-                  </p>
-                </div>
-                <div className="text-slate-600 text-sm">vs</div>
-                <div className="text-center">
-                  <p className="text-[10px] text-slate-500">NIFTY 50</p>
-                  <p className={`text-sm font-extrabold font-mono ${niftyReturn >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                    {niftyReturn >= 0 ? '+' : ''}{niftyReturn.toFixed(2)}%
-                  </p>
-                </div>
-                <div className="text-center">
-                  <p className="text-[10px] text-slate-500">Alpha</p>
-                  <p className={`text-sm font-extrabold font-mono ${(totalReturnPct - niftyReturn) >= 0 ? 'text-purple-400' : 'text-amber-400'}`}>
-                    {(totalReturnPct - niftyReturn) >= 0 ? '+' : ''}{(totalReturnPct - niftyReturn).toFixed(2)}%
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* ── Allocation Strip ───────────────────────────────────────────── */}
-          {allocationBars.length > 0 && (
-            <div className="p-4 rounded-xl border border-slate-800/80 bg-[#121620]/30">
-              <p className="text-xs font-semibold text-slate-400 mb-3">Portfolio Allocation by Current Value</p>
-              <div className="flex h-4 rounded-full overflow-hidden gap-0.5">
-                {allocationBars.map((bar, i) => (
-                  <div
-                    key={bar.label}
-                    className={`${COLORS[i % COLORS.length]} transition-all`}
-                    style={{ width: `${bar.pct}%` }}
-                    title={`${bar.label}: ${bar.pct.toFixed(1)}%`}
-                  />
-                ))}
-              </div>
-              <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2">
-                {allocationBars.map((bar, i) => (
-                  <div key={bar.label} className="flex items-center gap-1.5 text-[10px] text-slate-400">
-                    <span className={`w-2 h-2 rounded-full ${COLORS[i % COLORS.length]}`} />
-                    {bar.label} <span className="text-slate-500">({bar.pct.toFixed(1)}%)</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* ── P&L Bar Chart ─────────────────────────────────────────────── */}
-          <div className="p-4 rounded-xl border border-slate-800/80 bg-[#121620]/30">
-            <p className="text-xs font-semibold text-slate-400 mb-4">P&amp;L per Holding</p>
-            <div className="space-y-2.5">
-              {[...portfolioHoldings]
-                .sort((a, b) => b.pnl - a.pnl)
-                .map(h => {
-                  const maxAbs = Math.max(...portfolioHoldings.map(x => Math.abs(x.pnl)), 1);
-                  const barPct = Math.abs(h.pnl) / maxAbs * 100;
-                  const bull = h.pnl >= 0;
-                  return (
-                    <div key={h.instrument} className="flex items-center gap-3">
-                      <span className="text-xs font-mono font-bold text-slate-300 w-24 shrink-0 truncate">{h.instrument}</span>
-                      <div className="flex-1 h-5 bg-slate-900 rounded-full overflow-hidden">
-                        <div
-                          className={`h-full rounded-full transition-all ${bull ? 'bg-emerald-500/70' : 'bg-rose-500/70'}`}
-                          style={{ width: `${barPct}%` }}
-                        />
-                      </div>
-                      <span className={`text-xs font-mono font-semibold w-24 text-right shrink-0 ${pnlClass(h.pnl)}`}>
-                        {bull ? '+' : ''}₹{fmtINR(h.pnl)}
-                      </span>
-                    </div>
-                  );
-                })}
-            </div>
-          </div>
-
-          {/* ── Holdings Table ─────────────────────────────────────────────── */}
-          <div className="bg-[#121620]/60 rounded-xl border border-slate-800/80 p-4 flex flex-col">
-            <h3 className="text-sm font-bold text-white mb-3 flex items-center gap-2">
-              Holdings
-              <span className="text-xs text-slate-500 font-normal font-mono">({portfolioHoldings.length})</span>
-            </h3>
-            <div className="overflow-auto">
-              <table className="w-full border-collapse text-left text-sm">
-                <thead>
-                  <tr className="border-b border-slate-800 text-xs text-slate-400 uppercase tracking-wider font-mono">
-                    <th className="py-2.5 px-3">Instrument</th>
-                    <th className="py-2.5 px-3 text-right">Qty</th>
-                    <th className="py-2.5 px-3 text-right">Avg Cost</th>
-                    <th className="py-2.5 px-3 text-right">LTP</th>
-                    <th className="py-2.5 px-3 text-right">Invested</th>
-                    <th className="py-2.5 px-3 text-right">Current Val</th>
-                    <th className="py-2.5 px-3 text-right">P&amp;L</th>
-                    <th className="py-2.5 px-3 text-right">Return</th>
-                    <th className="py-2.5 px-3 text-center">Chart</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-850">
-                  {portfolioHoldings.map((h: PortfolioHolding) => {
-                    const bull = h.pnl >= 0;
-                    return (
-                      <tr key={h.instrument} className="hover:bg-slate-900/40 transition">
-                        <td className="py-3 px-3 font-bold text-white font-mono tracking-wide">
-                          {h.instrument}
-                        </td>
-                        <td className="py-3 px-3 text-right font-mono text-slate-300">
-                          {h.qty.toLocaleString('en-IN')}
-                        </td>
-                        <td className="py-3 px-3 text-right font-mono text-slate-300">
-                          ₹{fmtINR(h.avgCost)}
-                        </td>
-                        <td className="py-3 px-3 text-right font-mono text-slate-300">
-                          ₹{fmtINR(h.ltp)}
-                        </td>
-                        <td className="py-3 px-3 text-right font-mono text-slate-400">
-                          ₹{fmtINR(h.invested)}
-                        </td>
-                        <td className="py-3 px-3 text-right font-mono text-white">
-                          ₹{fmtINR(h.currentVal)}
-                        </td>
-                        <td className={`py-3 px-3 text-right font-mono font-semibold ${pnlClass(h.pnl)}`}>
-                          <span className="flex items-center justify-end gap-1">
-                            {bull ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
-                            {bull ? '+' : ''}₹{fmtINR(h.pnl)}
-                          </span>
-                        </td>
-                        <td className={`py-3 px-3 text-right font-mono font-semibold ${pnlClass(h.netChgPct)}`}>
-                          {bull ? '+' : ''}{fmt(h.netChgPct)}%
-                        </td>
-                        <td className="py-3 px-3 text-center">
-                          <button
-                            onClick={() => handleInspect(h.instrument)}
-                            className="px-2.5 py-1 rounded bg-slate-900 border border-slate-800 hover:border-purple-500/80 text-slate-400 hover:text-white text-xs transition cursor-pointer"
-                          >
-                            View
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </>
-      )}
+        )}
+      </div>
     </div>
   );
 };

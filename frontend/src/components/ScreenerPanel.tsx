@@ -535,6 +535,18 @@ export const ScreenerPanel: React.FC = () => {
                 <th className="py-2.5 px-3 cursor-pointer hover:text-white transition" onClick={() => handleSort('price_pct_change')}>
                   Change % {renderSortIcon('price_pct_change')}
                 </th>
+                <th className="py-2.5 px-2 text-right cursor-pointer hover:text-white transition" title="1-week return" onClick={() => handleSort('ret_1w')}>
+                  1W {renderSortIcon('ret_1w')}
+                </th>
+                <th className="py-2.5 px-2 text-right cursor-pointer hover:text-white transition" title="2-week return" onClick={() => handleSort('ret_2w')}>
+                  2W {renderSortIcon('ret_2w')}
+                </th>
+                <th className="py-2.5 px-2 text-right cursor-pointer hover:text-white transition" title="3-week return" onClick={() => handleSort('ret_3w')}>
+                  3W {renderSortIcon('ret_3w')}
+                </th>
+                <th className="py-2.5 px-2 text-right cursor-pointer hover:text-white transition" title="4-week return" onClick={() => handleSort('ret_4w')}>
+                  4W {renderSortIcon('ret_4w')}
+                </th>
                 <th className="py-2.5 px-3 cursor-pointer hover:text-white transition" onClick={() => handleSort('weekly_avg_volume')}>
                   Weekly Avg Vol {renderSortIcon('weekly_avg_volume')}
                 </th>
@@ -575,7 +587,7 @@ export const ScreenerPanel: React.FC = () => {
             <tbody className="divide-y divide-slate-850">
               {sortedResults.length === 0 ? (
                 <tr>
-                  <td colSpan={15} className="py-12 text-center text-slate-500 text-sm">
+                  <td colSpan={19} className="py-12 text-center text-slate-500 text-sm">
                     {isLoading 
                       ? 'Executing database snapshot sweep...' 
                       : 'No stock matches found for the current filter criteria.'}
@@ -609,6 +621,15 @@ export const ScreenerPanel: React.FC = () => {
                       <td className={`py-3 px-3 font-mono ${isChangeBullish ? 'text-emerald-400' : 'text-rose-400'}`}>
                         {isChangeBullish ? '+' : ''}{formatNumber(row.price_pct_change)}%
                       </td>
+
+                      {/* Rolling weekly returns 1W/2W/3W/4W */}
+                      {[row.ret_1w, row.ret_2w, row.ret_3w, row.ret_4w].map((r, i) => (
+                        <td key={i} className={`py-3 px-2 text-right font-mono text-xs ${
+                          r === null || r === undefined ? 'text-slate-600' : r >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                        }`}>
+                          {r === null || r === undefined ? '—' : `${r >= 0 ? '+' : ''}${r.toFixed(1)}%`}
+                        </td>
+                      ))}
 
                       {/* Weekly Avg Vol */}
                       <td className="py-3 px-3 font-mono text-slate-300">

@@ -11,6 +11,72 @@ class TradePlannerService:
     def __init__(self, risk_per_trade_inr: float = 5000.0):
         self.risk_per_trade = risk_per_trade_inr
 
+    @staticmethod
+    def compute_bias(
+        close: float | None,
+        sma_50: float | None,
+        sma_200: float | None,
+        ema_21: float | None,
+        macd_histogram: float | None,
+        rsi_14: float | None,
+        neutral_band_pct: float = 2.0,
+    ) -> tuple[str, list[str]]:
+        """Multi-factor directional bias with a NEUTRAL deadband around SMA200.
+
+        Replaces the naive ``close > sma200 ? BULLISH : BEARISH`` binary that
+        collapsed ~56% of symbols to BEARISH. A symbol is only BULLISH/BEARISH
+        when the trend leaves the deadband AND at least one momentum factor
+        (MACD histogram, RSI zone, EMA21 vs SMA50) confirms in the same
+        direction; otherwise it is NEUTRAL.
+
+        Returns (bias, reasons) where bias ∈ {BULLISH, NEUTRAL, BEARISH}.
+        """
+        reasons: list[str] = []
+
+        if close is None or sma_200 is None or sma_200 <= 0:
+            return "NEUTRAL", ["Insufficient data — no SMA200 baseline"]
+
+        band = sma_200 * (max(neutral_band_pct, 0.0) / 100.0)
+        if close > sma_200 + band:
+            trend = "UP"
+            reasons.append(f"Price {close:.2f} > SMA200 {sma_200:.2f} by more than {neutral_band_pct:.1f}%")
+        elif close < sma_200 - band:
+            trend = "DOWN"
+            reasons.append(f"Price {close:.2f} < SMA200 {sma_200:.2f} by more than {neutral_band_pct:.1f}%")
+        else:
+            trend = "FLAT"
+            reasons.append(f"Price within ±{neutral_band_pct:.1f}% of SMA200 — neutral band")
+
+        confirms_up = 0
+        confirms_down = 0
+        if macd_histogram is not None:
+            if macd_histogram > 0:
+                confirms_up += 1
+                reasons.append("MACD histogram positive")
+            elif macd_histogram < 0:
+                confirms_down += 1
+                reasons.append("MACD histogram negative")
+        if rsi_14 is not None:
+            if rsi_14 >= 55:
+                confirms_up += 1
+                reasons.append(f"RSI {rsi_14:.0f} ≥ 55")
+            elif rsi_14 <= 45:
+                confirms_down += 1
+                reasons.append(f"RSI {rsi_14:.0f} ≤ 45")
+        if ema_21 is not None and sma_50 is not None:
+            if ema_21 > sma_50:
+                confirms_up += 1
+                reasons.append("EMA21 above SMA50")
+            elif ema_21 < sma_50:
+                confirms_down += 1
+                reasons.append("EMA21 below SMA50")
+
+        if trend == "UP" and confirms_up >= 1:
+            return "BULLISH", reasons
+        if trend == "DOWN" and confirms_down >= 1:
+            return "BEARISH", reasons
+        return "NEUTRAL", reasons
+
     def calculate_trade_plan(
         self, symbol: str, latest_price: float, atr_14: float, support: float, resistance: float
     ) -> dict[str, Any]:

@@ -324,6 +324,12 @@ async def lifespan(app: FastAPI):
     except Exception as exc:
         logger.warning(f"EnsureCreated skipped: {exc}")
 
+    # ③b — patch in columns missing from EXISTING tables (create_all never ALTERs)
+    try:
+        db_manager.ensure_columns()
+    except Exception as exc:
+        logger.warning(f"ensure_columns skipped: {exc}")
+
     # ④ — migrations
     _run_pending_migrations(connection_string)
 

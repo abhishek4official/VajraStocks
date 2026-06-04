@@ -10,7 +10,8 @@ import type {
   ScreenerRow,
   CorporateAction,
   SyncJob,
-  SymbolSyncStatus
+  SymbolSyncStatus,
+  PortfolioData
 } from '../services/api';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -38,17 +39,6 @@ interface ScreenerFilters {
 }
 
 export type ChartOverlay = 'sma20' | 'sma50' | 'sma200' | 'ema9' | 'ema21' | 'bb' | 'sr' | 'nifty';
-
-export interface PortfolioHolding {
-  instrument: string;   // raw ticker e.g. RELIANCE
-  qty: number;
-  avgCost: number;
-  ltp: number;
-  invested: number;
-  currentVal: number;
-  pnl: number;
-  netChgPct: number;
-}
 
 export interface WatchlistItem {
   symbol: string;       // e.g. RELIANCE.NS
@@ -114,8 +104,9 @@ interface StockState {
   addCustomLine: (symbol: string, price: number) => void;
   removeCustomLines: (symbol: string) => void;
 
-  // Portfolio
-  portfolioHoldings: PortfolioHolding[];
+  // Portfolio (backend-computed)
+  portfolio: PortfolioData | null;
+  portfolioLoading: boolean;
 
   // Watchlists
   watchlists: Watchlist[];
@@ -135,9 +126,10 @@ interface StockState {
   setAiQuery: (query: string) => void;
   clearAiConsole: () => void;
 
-  // Portfolio actions
-  importPortfolioCSV: (csvText: string) => void;
-  clearPortfolio: () => void;
+  // Portfolio actions (backend-driven)
+  fetchPortfolio: () => Promise<void>;
+  importPortfolioFile: (file: File) => Promise<void>;
+  clearPortfolio: () => Promise<void>;
 
   // Watchlist actions
   createWatchlist: (name: string) => void;
@@ -166,13 +158,11 @@ interface StockState {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const PORTFOLIO_KEY = 'vajra_portfolio';
 const WATCHLIST_KEY = 'vajra_watchlists';
 
-function loadPortfolio(): PortfolioHolding[] {
-  try { return JSON.parse(localStorage.getItem(PORTFOLIO_KEY) || '[]'); }
-  catch { return []; }
-}
+// Portfolio holdings now live in the backend DB (single source of truth).
+// Any stale browser copy from older versions is discarded.
+try { localStorage.removeItem('vajra_portfolio'); } catch { /* ignore */ }
 
 function loadWatchlists(): Watchlist[] {
   try {
@@ -181,10 +171,6 @@ function loadWatchlists(): Watchlist[] {
   } catch { /* ignore */ }
   // Seed with one default list
   return [{ id: crypto.randomUUID(), name: 'My Watchlist', items: [] }];
-}
-
-function savePortfolio(holdings: PortfolioHolding[]) {
-  localStorage.setItem(PORTFOLIO_KEY, JSON.stringify(holdings));
 }
 
 function saveWatchlists(wl: Watchlist[]) {
@@ -202,58 +188,6 @@ function saveAlerts(a: WatchlistAlert[]) {
   localStorage.setItem(ALERTS_KEY, JSON.stringify(a));
 }
 
-/** Parse a Zerodha Console holdings CSV export.
- *  Handles Indian number formatting (commas) and various column name styles.
- */
-function parseZerodhaCSV(csvText: string): PortfolioHolding[] {
-  const lines = csvText.trim().split('\n').map(l => l.trim()).filter(Boolean);
-  if (lines.length < 2) return [];
-
-  // Find header line (first line containing "Instrument" or "instrument")
-  const headerIdx = lines.findIndex(l => /instrument/i.test(l));
-  if (headerIdx === -1) return [];
-
-  const headers = lines[headerIdx].split(',').map(h => h.trim().replace(/"/g, '').toLowerCase());
-
-  const col = (row: string[], keys: string[]): string => {
-    for (const k of keys) {
-      const idx = headers.findIndex(h => h.includes(k));
-      if (idx !== -1 && row[idx] !== undefined) return row[idx].replace(/"/g, '').trim();
-    }
-    return '0';
-  };
-
-  const num = (s: string): number => {
-    // Strip Indian comma formatting and currency symbols
-    const clean = s.replace(/[₹,\s]/g, '').replace(/−/g, '-');
-    const n = parseFloat(clean);
-    return isNaN(n) ? 0 : n;
-  };
-
-  const holdings: PortfolioHolding[] = [];
-
-  for (let i = headerIdx + 1; i < lines.length; i++) {
-    const row = lines[i].split(',');
-    if (row.length < 3) continue;
-
-    const instrument = col(row, ['instrument']).toUpperCase().replace('.NS', '').replace(' NS', '').trim();
-    if (!instrument) continue;
-
-    const qty = num(col(row, ['qty', 'quantity']));
-    const avgCost = num(col(row, ['avg. cost', 'avg cost', 'average cost', 'avg.cost']));
-    const ltp = num(col(row, ['ltp', 'last traded', 'cur. price', 'current price']));
-    const invested = num(col(row, ['invested', 'buy value', 'buy val'])) || qty * avgCost;
-    const currentVal = num(col(row, ['cur. val', 'curr. val', 'current val', 'curval', 'market value'])) || qty * ltp;
-    const pnl = num(col(row, ['p&l', 'pnl', 'unrealised p&l', 'profit'])) || currentVal - invested;
-    const netChgPct = invested !== 0 ? (pnl / invested) * 100 : 0;
-
-    if (qty > 0 && instrument.length > 0) {
-      holdings.push({ instrument, qty, avgCost, ltp, invested, currentVal, pnl, netChgPct });
-    }
-  }
-
-  return holdings;
-}
 
 function getInitialTab(): TabId {
   const path = window.location.pathname.replace(/^\/+/, '').split('/')[0];
@@ -334,7 +268,8 @@ export const useStockStore = create<StockState>((set, get) => ({
   aiRecommendation: null,
   aiConfidence: null,
 
-  portfolioHoldings: loadPortfolio(),
+  portfolio: null,
+  portfolioLoading: false,
   watchlists: loadWatchlists(),
   activeWatchlistId: null,
   alerts: loadAlerts(),
@@ -367,15 +302,34 @@ export const useStockStore = create<StockState>((set, get) => ({
 
   // ── Portfolio ──────────────────────────────────────────────────────────────
 
-  importPortfolioCSV: (csvText) => {
-    const holdings = parseZerodhaCSV(csvText);
-    savePortfolio(holdings);
-    set({ portfolioHoldings: holdings });
+  fetchPortfolio: async () => {
+    set({ portfolioLoading: true, error: null });
+    try {
+      const portfolio = await apiService.getPortfolio();
+      set({ portfolio, portfolioLoading: false });
+    } catch (err: unknown) {
+      set({ error: (err as Error).message || 'Failed to load portfolio', portfolioLoading: false });
+    }
   },
 
-  clearPortfolio: () => {
-    savePortfolio([]);
-    set({ portfolioHoldings: [] });
+  importPortfolioFile: async (file) => {
+    set({ portfolioLoading: true, error: null });
+    try {
+      const portfolio = await apiService.importPortfolio(file);
+      set({ portfolio, portfolioLoading: false });
+    } catch (err: unknown) {
+      set({ error: (err as Error).message || 'Failed to import portfolio CSV', portfolioLoading: false });
+    }
+  },
+
+  clearPortfolio: async () => {
+    set({ error: null });
+    try {
+      await apiService.clearPortfolio();
+      set({ portfolio: null });
+    } catch (err: unknown) {
+      set({ error: (err as Error).message || 'Failed to clear portfolio' });
+    }
   },
 
   // ── Watchlists ─────────────────────────────────────────────────────────────
