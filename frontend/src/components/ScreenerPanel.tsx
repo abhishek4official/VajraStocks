@@ -547,6 +547,15 @@ export const ScreenerPanel: React.FC = () => {
                 <th className="py-2.5 px-2 text-right cursor-pointer hover:text-white transition" title="4-week return" onClick={() => handleSort('ret_4w')}>
                   4W {renderSortIcon('ret_4w')}
                 </th>
+                <th className="py-2.5 px-2 text-right cursor-pointer hover:text-white transition" title="Stop-loss = close − 1.5×ATR" onClick={() => handleSort('stop_loss')}>
+                  Stop {renderSortIcon('stop_loss')}
+                </th>
+                <th className="py-2.5 px-2 text-right cursor-pointer hover:text-white transition" title="Target 1 = close + 1.5×ATR" onClick={() => handleSort('target_1')}>
+                  T1 {renderSortIcon('target_1')}
+                </th>
+                <th className="py-2.5 px-2 text-right cursor-pointer hover:text-white transition" title="Potential gain % to Target 1" onClick={() => handleSort('potential_gain_pct')}>
+                  Upside {renderSortIcon('potential_gain_pct')}
+                </th>
                 <th className="py-2.5 px-3 cursor-pointer hover:text-white transition" onClick={() => handleSort('weekly_avg_volume')}>
                   Weekly Avg Vol {renderSortIcon('weekly_avg_volume')}
                 </th>
@@ -587,7 +596,7 @@ export const ScreenerPanel: React.FC = () => {
             <tbody className="divide-y divide-slate-850">
               {sortedResults.length === 0 ? (
                 <tr>
-                  <td colSpan={19} className="py-12 text-center text-slate-500 text-sm">
+                  <td colSpan={22} className="py-12 text-center text-slate-500 text-sm">
                     {isLoading 
                       ? 'Executing database snapshot sweep...' 
                       : 'No stock matches found for the current filter criteria.'}
@@ -630,6 +639,17 @@ export const ScreenerPanel: React.FC = () => {
                           {r === null || r === undefined ? '—' : `${r >= 0 ? '+' : ''}${r.toFixed(1)}%`}
                         </td>
                       ))}
+
+                      {/* ATR-based trade setup: Stop / Target 1 / Upside% */}
+                      <td className="py-3 px-2 text-right font-mono text-xs text-rose-400/80">
+                        {row.stop_loss == null ? '—' : `₹${formatNumber(row.stop_loss)}`}
+                      </td>
+                      <td className="py-3 px-2 text-right font-mono text-xs text-emerald-400/90">
+                        {row.target_1 == null ? '—' : `₹${formatNumber(row.target_1)}`}
+                      </td>
+                      <td className="py-3 px-2 text-right font-mono text-xs text-emerald-400">
+                        {row.potential_gain_pct == null ? '—' : `+${row.potential_gain_pct.toFixed(1)}%`}
+                      </td>
 
                       {/* Weekly Avg Vol */}
                       <td className="py-3 px-3 font-mono text-slate-300">

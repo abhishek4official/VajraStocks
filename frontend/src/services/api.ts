@@ -58,6 +58,8 @@ export interface PortfolioHolding {
   ret_2w: number | null;
   ret_3w: number | null;
   ret_4w: number | null;
+  target_1: number | null;
+  potential_gain_pct: number | null;
 }
 
 export interface ReplacementCandidate {
@@ -69,6 +71,13 @@ export interface ReplacementCandidate {
   vol_class: 'LOW' | 'MEDIUM' | 'HIGH' | null;
   bias: 'BULLISH' | 'NEUTRAL' | 'BEARISH' | null;
   weekly_trend: 'UP' | 'DOWN' | null;
+  ret_1w: number | null;
+  ret_2w: number | null;
+  ret_3w: number | null;
+  ret_4w: number | null;
+  stop_loss: number | null;
+  target_1: number | null;
+  potential_gain_pct: number | null;
 }
 
 export interface PortfolioAggregates {
@@ -166,6 +175,10 @@ export interface ScreenerRow {
   ret_2w?: number | null;
   ret_3w?: number | null;
   ret_4w?: number | null;
+  atr_pct?: number | null;
+  stop_loss?: number | null;
+  target_1?: number | null;
+  potential_gain_pct?: number | null;
 }
 
 export interface CorporateAction {

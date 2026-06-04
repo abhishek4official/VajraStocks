@@ -299,6 +299,7 @@ export const PortfolioPanel: React.FC = () => {
                 <th className="py-2.5 px-3 text-center font-semibold">MTF</th>
                 <th className="py-2.5 px-3 text-right font-semibold">ATR%</th>
                 <th className="py-2.5 px-3 text-right font-semibold">Risk · Stop</th>
+                <th className="py-2.5 px-3 text-right font-semibold" title="ATR-based first target (close + 1.5×ATR) and % upside">Target 1</th>
                 <th className="py-2.5 px-3 text-right font-semibold">RS</th>
                 <th className="py-2.5 pr-5 pl-3 text-center font-semibold"></th>
               </tr>
@@ -361,6 +362,11 @@ export const PortfolioPanel: React.FC = () => {
                     <td className="py-3 px-3 text-right font-mono text-slate-300 whitespace-nowrap">
                       {h.open_risk !== null
                         ? <>₹{fmtINR0(h.open_risk)}<span className="text-slate-600 text-[10px]"> @{fmtINR0(h.stop ?? 0)}</span></>
+                        : '—'}
+                    </td>
+                    <td className="py-3 px-3 text-right font-mono text-slate-300 whitespace-nowrap">
+                      {h.target_1 !== null
+                        ? <>₹{fmtINR0(h.target_1)}<span className="text-emerald-400/80 text-[10px]"> +{fmt(h.potential_gain_pct ?? 0, 1)}%</span></>
                         : '—'}
                     </td>
                     <td className={`py-3 px-3 text-right font-mono ${h.rs_score_1m !== null && h.rs_score_1m >= 1 ? 'text-emerald-400' : 'text-slate-400'}`}>
@@ -426,6 +432,26 @@ export const PortfolioPanel: React.FC = () => {
                   {c.atr_pct !== null && <span className={volText(c.vol_class)}>ATR {fmt(c.atr_pct)}%</span>}
                   <span className="ml-auto text-emerald-400/70 flex items-center gap-0.5"><TrendingUp className="w-3 h-3" />{c.weekly_trend}</span>
                 </div>
+
+                {/* Weekly returns */}
+                <div className="flex items-center gap-2 mt-2 text-[10px] font-mono">
+                  {([['1W', c.ret_1w], ['2W', c.ret_2w], ['3W', c.ret_3w], ['4W', c.ret_4w]] as const).map(([lbl, r]) => (
+                    <span key={lbl} className="flex flex-col items-center">
+                      <span className="text-slate-600 text-[8px]">{lbl}</span>
+                      <span className={r === null ? 'text-slate-600' : r >= 0 ? 'text-emerald-400' : 'text-rose-400'}>
+                        {r === null ? '—' : `${r >= 0 ? '+' : ''}${r.toFixed(1)}`}
+                      </span>
+                    </span>
+                  ))}
+                </div>
+
+                {/* Trade setup: stop / target / upside */}
+                {c.target_1 !== null && (
+                  <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-800/60 text-[10px] font-mono">
+                    <span className="text-rose-400/80">SL ₹{fmtINR0(c.stop_loss ?? 0)}</span>
+                    <span className="text-emerald-400">T1 ₹{fmtINR0(c.target_1)} <span className="text-emerald-400/70">+{fmt(c.potential_gain_pct ?? 0, 1)}%</span></span>
+                  </div>
+                )}
               </button>
             ))}
           </div>

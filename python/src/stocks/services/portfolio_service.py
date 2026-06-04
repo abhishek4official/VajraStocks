@@ -185,14 +185,17 @@ class PortfolioService:
             pnl = current_val - invested
             return_pct = (pnl / invested * 100.0) if invested else 0.0
 
-            # Per-position open risk via ATR stop (1.5x ATR below LTP)
+            # Per-position open risk via ATR stop (1.5x ATR below LTP),
+            # plus an ATR-based first target (T1 = LTP + 1.5x ATR).
             atr_pct = float(snap.atr_pct) if snap and snap.atr_pct is not None else None
-            stop = open_risk = None
+            stop = open_risk = target_1 = potential_gain_pct = None
             if atr_pct is not None and ltp > 0:
                 atr_abs = atr_pct / 100.0 * ltp
                 stop = round(ltp - 1.5 * atr_abs, 2)
                 open_risk = round(float(r.qty) * (ltp - stop), 2)
                 total_open_risk += open_risk
+                target_1 = round(ltp + 1.5 * atr_abs, 2)
+                potential_gain_pct = round(1.5 * atr_pct, 2)
 
             if snap and snap.sma_200_cross_direction == "ABOVE":
                 above_sma200 += 1
@@ -236,6 +239,8 @@ class PortfolioService:
                     "ret_2w": round(float(snap.ret_2w), 2) if snap and snap.ret_2w is not None else None,
                     "ret_3w": round(float(snap.ret_3w), 2) if snap and snap.ret_3w is not None else None,
                     "ret_4w": round(float(snap.ret_4w), 2) if snap and snap.ret_4w is not None else None,
+                    "target_1": target_1,
+                    "potential_gain_pct": potential_gain_pct,
                 }
             )
 
@@ -319,19 +324,36 @@ class PortfolioService:
             .order_by(ScreeningSnapshot.rsi_14.desc())
             .limit(limit)
         ).all()
-        return [
-            {
-                "symbol": sn.symbol.replace(".NS", ""),
-                "company_name": sn.company_name,
-                "close_price": round(float(sn.close_price), 2),
-                "rsi_14": round(float(sn.rsi_14), 1) if sn.rsi_14 is not None else None,
-                "atr_pct": round(float(sn.atr_pct), 2) if sn.atr_pct is not None else None,
-                "vol_class": sn.vol_class,
-                "bias": sn.regime_bias,
-                "weekly_trend": sn.weekly_trend,
-            }
-            for sn in rows
-        ]
+        out = []
+        for sn in rows:
+            close = round(float(sn.close_price), 2)
+            atr_pct = round(float(sn.atr_pct), 2) if sn.atr_pct is not None else None
+            stop = target_1 = gain = None
+            if atr_pct is not None and close > 0:
+                atr_abs = atr_pct / 100.0 * close
+                stop = round(close - 1.5 * atr_abs, 2)
+                target_1 = round(close + 1.5 * atr_abs, 2)
+                gain = round(1.5 * atr_pct, 2)
+            out.append(
+                {
+                    "symbol": sn.symbol.replace(".NS", ""),
+                    "company_name": sn.company_name,
+                    "close_price": close,
+                    "rsi_14": round(float(sn.rsi_14), 1) if sn.rsi_14 is not None else None,
+                    "atr_pct": atr_pct,
+                    "vol_class": sn.vol_class,
+                    "bias": sn.regime_bias,
+                    "weekly_trend": sn.weekly_trend,
+                    "ret_1w": round(float(sn.ret_1w), 2) if sn.ret_1w is not None else None,
+                    "ret_2w": round(float(sn.ret_2w), 2) if sn.ret_2w is not None else None,
+                    "ret_3w": round(float(sn.ret_3w), 2) if sn.ret_3w is not None else None,
+                    "ret_4w": round(float(sn.ret_4w), 2) if sn.ret_4w is not None else None,
+                    "stop_loss": stop,
+                    "target_1": target_1,
+                    "potential_gain_pct": gain,
+                }
+            )
+        return out
 
     def _market_regime(self, holdings: list[dict]) -> str:
         """Returns BULL / NEUTRAL / BEAR from NIFTY 50 bias, else holdings majority."""
