@@ -1,13 +1,24 @@
 ; Inno Setup script for VajraStocks Windows installer
 ; Produces: VajraStocks-Setup.exe
-; Requires: PyInstaller output at dist\VajraStocks\
+; Requires: PyInstaller onedir output at ..\..\dist\VajraStocks\
+;
+; Called by GitHub Actions with  APP_VERSION  set in the environment:
+;   ISCC /Q setup.iss
+; Or locally:
+;   set APP_VERSION=1.0.0 && ISCC setup.iss
 
-#define AppName    "VajraStocks"
-#define AppVersion GetEnv("APP_VERSION")
+#define AppName      "VajraStocks"
 #define AppPublisher "Abhishek"
-#define AppURL     "https://github.com/abhishek4official/VajraStocks"
-#define AppExeName "VajraStocks.exe"
-#define SrcDir     "..\..\dist\VajraStocks"
+#define AppURL       "https://github.com/abhishek4official/VajraStocks"
+#define AppExeName   "VajraStocks.exe"
+#define SrcDir       "..\..\dist\VajraStocks"
+#define IconFile     "..\assets\icon.ico"
+
+; Use APP_VERSION env var; fall back to "1.0.0" if not set
+#define AppVersion GetEnv("APP_VERSION")
+#if AppVersion == ""
+  #define AppVersion "1.0.0"
+#endif
 
 [Setup]
 AppId={{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}
@@ -20,10 +31,12 @@ AppUpdatesURL={#AppURL}/releases
 DefaultDirName={autopf}\{#AppName}
 DefaultGroupName={#AppName}
 AllowNoIcons=yes
-LicenseFile=..\..\LICENSE
+; Only set SetupIconFile if the icon actually exists — avoids compile error
+#if FileExists(IconFile)
+SetupIconFile={#IconFile}
+#endif
 OutputDir=..\..\release
 OutputBaseFilename=VajraStocks-Setup
-SetupIconFile=..\assets\icon.ico
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern
@@ -48,18 +61,28 @@ Name: "{group}\{cm:UninstallProgram,{#AppName}}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; WorkingDir: "{app}"; Tasks: desktopicon
 
 [Registry]
-Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "{#AppName}"; ValueData: """{app}\{#AppExeName}"""; Flags: uninsdeletevalue; Tasks: startupicon
+; Auto-start: written only when user selects the startup task
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; \
+  ValueType: string; ValueName: "{#AppName}"; \
+  ValueData: """{app}\{#AppExeName}"""; \
+  Flags: uninsdeletevalue; Tasks: startupicon
 
 [Run]
-Filename: "{app}\{#AppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(AppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#AppExeName}"; \
+  Description: "{cm:LaunchProgram,{#StringChange(AppName, '&', '&&')}}"; \
+  Flags: nowait postinstall skipifsilent
 
 [UninstallDelete]
+; Remove the user-data folder created at runtime (db, logs)
 Type: filesandordirs; Name: "{app}\data"
 
 [Code]
-// Kill any running VajraStocks instance before uninstall
+var ResultCode: Integer;
+
+// Kill any running VajraStocks process before uninstall proceeds
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 begin
   if CurUninstallStep = usUninstall then
-    Exec('taskkill.exe', '/F /IM VajraStocks.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM VajraStocks.exe',
+         '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
 end;

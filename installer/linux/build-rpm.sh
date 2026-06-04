@@ -6,10 +6,10 @@
 set -euo pipefail
 
 VERSION="${1:?Usage: build-rpm.sh <version>}"
-RELEASE="1"
 DIST_SRC="dist/VajraStocks"
 RELEASE_DIR="release"
-RPM_BUILD_DIR="rpm-build"
+RPM_BUILD_DIR="$(pwd)/rpm-build"
+HAS_ICON=0
 
 echo "Building .rpm for version ${VERSION}"
 
@@ -17,26 +17,35 @@ echo "Building .rpm for version ${VERSION}"
 rm -rf "${RPM_BUILD_DIR}"
 mkdir -p "${RPM_BUILD_DIR}"/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
 
-# ── Bundle sources ─────────────────────────────────────────────────────────────
-TARBALL="${RPM_BUILD_DIR}/SOURCES/vajrastocks-${VERSION}.tar.gz"
-tar -czf "${TARBALL}" -C "$(dirname "${DIST_SRC}")" "$(basename "${DIST_SRC}")" \
-    --transform "s|^VajraStocks|vajrastocks-${VERSION}|"
+# ── Pre-stage the app bundle directly in BUILD/ ───────────────────────────────
+# We skip %prep / tarball extraction — just copy the binary bundle in.
+APP_BUILD_DIR="${RPM_BUILD_DIR}/BUILD/vajrastocks-${VERSION}"
+mkdir -p "${APP_BUILD_DIR}"
+cp -r "${DIST_SRC}/." "${APP_BUILD_DIR}/"
+chmod +x "${APP_BUILD_DIR}/VajraStocks"
 
-# ── Icon ──────────────────────────────────────────────────────────────────────
+# ── Optional icon ─────────────────────────────────────────────────────────────
 if [[ -f "installer/assets/icon.png" ]]; then
   cp installer/assets/icon.png "${RPM_BUILD_DIR}/SOURCES/vajrastocks.png"
+  HAS_ICON=1
+fi
+
+# ── Conditional icon lines for spec ───────────────────────────────────────────
+ICON_INSTALL_LINE=""
+ICON_FILE_LINE=""
+if [[ "${HAS_ICON}" -eq 1 ]]; then
+  ICON_INSTALL_LINE="cp %{_topdir}/SOURCES/vajrastocks.png %{buildroot}/usr/share/pixmaps/"
+  ICON_FILE_LINE="/usr/share/pixmaps/vajrastocks.png"
 fi
 
 # ── Spec file ─────────────────────────────────────────────────────────────────
-cat > "${RPM_BUILD_DIR}/SPECS/vajrastocks.spec" << EOF
+cat > "${RPM_BUILD_DIR}/SPECS/vajrastocks.spec" << SPECEOF
 Name:           vajrastocks
 Version:        ${VERSION}
-Release:        ${RELEASE}%{?dist}
+Release:        1%{?dist}
 Summary:        NSE Stock Analysis Platform
 License:        Proprietary
 URL:            https://github.com/abhishek4official/VajraStocks
-Source0:        vajrastocks-%{version}.tar.gz
-Source1:        vajrastocks.png
 BuildArch:      x86_64
 
 %description
@@ -50,7 +59,8 @@ mkdir -p %{buildroot}/usr/bin
 mkdir -p %{buildroot}/usr/share/applications
 mkdir -p %{buildroot}/usr/share/pixmaps
 
-cp -r %{_sourcedir}/../BUILD/vajrastocks-%{version}/. %{buildroot}/opt/vajrastocks/
+# Copy the pre-staged bundle (no tarball / %prep needed)
+cp -r %{_topdir}/BUILD/vajrastocks-${VERSION}/. %{buildroot}/opt/vajrastocks/
 chmod +x %{buildroot}/opt/vajrastocks/VajraStocks
 
 cat > %{buildroot}/usr/bin/vajrastocks << 'LAUNCHER'
@@ -59,9 +69,7 @@ exec /opt/vajrastocks/VajraStocks "\$@"
 LAUNCHER
 chmod +x %{buildroot}/usr/bin/vajrastocks
 
-if [ -f %{_sourcedir}/vajrastocks.png ]; then
-  cp %{_sourcedir}/vajrastocks.png %{buildroot}/usr/share/pixmaps/
-fi
+${ICON_INSTALL_LINE}
 
 cat > %{buildroot}/usr/share/applications/vajrastocks.desktop << 'DESKTOP'
 [Desktop Entry]
@@ -79,21 +87,17 @@ DESKTOP
 /opt/vajrastocks/
 /usr/bin/vajrastocks
 /usr/share/applications/vajrastocks.desktop
-%{?_sourcedir:/usr/share/pixmaps/vajrastocks.png}
+${ICON_FILE_LINE}
 
 %post
 update-desktop-database /usr/share/applications 2>/dev/null || true
 
 %preun
 pkill -x VajraStocks 2>/dev/null || true
-EOF
+SPECEOF
 
 # ── Build ─────────────────────────────────────────────────────────────────────
-# Extract source so %install can copy it
-mkdir -p "${RPM_BUILD_DIR}/BUILD/vajrastocks-${VERSION}"
-tar -xzf "${TARBALL}" -C "${RPM_BUILD_DIR}/BUILD/" --strip-components=1
-
-rpmbuild --define "_topdir $(pwd)/${RPM_BUILD_DIR}" \
+rpmbuild --define "_topdir ${RPM_BUILD_DIR}" \
          -bb "${RPM_BUILD_DIR}/SPECS/vajrastocks.spec"
 
 mkdir -p "${RELEASE_DIR}"
