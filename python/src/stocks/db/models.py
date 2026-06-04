@@ -383,6 +383,35 @@ class PortfolioHolding(Base):
     )
 
 
+class Alert(Base):
+    """A triggered or armed alert for a symbol — evaluated post-sync."""
+
+    __tablename__ = "alerts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    symbol_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("symbols.id", ondelete="CASCADE"), nullable=True
+    )
+    symbol: Mapped[str] = mapped_column(String(50), nullable=False)
+    alert_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    # PRICE_CROSS_SUPPORT / PRICE_CROSS_RESISTANCE / STOP_HIT / TARGET_HIT /
+    # RSI_EXTREME / MACD_CROSS / SUPERTREND_FLIP / VOLUME_BREAKOUT /
+    # BIAS_UPGRADE / BIAS_DOWNGRADE
+    condition_value: Mapped[float | None] = mapped_column(Float, nullable=True)  # threshold that triggered
+    status: Mapped[str] = mapped_column(String(15), nullable=False, default="TRIGGERED")
+    # TRIGGERED / DISMISSED
+    scope: Mapped[str] = mapped_column(String(15), nullable=False, default="HOLDING")
+    # HOLDING / GLOBAL
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    triggered_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=func.now())
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=func.now())
+
+    __table_args__ = (
+        Index("ix_alerts_symbol_status", "symbol", "status"),
+        Index("ix_alerts_triggered_at", "triggered_at"),
+    )
+
+
 class SymbolConfluenceLevel(Base):
     """Model representing cached backend-calculated Confluence Support and Resistance levels."""
 

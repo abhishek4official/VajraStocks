@@ -12,7 +12,8 @@ import type {
   SyncJob,
   SymbolSyncStatus,
   PortfolioData,
-  ConfluenceLevel
+  ConfluenceLevel,
+  StockAlert,
 } from '../services/api';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -110,6 +111,10 @@ interface StockState {
   portfolio: PortfolioData | null;
   portfolioLoading: boolean;
 
+  // Stock alerts (backend-evaluated post-sync)
+  stockAlerts: StockAlert[];
+  stockAlertsLoading: boolean;
+
   // Watchlists
   watchlists: Watchlist[];
   activeWatchlistId: string | null;
@@ -132,6 +137,11 @@ interface StockState {
   fetchPortfolio: () => Promise<void>;
   importPortfolioFile: (file: File) => Promise<void>;
   clearPortfolio: () => Promise<void>;
+
+  // Stock alert actions
+  fetchStockAlerts: () => Promise<void>;
+  dismissStockAlert: (id: number) => Promise<void>;
+  dismissAllStockAlerts: () => Promise<void>;
 
   // Watchlist actions
   createWatchlist: (name: string) => void;
@@ -274,6 +284,8 @@ export const useStockStore = create<StockState>((set, get) => ({
 
   portfolio: null,
   portfolioLoading: false,
+  stockAlerts: [],
+  stockAlertsLoading: false,
   watchlists: loadWatchlists(),
   activeWatchlistId: null,
   alerts: loadAlerts(),
@@ -333,6 +345,36 @@ export const useStockStore = create<StockState>((set, get) => ({
       set({ portfolio: null });
     } catch (err: unknown) {
       set({ error: (err as Error).message || 'Failed to clear portfolio' });
+    }
+  },
+
+  // ── Stock Alerts ───────────────────────────────────────────────────────────
+
+  fetchStockAlerts: async () => {
+    set({ stockAlertsLoading: true });
+    try {
+      const stockAlerts = await apiService.getAlerts('TRIGGERED');
+      set({ stockAlerts, stockAlertsLoading: false });
+    } catch {
+      set({ stockAlertsLoading: false });
+    }
+  },
+
+  dismissStockAlert: async (id: number) => {
+    try {
+      await apiService.dismissAlert(id);
+      set(state => ({ stockAlerts: state.stockAlerts.filter(a => a.id !== id) }));
+    } catch {
+      // silently ignore
+    }
+  },
+
+  dismissAllStockAlerts: async () => {
+    try {
+      await apiService.dismissAllAlerts();
+      set({ stockAlerts: [] });
+    } catch {
+      // silently ignore
     }
   },
 

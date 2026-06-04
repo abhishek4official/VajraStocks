@@ -122,6 +122,17 @@ export interface PortfolioData {
   aggregates: PortfolioAggregates;
 }
 
+export interface StockAlert {
+  id: number;
+  symbol: string;
+  alert_type: string;
+  condition_value: number | null;
+  status: 'TRIGGERED' | 'DISMISSED';
+  scope: string;
+  message: string;
+  triggered_at: string;
+}
+
 export interface CandleData {
   time: string; // YYYY-MM-DD
   open: number;
@@ -461,5 +472,26 @@ export const apiService = {
     const response = await fetch(`${BASE_URL}/sync/cancel`, { method: 'POST' });
     if (!response.ok) throw new Error('Failed to cancel active sync jobs');
     return response.json();
-  }
+  },
+
+  // 7. Alerts
+  async getAlerts(status?: string, limit = 100): Promise<StockAlert[]> {
+    const params = new URLSearchParams();
+    if (status) params.set('status', status);
+    params.set('limit', String(limit));
+    const response = await fetch(`${BASE_URL}/alerts?${params}`);
+    if (!response.ok) throw new Error('Failed to fetch alerts');
+    return response.json();
+  },
+
+  async dismissAlert(id: number): Promise<void> {
+    const response = await fetch(`${BASE_URL}/alerts/${id}/dismiss`, { method: 'POST' });
+    if (!response.ok) throw new Error('Failed to dismiss alert');
+  },
+
+  async dismissAllAlerts(): Promise<{ dismissed: number }> {
+    const response = await fetch(`${BASE_URL}/alerts/dismiss-all`, { method: 'POST' });
+    if (!response.ok) throw new Error('Failed to dismiss all alerts');
+    return response.json();
+  },
 };

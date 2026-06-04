@@ -25,6 +25,8 @@ import {
   IndianRupee,
   Bookmark,
   TrendingUp,
+  Bell,
+  X,
 } from 'lucide-react';
 import './App.css';
 
@@ -79,7 +81,13 @@ function Dashboard() {
     customLines,
     addCustomLine,
     removeCustomLines,
+    stockAlerts,
+    fetchStockAlerts,
+    dismissStockAlert,
+    dismissAllStockAlerts,
   } = useStockStore();
+
+  const [showAlerts, setShowAlerts] = useState(false);
 
   const [indicatorToShow, setIndicatorToShow] = useState<'RSI' | 'MACD' | 'NONE'>('RSI');
   const [drawMode, setDrawMode] = useState(false);
@@ -125,6 +133,7 @@ function Dashboard() {
   useEffect(() => {
     fetchSymbols();
     fetchNiftyCandles(); // attempt to load NIFTY data for overlay — silently fails if not synced
+    fetchStockAlerts();  // load triggered alerts on startup
 
     const handlePopState = () => {
       const path = window.location.pathname.replace(/^\/+/, '').split('/')[0];
@@ -213,6 +222,64 @@ function Dashboard() {
           >
             <Settings className="w-3.5 h-3.5" />
           </button>
+
+          {/* Alerts bell */}
+          <div className="relative">
+            <button
+              onClick={() => setShowAlerts(v => !v)}
+              title="Alerts"
+              className="relative flex items-center gap-1.5 px-2 py-1.5 rounded-md transition duration-150 cursor-pointer text-slate-500 hover:text-slate-300"
+            >
+              <Bell className="w-3.5 h-3.5" />
+              {stockAlerts.length > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 min-w-[14px] h-[14px] flex items-center justify-center bg-rose-500 text-white text-[9px] font-bold rounded-full px-0.5">
+                  {stockAlerts.length > 99 ? '99+' : stockAlerts.length}
+                </span>
+              )}
+            </button>
+
+            {showAlerts && (
+              <div className="absolute right-0 top-full mt-1 w-96 max-h-96 overflow-y-auto bg-[#0f1117] border border-slate-700 rounded-xl shadow-2xl z-50">
+                <div className="flex items-center justify-between px-3 py-2 border-b border-slate-700">
+                  <span className="text-xs font-bold text-slate-200">Alerts ({stockAlerts.length})</span>
+                  <div className="flex gap-2">
+                    {stockAlerts.length > 0 && (
+                      <button
+                        onClick={() => { dismissAllStockAlerts(); }}
+                        className="text-[10px] text-slate-400 hover:text-slate-200"
+                      >
+                        Dismiss all
+                      </button>
+                    )}
+                    <button onClick={() => setShowAlerts(false)} className="text-slate-400 hover:text-slate-200">
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+                {stockAlerts.length === 0 ? (
+                  <p className="text-xs text-slate-500 px-3 py-4 text-center">No active alerts.</p>
+                ) : (
+                  <ul className="divide-y divide-slate-800">
+                    {stockAlerts.map(alert => (
+                      <li key={alert.id} className="flex items-start gap-2 px-3 py-2.5 hover:bg-slate-800/40">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[11px] font-semibold text-slate-200 truncate">{alert.symbol.replace('.NS', '')}</p>
+                          <p className="text-[10px] text-slate-400 mt-0.5 leading-tight">{alert.message}</p>
+                          <p className="text-[9px] text-slate-600 mt-0.5">{new Date(alert.triggered_at).toLocaleString('en-IN')}</p>
+                        </div>
+                        <button
+                          onClick={() => dismissStockAlert(alert.id)}
+                          className="text-slate-600 hover:text-slate-400 mt-0.5 flex-shrink-0"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+          </div>
         </nav>
 
         {/* Global Loading Spinner */}
