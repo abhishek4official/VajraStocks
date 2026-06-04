@@ -157,7 +157,7 @@ def get_trade_plan(symbol: str, db: Session = Depends(get_db)):
         "target_2": exe["targets"][1],
         "entry_zone": exe["entry_zone"],
         "position_size_shares": exe["position_size_shares"],
-        "risk_reward_ratio": exe["risk_reward_ratio"],
+        "rr_ratio": exe["risk_reward_ratio"],
         "sma_200": round(sma_200, 2) if sma_200 is not None else None,
         "rsi_14": round(rsi_14, 1) if rsi_14 is not None else None,
         "risk_per_trade": risk_amount,

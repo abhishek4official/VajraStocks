@@ -25,7 +25,7 @@ export interface TradePlan {
   target_2: number;
   entry_zone: string;
   position_size_shares: number;
-  risk_reward_ratio: number;
+  rr_ratio: number;
   sma_200: number | null;
   rsi_14: number | null;
   risk_per_trade: number;

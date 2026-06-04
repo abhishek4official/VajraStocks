@@ -77,7 +77,7 @@ export const TradePlanCard: React.FC = () => {
           { label: 'Stop Loss',   value: `₹${fmtINR(plan.stop_loss)}`, color: 'text-rose-400'    },
           { label: 'Target 1',    value: `₹${fmtINR(plan.target_1)}`,  color: 'text-emerald-400' },
           { label: 'Target 2',    value: `₹${fmtINR(plan.target_2)}`,  color: 'text-emerald-300' },
-          { label: 'R:R Ratio',   value: `1 : ${plan.risk_reward_ratio.toFixed(2)}`, color: plan.risk_reward_ratio >= 1.5 ? 'text-emerald-400' : 'text-amber-400' },
+          { label: 'R:R Ratio',   value: `1 : ${plan.rr_ratio.toFixed(2)}`, color: plan.rr_ratio >= 1.5 ? 'text-emerald-400' : 'text-amber-400' },
         ].map(({ label, value, color }) => (
           <div key={label} className="bg-slate-900/50 rounded-lg p-2.5 border border-slate-800/60">
             <p className="text-[10px] text-slate-500">{label}</p>
@@ -98,7 +98,7 @@ export const TradePlanCard: React.FC = () => {
       </div>
 
       {/* Warning if R:R too low */}
-      {plan.risk_reward_ratio < 1 && (
+      {plan.rr_ratio < 1 && (
         <div className="flex items-center gap-1.5 text-[10px] text-amber-400 bg-amber-950/20 border border-amber-900/30 rounded-lg px-3 py-2">
           <AlertTriangle className="w-3 h-3 shrink-0" />
           R:R below 1:1 — consider waiting for a better entry near support
