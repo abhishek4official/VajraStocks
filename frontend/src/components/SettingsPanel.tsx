@@ -4,6 +4,7 @@ import {
   Power, RefreshCw, RotateCcw, Save, Settings, Wifi, WifiOff,
 } from 'lucide-react';
 import { invalidateSettingsCache } from '../hooks/useSettings';
+import { API_BASE, API_ROOT } from '../lib/apiBase';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -28,7 +29,7 @@ interface CategoryMeta {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const BASE = `${import.meta.env.VITE_API_BASE_URL}/api/v1`;
+const BASE = API_BASE;
 
 const RESTART_REQUIRED = new Set<string>([
   'DATABASE/db_connection_string', 'DATABASE/db_provider',
@@ -236,7 +237,7 @@ export const SettingsPanel: React.FC = () => {
         return;
       }
       try {
-        const r = await fetch(`${import.meta.env.VITE_API_BASE_URL}/health`, {
+        const r = await fetch(`${API_ROOT}/health`, {
           signal: AbortSignal.timeout(1500),
         });
         if (r.ok) {

@@ -1,29 +1,24 @@
 ; Inno Setup script for VajraStocks Windows installer
 ; Produces: VajraStocks-Setup.exe
-; Requires: PyInstaller onedir output at ..\..\dist\VajraStocks\
-;
-; Called by GitHub Actions with  APP_VERSION  set in the environment:
-;   ISCC /Q setup.iss
-; Or locally:
-;   set APP_VERSION=1.0.0 && ISCC setup.iss
 
 #define AppName      "VajraStocks"
-#define AppPublisher "Abhishek"
+#define AppPublisher "Abhishek Kumar"
 #define AppURL       "https://github.com/abhishek4official/VajraStocks"
 #define AppExeName   "VajraStocks.exe"
 #define SrcDir       "..\..\dist\VajraStocks"
 #define IconFile     "..\assets\icon.ico"
 
-; Use APP_VERSION env var; fall back to "1.0.0" if not set
 #define AppVersion GetEnv("APP_VERSION")
 #if AppVersion == ""
-  #define AppVersion "1.0.0"
+  #define AppVersion "1.0.2"
 #endif
 
 [Setup]
+; Keep AppId fixed forever — changing it creates a second Add/Remove Programs entry
 AppId={{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}
 AppName={#AppName}
 AppVersion={#AppVersion}
+AppVerName={#AppName} {#AppVersion}
 AppPublisher={#AppPublisher}
 AppPublisherURL={#AppURL}
 AppSupportURL={#AppURL}
@@ -31,7 +26,10 @@ AppUpdatesURL={#AppURL}/releases
 DefaultDirName={autopf}\{#AppName}
 DefaultGroupName={#AppName}
 AllowNoIcons=yes
-; Only set SetupIconFile if the icon actually exists — avoids compile error
+; Show in Add/Remove Programs with publisher, version, URL, and estimated size
+CreateUninstallRegKey=yes
+UninstallDisplayName={#AppName} {#AppVersion}
+UninstallDisplayIcon={app}\{#AppExeName}
 #if FileExists(IconFile)
 SetupIconFile={#IconFile}
 #endif
@@ -40,10 +38,15 @@ OutputBaseFilename=VajraStocks-Setup
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern
+; Require admin so we can write to Program Files
 PrivilegesRequired=admin
 PrivilegesRequiredOverridesAllowed=dialog
 ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0
+; Kill running instances and warn the user before install/upgrade
+CloseApplications=yes
+CloseApplicationsFilter={#AppExeName}
+RestartApplications=no
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -53,6 +56,7 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 Name: "startupicon"; Description: "Start VajraStocks automatically at Windows login"; GroupDescription: "Startup:"; Flags: unchecked
 
 [Files]
+; Always overwrite — ensures old files are fully replaced on upgrade
 Source: "{#SrcDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
@@ -61,7 +65,6 @@ Name: "{group}\{cm:UninstallProgram,{#AppName}}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; WorkingDir: "{app}"; Tasks: desktopicon
 
 [Registry]
-; Auto-start: written only when user selects the startup task
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; \
   ValueType: string; ValueName: "{#AppName}"; \
   ValueData: """{app}\{#AppExeName}"""; \
@@ -73,13 +76,34 @@ Filename: "{app}\{#AppExeName}"; \
   Flags: nowait postinstall skipifsilent
 
 [UninstallDelete]
-; Remove the user-data folder created at runtime (db, logs)
+; Remove the runtime data folder created by the app
 Type: filesandordirs; Name: "{app}\data"
 
 [Code]
 var ResultCode: Integer;
 
-// Kill any running VajraStocks process before uninstall proceeds
+// On upgrade: silently uninstall the previous version first so no stale files remain
+procedure CurStepChanged(CurStep: TSetupStep);
+var
+  UninstPath: string;
+  UninstExe:  string;
+begin
+  if CurStep = ssInstall then begin
+    UninstPath := ExpandConstant(
+      'Software\Microsoft\Windows\CurrentVersion\Uninstall\{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}_is1'
+    );
+    if RegQueryStringValue(HKLM, UninstPath, 'UninstallString', UninstExe) or
+       RegQueryStringValue(HKCU, UninstPath, 'UninstallString', UninstExe) then begin
+      UninstExe := RemoveQuotes(UninstExe);
+      if FileExists(UninstExe) then begin
+        Exec(UninstExe, '/SILENT /NORESTART', '', SW_HIDE,
+             ewWaitUntilTerminated, ResultCode);
+      end;
+    end;
+  end;
+end;
+
+// Kill any running VajraStocks process before uninstall
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 begin
   if CurUninstallStep = usUninstall then
