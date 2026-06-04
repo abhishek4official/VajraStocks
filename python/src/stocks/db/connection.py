@@ -262,7 +262,14 @@ class DatabaseManager:
             ("screening_snapshots", "obv_trend",            "VARCHAR(10)",  "VARCHAR(10)"),
             ("screening_snapshots", "supertrend_dir",       "VARCHAR(10)",  "VARCHAR(10)"),
             ("screening_snapshots", "stoch_state",          "VARCHAR(15)",  "VARCHAR(15)"),
+            # Composite score columns
+            ("screening_snapshots", "composite_score",      "FLOAT",        "FLOAT"),
+            ("screening_snapshots", "trend_score_val",      "FLOAT",        "FLOAT"),
+            ("screening_snapshots", "volume_score_val",     "FLOAT",        "FLOAT"),
+            ("screening_snapshots", "rs_score_val",         "FLOAT",        "FLOAT"),
+            ("screening_snapshots", "momentum_score_val",   "FLOAT",        "FLOAT"),
             # New DailyIndicator columns
+            ("daily_indicators",    "ema_20",               "FLOAT",        "FLOAT"),
             ("daily_indicators",    "adx_14",               "FLOAT",        "FLOAT"),
             ("daily_indicators",    "plus_di",              "FLOAT",        "FLOAT"),
             ("daily_indicators",    "minus_di",             "FLOAT",        "FLOAT"),

@@ -162,6 +162,7 @@ class DailyIndicator(Base):
     sma_50: Mapped[float | None] = mapped_column(Float, nullable=True)
     sma_200: Mapped[float | None] = mapped_column(Float, nullable=True)
     ema_9: Mapped[float | None] = mapped_column(Float, nullable=True)
+    ema_20: Mapped[float | None] = mapped_column(Float, nullable=True)
     ema_21: Mapped[float | None] = mapped_column(Float, nullable=True)
     macd_line: Mapped[float | None] = mapped_column(Float, nullable=True)
     macd_signal: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -325,6 +326,13 @@ class ScreeningSnapshot(Base):
     obv_trend: Mapped[str | None] = mapped_column(String(10), nullable=True)             # UP / DOWN / FLAT
     supertrend_dir: Mapped[str | None] = mapped_column(String(10), nullable=True)        # UP / DOWN
     stoch_state: Mapped[str | None] = mapped_column(String(15), nullable=True)           # OVERBOUGHT / OVERSOLD / NEUTRAL
+
+    # Composite scoring (0-100 per component + weighted total)
+    composite_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    trend_score_val: Mapped[float | None] = mapped_column(Float, nullable=True)
+    volume_score_val: Mapped[float | None] = mapped_column(Float, nullable=True)
+    rs_score_val: Mapped[float | None] = mapped_column(Float, nullable=True)
+    momentum_score_val: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     updated_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now())
 

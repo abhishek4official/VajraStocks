@@ -34,8 +34,9 @@ class IndicatorEngine:
             df_sorted["sma_50"] = ta.sma(df_sorted["close"], length=50)
             df_sorted["sma_200"] = ta.sma(df_sorted["close"], length=200)
 
-            # 4. EMAs (9, 21)
-            df_sorted["ema_9"] = ta.ema(df_sorted["close"], length=9)
+            # 4. EMAs (9, 20, 21)
+            df_sorted["ema_9"]  = ta.ema(df_sorted["close"], length=9)
+            df_sorted["ema_20"] = ta.ema(df_sorted["close"], length=20)
             df_sorted["ema_21"] = ta.ema(df_sorted["close"], length=21)
 
             # 5. MACD (12, 26, 9)

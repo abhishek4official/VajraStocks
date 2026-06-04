@@ -107,15 +107,25 @@ def _structural_trade_setup(
 
 
 def compute_trade_quality_score(snap, rr_ratio: float | None = None) -> float | None:
-    """Composite 0–100 quality score from materialised ScreeningSnapshot fields.
+    """Trade quality score (0-100) blending the composite signal score with R:R.
 
-    Weights: Trend 30%, Momentum 25%, Relative Strength 20%, Volume 15%, R:R 10%.
-    Returns None only when critical inputs are entirely absent (no indicators at all).
+    When composite_score is available in the snapshot (post-recalculation),
+    it drives 90% of the score; R:R adjusts the remaining 10%.
+    Falls back to a heuristic when composite_score is absent (legacy snapshots).
     """
     if snap is None:
         return None
 
-    # Trend strength (30%)
+    composite = getattr(snap, "composite_score", None)
+
+    if composite is not None:
+        # Primary path: use the pre-computed composite score
+        rr_component = 50.0
+        if rr_ratio is not None:
+            rr_component = min(100.0, max(0.0, rr_ratio / 3.0 * 100.0))
+        return round(0.90 * float(composite) + 0.10 * rr_component, 1)
+
+    # Legacy fallback (snapshots not yet recalculated)
     trend = 0
     if snap.sma_200_cross_direction == "ABOVE":
         trend += 40
@@ -125,66 +135,45 @@ def compute_trade_quality_score(snap, rr_ratio: float | None = None) -> float | 
         trend += 35
     elif snap.regime_bias == "NEUTRAL":
         trend += 15
-    # BEARISH / VERY_BEARISH → 0 (no addition)
     if snap.weekly_trend == "UP":
         trend += 15
     elif snap.weekly_trend is None:
         trend += 8
     if snap.mtf_confirmed:
         trend = min(trend + 10, 100)
-    # ADX trend strength bonus
     if getattr(snap, "trend_strength_class", None) == "STRONG":
         trend = min(trend + 10, 100)
-    # Supertrend confirmation bonus
     if getattr(snap, "supertrend_dir", None) == "UP":
         trend = min(trend + 5, 100)
     score = min(trend, 100) * 0.30
 
-    # Relative strength (20%)
     rs = 50.0
     if snap.rs_score_1m is not None:
         rs = min(100.0, max(0.0, float(snap.rs_score_1m) * 50.0))
     score += rs * 0.20
 
-    # Volume (15%)
     vol = {"HIGH": 100, "MEDIUM": 60, "LOW": 20}.get(snap.vol_class, 50)
-    # OBV accumulation bonus
     if getattr(snap, "obv_trend", None) == "UP":
         vol = min(vol + 15, 100)
     score += vol * 0.15
 
-    # Momentum (25%)
     mom = 0
     if snap.rsi_14 is not None:
         rsi = float(snap.rsi_14)
-        if rsi >= 70:
-            mom = 95
-        elif rsi >= 60:
-            mom = 82
-        elif rsi >= 50:
-            mom = 65
-        elif rsi >= 40:
-            mom = 40
-        elif rsi >= 30:
-            mom = 20
-        # else: mom stays 0
-    if snap.macd_trend == "BULLISH":
-        mom = min(mom + 12, 100)
-    if snap.ret_1w is not None and float(snap.ret_1w) > 0:
-        mom = min(mom + 8, 100)
-    if snap.ha_direction == "UP":
-        mom = min(mom + 5, 100)
-    # Stochastic not overbought bonus (momentum has room to run)
-    if getattr(snap, "stoch_state", None) == "NEUTRAL":
-        mom = min(mom + 5, 100)
+        if rsi >= 70: mom = 95
+        elif rsi >= 60: mom = 82
+        elif rsi >= 50: mom = 65
+        elif rsi >= 40: mom = 40
+        elif rsi >= 30: mom = 20
+    if snap.macd_trend == "BULLISH": mom = min(mom + 12, 100)
+    if snap.ret_1w is not None and float(snap.ret_1w) > 0: mom = min(mom + 8, 100)
+    if snap.ha_direction == "UP": mom = min(mom + 5, 100)
     score += mom * 0.25
 
-    # R:R (10%)
     rr = 50.0
     if rr_ratio is not None:
         rr = min(100.0, max(0.0, rr_ratio / 3.0 * 100.0))
     score += rr * 0.10
-
     return round(score, 1)
 
 
@@ -251,6 +240,11 @@ class ScreenerRowResponse(BaseModel):
     obv_trend: str | None = None
     supertrend_dir: str | None = None
     stoch_state: str | None = None
+    composite_score: float | None = None
+    trend_score_val: float | None = None
+    volume_score_val: float | None = None
+    rs_score_val: float | None = None
+    momentum_score_val: float | None = None
 
     class Config:
         from_attributes = True
@@ -312,6 +306,11 @@ def _build_row(r, confl_by_symbol_id: dict, risk_per_trade: float) -> dict:
         "obv_trend": getattr(r, "obv_trend", None),
         "supertrend_dir": getattr(r, "supertrend_dir", None),
         "stoch_state": getattr(r, "stoch_state", None),
+        "composite_score": getattr(r, "composite_score", None),
+        "trend_score_val": getattr(r, "trend_score_val", None),
+        "volume_score_val": getattr(r, "volume_score_val", None),
+        "rs_score_val": getattr(r, "rs_score_val", None),
+        "momentum_score_val": getattr(r, "momentum_score_val", None),
     }
 
 

@@ -222,6 +222,11 @@ export interface ScreenerRow {
   obv_trend?: string | null;
   supertrend_dir?: string | null;
   stoch_state?: string | null;
+  composite_score?: number | null;
+  trend_score_val?: number | null;
+  volume_score_val?: number | null;
+  rs_score_val?: number | null;
+  momentum_score_val?: number | null;
 }
 
 export interface CorporateAction {
