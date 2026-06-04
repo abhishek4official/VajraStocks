@@ -116,10 +116,28 @@ def main() -> None:
     # ── Expose resource root so main.py can find config/, migrations/, frontend/
     os.environ.setdefault("VAJRA_RESOURCE_ROOT", str(bundle))
 
-    # ── Point SQLite to the user-writable data dir (absolute path avoids cwd issues)
-    sqlite_url = f"sqlite:///{data / 'vajra.db'}"
-    os.environ.setdefault("VAJRA_DB_URL", sqlite_url)
     os.environ.setdefault("VAJRA_DATA_DIR", str(data))
+
+    # ── Resolve the database connection string ────────────────────────────────
+    # Priority:
+    #   1. VAJRA_DB_URL already set in environment (Docker / CI / test override)
+    #   2. connection_string in user config.yaml  (user changed DB via Settings)
+    #   3. SQLite in the user data dir             (safe default for new installs)
+    sqlite_url = f"sqlite:///{data / 'vajra.db'}"
+    if "VAJRA_DB_URL" not in os.environ:
+        db_url = sqlite_url          # default
+        try:
+            import yaml as _yaml
+            _cfg_path = _app_dir() / "config.yaml"
+            if _cfg_path.exists():
+                with open(_cfg_path, encoding="utf-8") as _f:
+                    _cfg = _yaml.safe_load(_f) or {}
+                _cs = _cfg.get("database", {}).get("connection_string", "")
+                if _cs and _cs.strip():
+                    db_url = _cs.strip()
+        except Exception:
+            pass                     # any parse error → keep SQLite default
+        os.environ["VAJRA_DB_URL"] = db_url
 
     # ── Alembic ini — read-only, lives in the bundle (no writes needed)
     alembic_ini = bundle / "alembic.ini"
