@@ -268,61 +268,15 @@ jobs:
             COMMITS=$(git log --pretty=format:"- %s (%h)" | head -40)
           fi
 
-          cat > /tmp/notes.md << 'MDEOF'
-# VajraStocks vVERSION_PLACEHOLDER
-
-NSE Stock Analysis Platform — release **vVERSION_PLACEHOLDER**
-
-## What's Changed
-
-COMMITS_PLACEHOLDER
-
-## Downloads
-
-| Platform | File |
-|----------|------|
-| Windows  | `VajraStocks-Setup.exe` |
-| Linux (Debian/Ubuntu) | `VajraStocks.deb` |
-| Linux (Fedora/RHEL)   | `VajraStocks.rpm` |
-| Linux (Universal)     | `VajraStocks.AppImage` |
-| macOS                 | `VajraStocks.dmg` |
-
-## Installation
-
-### Windows
-Run `VajraStocks-Setup.exe` and follow the installer wizard.
-
-### Linux (.deb)
-```bash
-sudo dpkg -i VajraStocks.deb
-```
-
-### Linux (.rpm)
-```bash
-sudo rpm -i VajraStocks.rpm
-```
-
-### Linux (AppImage)
-```bash
-chmod +x VajraStocks.AppImage && ./VajraStocks.AppImage
-```
-
-### macOS
-Open `VajraStocks.dmg`, drag VajraStocks to Applications.
-
----
-*Generated automatically by GitHub Actions.*
-MDEOF
-
-          sed -i "s/VERSION_PLACEHOLDER/${VERSION}/g" /tmp/notes.md
-          python3 - "${COMMITS}" << 'PYEOF'
+          python3 - "$VERSION" "$COMMITS" << 'PYEOF'
 import sys, pathlib
-commits = sys.argv[1] if len(sys.argv) > 1 else "- Initial release"
-content = pathlib.Path("/tmp/notes.md").read_text()
-content = content.replace("COMMITS_PLACEHOLDER", commits)
-pathlib.Path("/tmp/notes.md").write_text(content)
+version = sys.argv[1]
+commits = sys.argv[2] if len(sys.argv) > 2 else "- Initial release"
+template = pathlib.Path("installer/release_notes_template.md").read_text()
+notes = template.replace("VERSION_PLACEHOLDER", version)
+notes = notes.replace("COMMITS_PLACEHOLDER", commits)
+pathlib.Path("release/ReleaseNotes.md").write_text(notes)
 PYEOF
-          cp /tmp/notes.md release/ReleaseNotes.md
 
       - name: Generate checksums
         run: |
