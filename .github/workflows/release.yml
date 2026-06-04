@@ -262,21 +262,23 @@ jobs:
             | sed -n '2p' || true)
 
           if [[ -n "${PREV_TAG}" ]]; then
-            COMMITS=$(git log "${PREV_TAG}..HEAD" \
-              --pretty=format:"- %s (%h)" | head -40)
+            git log "${PREV_TAG}..HEAD" --pretty=format:"- %s (%h)" \
+              | head -40 > /tmp/commits.txt
           else
-            COMMITS=$(git log --pretty=format:"- %s (%h)" | head -40)
+            git log --pretty=format:"- %s (%h)" \
+              | head -40 > /tmp/commits.txt
           fi
 
-          python3 - "$VERSION" "$COMMITS" << 'PYEOF'
-import sys, pathlib
-version = sys.argv[1]
-commits = sys.argv[2] if len(sys.argv) > 2 else "- Initial release"
-template = pathlib.Path("installer/release_notes_template.md").read_text()
-notes = template.replace("VERSION_PLACEHOLDER", version)
-notes = notes.replace("COMMITS_PLACEHOLDER", commits)
-pathlib.Path("release/ReleaseNotes.md").write_text(notes)
-PYEOF
+          echo "${VERSION}" > /tmp/version.txt
+
+          python3 -c "
+import pathlib
+version = pathlib.Path('/tmp/version.txt').read_text().strip()
+commits = pathlib.Path('/tmp/commits.txt').read_text().strip() or '- Initial release'
+template = pathlib.Path('installer/release_notes_template.md').read_text()
+notes = template.replace('VERSION_PLACEHOLDER', version).replace('COMMITS_PLACEHOLDER', commits)
+pathlib.Path('release/ReleaseNotes.md').write_text(notes)
+"
 
       - name: Generate checksums
         run: |
