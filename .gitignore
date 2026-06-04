@@ -35,6 +35,8 @@ MANIFEST
 #  Usually these written by a python runner on a windows machine
 *.manifest
 *.spec
+# Keep the checked-in installer spec
+!installer/vajrastocks.spec
 
 # Installer logs
 pip-log.txt

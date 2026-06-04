@@ -12,10 +12,17 @@ from loguru import logger
 
 
 # ── config.yaml location ─────────────────────────────────────────────────────
-# this file:  python/src/stocks/api/main.py
-# parents[3]: python/
-# config.yaml: python/config/config.yaml
-_CONFIG_YAML = Path(__file__).resolve().parents[3] / "config" / "config.yaml"
+# In a frozen (PyInstaller) build the source-relative parents[] chain resolves
+# outside the bundle.  The launcher injects VAJRA_CONFIG_YAML so we use that
+# when available; otherwise fall back to the source-tree path for dev mode.
+def _resolve_config_yaml() -> Path:
+    env = os.environ.get("VAJRA_CONFIG_YAML")
+    if env:
+        return Path(env)
+    # Dev / source mode: python/src/stocks/api/main.py → parents[3] = python/
+    return Path(__file__).resolve().parents[3] / "config" / "config.yaml"
+
+_CONFIG_YAML = _resolve_config_yaml()
 
 # Bootstrap keys that must survive in config.yaml so the app can always restart.
 # When any of these is changed via the Settings UI, config.yaml is rewritten.
@@ -248,8 +255,16 @@ def _run_pending_migrations(connection_string: str) -> None:
         from alembic import command
         from alembic.config import Config as AlembicConfig
 
-        # Locate alembic.ini relative to this file: python/alembic.ini
-        alembic_ini = Path(__file__).resolve().parents[4] / "alembic.ini"
+        # Prefer env-var path set by the installer launcher (frozen mode),
+        # then fall back to the source-tree location for dev mode.
+        env_ini = os.environ.get("VAJRA_ALEMBIC_INI")
+        if env_ini:
+            alembic_ini = Path(env_ini)
+        else:
+            # Dev: python/src/stocks/api/main.py → parents[4] = repo root
+            #      but alembic.ini lives at python/alembic.ini = parents[3]
+            alembic_ini = Path(__file__).resolve().parents[3] / "alembic.ini"
+
         if not alembic_ini.exists():
             logger.warning(f"alembic.ini not found at {alembic_ini} — skipping migrations.")
             return

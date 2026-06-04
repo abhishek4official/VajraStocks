@@ -143,8 +143,10 @@ jobs:
           # rpm: rpmbuild for .rpm packaging
           # patchelf: required by PyInstaller on Linux for binary patching
           # imagemagick: used by build-appimage.sh placeholder icon generation
-          # fuse libfuse2: required to run appimagetool (itself an AppImage)
-          sudo apt-get install -y unixodbc-dev rpm patchelf imagemagick fuse libfuse2
+          # fuse + libfuse2/libfuse2t64: required to run appimagetool (itself an AppImage)
+          #   Ubuntu 22.04 uses libfuse2; Ubuntu 24.04 (current ubuntu-latest) uses libfuse2t64
+          sudo apt-get install -y unixodbc-dev rpm patchelf imagemagick fuse
+          sudo apt-get install -y libfuse2 2>/dev/null || sudo apt-get install -y libfuse2t64
 
       - name: Download frontend dist
         uses: actions/download-artifact@v4
