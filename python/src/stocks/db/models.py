@@ -170,6 +170,22 @@ class DailyIndicator(Base):
     bb_middle: Mapped[float | None] = mapped_column(Float, nullable=True)
     bb_lower: Mapped[float | None] = mapped_column(Float, nullable=True)
 
+    # Trend strength
+    adx_14: Mapped[float | None] = mapped_column(Float, nullable=True)
+    plus_di: Mapped[float | None] = mapped_column(Float, nullable=True)
+    minus_di: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    # Volume / accumulation
+    obv: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    # Supertrend(10, 3)
+    supertrend: Mapped[float | None] = mapped_column(Float, nullable=True)
+    supertrend_dir: Mapped[str | None] = mapped_column(String(10), nullable=True)  # UP / DOWN
+
+    # Stochastic(14, 3, 3)
+    stoch_k: Mapped[float | None] = mapped_column(Float, nullable=True)
+    stoch_d: Mapped[float | None] = mapped_column(Float, nullable=True)
+
     # Relationships
     symbol_obj: Mapped["Symbol"] = relationship("Symbol", back_populates="indicators")
 
@@ -293,7 +309,7 @@ class ScreeningSnapshot(Base):
     # MTF / Risk fields (materialized from daily + weekly-resampled data)
     atr_pct: Mapped[float | None] = mapped_column(Float, nullable=True)         # ATR(14) / close * 100
     vol_class: Mapped[str | None] = mapped_column(String(10), nullable=True)    # LOW / MEDIUM / HIGH
-    regime_bias: Mapped[str | None] = mapped_column(String(10), nullable=True)  # BULLISH / NEUTRAL / BEARISH (multi-factor)
+    regime_bias: Mapped[str | None] = mapped_column(String(20), nullable=True)  # VERY_BULLISH / BULLISH / NEUTRAL / BEARISH / VERY_BEARISH
     weekly_trend: Mapped[str | None] = mapped_column(String(10), nullable=True) # UP / DOWN (weekly close vs 40-wk EMA)
     mtf_confirmed: Mapped[bool | None] = mapped_column(Boolean, nullable=True)  # daily bias confirmed by weekly trend
 
@@ -303,6 +319,13 @@ class ScreeningSnapshot(Base):
     ret_3w: Mapped[float | None] = mapped_column(Float, nullable=True)
     ret_4w: Mapped[float | None] = mapped_column(Float, nullable=True)
 
+    # New indicator snapshot fields
+    adx_14: Mapped[float | None] = mapped_column(Float, nullable=True)
+    trend_strength_class: Mapped[str | None] = mapped_column(String(10), nullable=True)  # WEAK / MODERATE / STRONG
+    obv_trend: Mapped[str | None] = mapped_column(String(10), nullable=True)             # UP / DOWN / FLAT
+    supertrend_dir: Mapped[str | None] = mapped_column(String(10), nullable=True)        # UP / DOWN
+    stoch_state: Mapped[str | None] = mapped_column(String(15), nullable=True)           # OVERBOUGHT / OVERSOLD / NEUTRAL
+
     updated_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now())
 
     # Relationships
@@ -311,6 +334,7 @@ class ScreeningSnapshot(Base):
     __table_args__ = (
         Index("ix_snapshot_rsi", "rsi_14"),
         Index("ix_snapshot_sma_200", "sma_200_cross_direction"),
+        Index("ix_snapshot_bias", "regime_bias"),
     )
 
 

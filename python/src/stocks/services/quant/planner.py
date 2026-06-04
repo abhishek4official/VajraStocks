@@ -20,16 +20,23 @@ class TradePlannerService:
         macd_histogram: float | None,
         rsi_14: float | None,
         neutral_band_pct: float = 2.0,
+        adx_14: float | None = None,
+        plus_di: float | None = None,
+        minus_di: float | None = None,
     ) -> tuple[str, list[str]]:
         """Multi-factor directional bias with a NEUTRAL deadband around SMA200.
 
-        Replaces the naive ``close > sma200 ? BULLISH : BEARISH`` binary that
-        collapsed ~56% of symbols to BEARISH. A symbol is only BULLISH/BEARISH
-        when the trend leaves the deadband AND at least one momentum factor
-        (MACD histogram, RSI zone, EMA21 vs SMA50) confirms in the same
-        direction; otherwise it is NEUTRAL.
+        Returns (bias, reasons) where bias ∈ {VERY_BULLISH, BULLISH, NEUTRAL, BEARISH, VERY_BEARISH}.
 
-        Returns (bias, reasons) where bias ∈ {BULLISH, NEUTRAL, BEARISH}.
+        Confirmation factors (0–4):
+          1. MACD histogram direction
+          2. RSI zone (≥55 bullish / ≤45 bearish)
+          3. EMA21 vs SMA50 cross
+          4. ADX > 25 with DI alignment (only when adx_14, plus_di, minus_di are available)
+
+        VERY_BULLISH / VERY_BEARISH requires trend out of band AND ≥3 confirms.
+        BULLISH / BEARISH requires trend out of band AND ≥1 confirm.
+        All other cases → NEUTRAL.
         """
         reasons: list[str] = []
 
@@ -49,6 +56,7 @@ class TradePlannerService:
 
         confirms_up = 0
         confirms_down = 0
+
         if macd_histogram is not None:
             if macd_histogram > 0:
                 confirms_up += 1
@@ -56,6 +64,7 @@ class TradePlannerService:
             elif macd_histogram < 0:
                 confirms_down += 1
                 reasons.append("MACD histogram negative")
+
         if rsi_14 is not None:
             if rsi_14 >= 55:
                 confirms_up += 1
@@ -63,6 +72,7 @@ class TradePlannerService:
             elif rsi_14 <= 45:
                 confirms_down += 1
                 reasons.append(f"RSI {rsi_14:.0f} ≤ 45")
+
         if ema_21 is not None and sma_50 is not None:
             if ema_21 > sma_50:
                 confirms_up += 1
@@ -71,10 +81,26 @@ class TradePlannerService:
                 confirms_down += 1
                 reasons.append("EMA21 below SMA50")
 
-        if trend == "UP" and confirms_up >= 1:
-            return "BULLISH", reasons
-        if trend == "DOWN" and confirms_down >= 1:
-            return "BEARISH", reasons
+        # 4th factor: ADX trend strength + directional alignment
+        if adx_14 is not None and adx_14 > 25 and plus_di is not None and minus_di is not None:
+            if plus_di > minus_di:
+                confirms_up += 1
+                reasons.append(f"ADX {adx_14:.0f} strong — DI+ {plus_di:.0f} > DI- {minus_di:.0f}")
+            elif minus_di > plus_di:
+                confirms_down += 1
+                reasons.append(f"ADX {adx_14:.0f} strong — DI- {minus_di:.0f} > DI+ {plus_di:.0f}")
+
+        if trend == "UP":
+            if confirms_up >= 3:
+                return "VERY_BULLISH", reasons
+            if confirms_up >= 1:
+                return "BULLISH", reasons
+        elif trend == "DOWN":
+            if confirms_down >= 3:
+                return "VERY_BEARISH", reasons
+            if confirms_down >= 1:
+                return "BEARISH", reasons
+
         return "NEUTRAL", reasons
 
     def calculate_trade_plan(

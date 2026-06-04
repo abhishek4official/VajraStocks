@@ -15,6 +15,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from stocks.db.models import PortfolioHolding, ScreeningSnapshot, Symbol, SymbolConfluenceLevel
+from stocks.services.quant.confluence_service import ConfluenceService
 from stocks.services.settings_service import SettingsService
 
 # Column-name aliases (matched as substrings, lower-cased) — mirrors the old
@@ -162,6 +163,8 @@ class PortfolioService:
 
         rows = self.db.scalars(select(PortfolioHolding).order_by(PortfolioHolding.instrument.asc())).all()
 
+        risk_per_trade = SettingsService(self.db).get_float("PORTFOLIO", "default_risk_amount", 5000.0)
+
         # Batch-load snapshots and confluence levels for the held symbols
         snap_by_instr: dict[str, ScreeningSnapshot] = {}
         confl_by_symbol_id: dict[int, list[SymbolConfluenceLevel]] = defaultdict(list)
@@ -201,17 +204,15 @@ class PortfolioService:
             pos_resistances = [lvl for lvl in symbol_levels if lvl.level_type == "RESISTANCE"]
 
             pos_supports_sorted = sorted(pos_supports, key=lambda x: float(x.price), reverse=True)
-            pos_resistances_sorted = sorted(pos_resistances, key=lambda x: float(x.price))
-
             support_val = float(pos_supports_sorted[0].price) if pos_supports_sorted else None
-            resistance_val = float(pos_resistances_sorted[0].price) if pos_resistances_sorted else None
 
-            # Per-position open risk via confluence support, plus a structural resistance target
+            # Per-position open risk via confluence support, plus structural resistance targets
             atr_pct = float(snap.atr_pct) if snap and snap.atr_pct is not None else None
-            stop = open_risk = target_1 = potential_gain_pct = rr_ratio = None
+            stop = open_risk = target_1 = target_2 = target_3 = potential_gain_pct = rr_ratio = None
+            position_size_shares = None
             if atr_pct is not None and ltp > 0:
                 atr_abs = atr_pct / 100.0 * ltp
-                
+
                 # Structural support stop-loss
                 if support_val is not None:
                     stop = round(support_val - 1.5 * atr_abs, 2)
@@ -222,19 +223,30 @@ class PortfolioService:
 
                 open_risk = round(float(r.qty) * (ltp - stop), 2)
                 total_open_risk += open_risk
-                
-                # Structural resistance target
-                if resistance_val is not None:
-                    target_1 = round(resistance_val, 2)
+
+                # T1: highest-strength resistance meaningfully above price
+                best_r1 = ConfluenceService.select_best_resistance(pos_resistances, ltp, atr_abs)
+                if best_r1 is not None:
+                    target_1 = round(float(best_r1.price), 2)
+                    above_t1 = sorted(
+                        [rv for rv in pos_resistances if float(rv.price) > float(best_r1.price)],
+                        key=lambda x: float(x.price),
+                    )
+                    if len(above_t1) >= 1:
+                        target_2 = round(float(above_t1[0].price), 2)
+                    if len(above_t1) >= 2:
+                        target_3 = round(float(above_t1[1].price), 2)
                 else:
                     target_1 = round(ltp + 1.5 * atr_abs, 2)
-                    
-                potential_gain_pct = round(((target_1 - ltp) / ltp * 100.0), 2) if ltp > 0 else 0.0
+                    target_2 = round(ltp + 3.0 * atr_abs, 2)
 
-                # Structural Reward-to-Risk ratio
+                potential_gain_pct = round((target_1 - ltp) / ltp * 100.0, 2) if ltp > 0 else 0.0
+
                 risk_per_share = ltp - stop
                 reward_per_share = target_1 - ltp
-                rr_ratio = round(reward_per_share / risk_per_share, 2) if risk_per_share > 0 else 0.0
+                rr_ratio = round(reward_per_share / risk_per_share, 2) if risk_per_share > 0 else None
+                if risk_per_share > 0 and risk_per_trade > 0:
+                    position_size_shares = int(risk_per_trade / risk_per_share) or None
 
             if snap and snap.sma_200_cross_direction == "ABOVE":
                 above_sma200 += 1
@@ -247,9 +259,9 @@ class PortfolioService:
             mtf_ok = snap.mtf_confirmed if snap else None
             weak = False
             weak_reason = None
-            if bias == "BEARISH":
+            if bias in ("BEARISH", "VERY_BEARISH"):
                 weak, weak_reason = True, "Bearish bias"
-            elif bias is not None and mtf_ok is False:
+            elif bias is not None and mtf_ok is False and bias not in ("VERY_BULLISH",):
                 weak, weak_reason = True, "Weekly trend not confirmed"
 
             holdings.append(
@@ -279,8 +291,11 @@ class PortfolioService:
                     "ret_3w": round(float(snap.ret_3w), 2) if snap and snap.ret_3w is not None else None,
                     "ret_4w": round(float(snap.ret_4w), 2) if snap and snap.ret_4w is not None else None,
                     "target_1": target_1,
+                    "target_2": target_2,
+                    "target_3": target_3,
                     "potential_gain_pct": potential_gain_pct,
                     "rr_ratio": rr_ratio,
+                    "position_size_shares": position_size_shares,
                 }
             )
 
@@ -353,7 +368,7 @@ class PortfolioService:
         rows = self.db.scalars(
             select(ScreeningSnapshot)
             .where(
-                ScreeningSnapshot.regime_bias == "BULLISH",
+                ScreeningSnapshot.regime_bias.in_(["BULLISH", "VERY_BULLISH"]),
                 ScreeningSnapshot.mtf_confirmed == True,  # noqa: E712
                 ScreeningSnapshot.rsi_14.is_not(None),
                 ScreeningSnapshot.rsi_14 < 75,  # avoid badly overbought entries
@@ -374,25 +389,24 @@ class PortfolioService:
             for lvl in cand_levels:
                 confl_by_cand_id[lvl.symbol_id].append(lvl)
 
+        cand_risk_per_trade = SettingsService(self.db).get_float("PORTFOLIO", "default_risk_amount", 5000.0)
+
         out = []
         for sn in rows:
             close = round(float(sn.close_price), 2)
             atr_pct = round(float(sn.atr_pct), 2) if sn.atr_pct is not None else None
-            
+
             cand_levels = confl_by_cand_id.get(sn.symbol_id, [])
             cand_supports = [lvl for lvl in cand_levels if lvl.level_type == "SUPPORT"]
             cand_resistances = [lvl for lvl in cand_levels if lvl.level_type == "RESISTANCE"]
 
             cand_supports_sorted = sorted(cand_supports, key=lambda x: float(x.price), reverse=True)
-            cand_resistances_sorted = sorted(cand_resistances, key=lambda x: float(x.price))
-
             support_val = float(cand_supports_sorted[0].price) if cand_supports_sorted else None
-            resistance_val = float(cand_resistances_sorted[0].price) if cand_resistances_sorted else None
 
-            stop = target_1 = gain = None
+            stop = target_1 = target_2 = target_3 = gain = rr_ratio = position_size_shares = None
             if atr_pct is not None and close > 0:
                 atr_abs = atr_pct / 100.0 * close
-                
+
                 # Structural stop-loss
                 if support_val is not None:
                     stop = round(support_val - 1.5 * atr_abs, 2)
@@ -401,13 +415,29 @@ class PortfolioService:
                 else:
                     stop = round(close - 1.5 * atr_abs, 2)
 
-                # Structural target
-                if resistance_val is not None:
-                    target_1 = round(resistance_val, 2)
+                # T1: highest-strength resistance
+                best_r1 = ConfluenceService.select_best_resistance(cand_resistances, close, atr_abs)
+                if best_r1 is not None:
+                    target_1 = round(float(best_r1.price), 2)
+                    above_t1 = sorted(
+                        [rv for rv in cand_resistances if float(rv.price) > float(best_r1.price)],
+                        key=lambda x: float(x.price),
+                    )
+                    if len(above_t1) >= 1:
+                        target_2 = round(float(above_t1[0].price), 2)
+                    if len(above_t1) >= 2:
+                        target_3 = round(float(above_t1[1].price), 2)
                 else:
                     target_1 = round(close + 1.5 * atr_abs, 2)
+                    target_2 = round(close + 3.0 * atr_abs, 2)
 
-                gain = round(((target_1 - close) / close * 100.0), 2) if close > 0 else 0.0
+                gain = round((target_1 - close) / close * 100.0, 2) if close > 0 else 0.0
+                risk_per_share = close - stop
+                reward_per_share = target_1 - close
+                rr_ratio = round(reward_per_share / risk_per_share, 2) if risk_per_share > 0 else None
+                if risk_per_share > 0 and cand_risk_per_trade > 0:
+                    position_size_shares = int(cand_risk_per_trade / risk_per_share) or None
+
             out.append(
                 {
                     "symbol": sn.symbol.replace(".NS", ""),
@@ -424,7 +454,11 @@ class PortfolioService:
                     "ret_4w": round(float(sn.ret_4w), 2) if sn.ret_4w is not None else None,
                     "stop_loss": stop,
                     "target_1": target_1,
+                    "target_2": target_2,
+                    "target_3": target_3,
                     "potential_gain_pct": gain,
+                    "rr_ratio": rr_ratio,
+                    "position_size_shares": position_size_shares,
                 }
             )
         return out
@@ -437,4 +471,10 @@ class PortfolioService:
             biases = [h["bias"] for h in holdings if h["bias"]]
             if biases:
                 bias = max(set(biases), key=biases.count)
-        return {"BULLISH": "BULL", "BEARISH": "BEAR", "NEUTRAL": "NEUTRAL"}.get(bias or "", "NEUTRAL")
+        return {
+            "VERY_BULLISH": "BULL",
+            "BULLISH": "BULL",
+            "NEUTRAL": "NEUTRAL",
+            "BEARISH": "BEAR",
+            "VERY_BEARISH": "BEAR",
+        }.get(bias or "", "NEUTRAL")

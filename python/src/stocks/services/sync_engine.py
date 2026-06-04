@@ -374,6 +374,14 @@ class SyncEngine:
                 "bb_upper": None if pd.isna(row.get("bb_upper")) else float(row["bb_upper"]),
                 "bb_middle": None if pd.isna(row.get("bb_middle")) else float(row["bb_middle"]),
                 "bb_lower": None if pd.isna(row.get("bb_lower")) else float(row["bb_lower"]),
+                "adx_14":   None if pd.isna(row.get("adx_14"))   else float(row["adx_14"]),
+                "plus_di":  None if pd.isna(row.get("plus_di"))   else float(row["plus_di"]),
+                "minus_di": None if pd.isna(row.get("minus_di"))  else float(row["minus_di"]),
+                "obv":      None if pd.isna(row.get("obv"))       else float(row["obv"]),
+                "supertrend":     None if pd.isna(row.get("supertrend"))     else float(row["supertrend"]),
+                "supertrend_dir": None if (row.get("supertrend_dir") is None or (isinstance(row.get("supertrend_dir"), float) and pd.isna(row.get("supertrend_dir")))) else str(row["supertrend_dir"]),
+                "stoch_k":  None if pd.isna(row.get("stoch_k"))   else float(row["stoch_k"]),
+                "stoch_d":  None if pd.isna(row.get("stoch_d"))   else float(row["stoch_d"]),
             }
             indicators_to_save.append(ind_dict)
 

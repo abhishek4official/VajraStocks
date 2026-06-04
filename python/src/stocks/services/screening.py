@@ -161,13 +161,15 @@ class ScreeningService:
                 ha_close = float(ha.close)
                 ha_direction = "UP" if float(ha.close) >= float(ha.open) else "DOWN"
 
-            # 4. Fetch latest Technical Indicators
-            ind = self.db.scalar(
+            # 4. Fetch latest 2 Technical Indicator rows (2nd needed for OBV trend direction)
+            ind_rows = self.db.scalars(
                 select(DailyIndicator)
                 .filter_by(symbol_id=symbol_id)
                 .order_by(DailyIndicator.trading_date.desc())
-                .limit(1)
-            )
+                .limit(2)
+            ).all()
+            ind = ind_rows[0] if ind_rows else None
+            ind_prev = ind_rows[1] if len(ind_rows) > 1 else None
 
             rsi_14 = None
             sma_20_cross = None
@@ -207,6 +209,12 @@ class ScreeningService:
             regime_bias = None
             weekly_trend = None
             mtf_confirmed = None
+            adx_14_snap = None
+            trend_strength_class = None
+            obv_trend = None
+            supertrend_dir_snap = None
+            stoch_state = None
+
             if ind:
                 atr_14 = float(ind.atr_14) if ind.atr_14 is not None else None
                 if atr_14 is not None and close_price > 0:
@@ -226,11 +234,48 @@ class ScreeningService:
                     macd_histogram=float(ind.macd_histogram) if ind.macd_histogram is not None else None,
                     rsi_14=float(ind.rsi_14) if ind.rsi_14 is not None else None,
                     neutral_band_pct=mtf["bias_band"],
+                    adx_14=float(ind.adx_14) if getattr(ind, "adx_14", None) is not None else None,
+                    plus_di=float(ind.plus_di) if getattr(ind, "plus_di", None) is not None else None,
+                    minus_di=float(ind.minus_di) if getattr(ind, "minus_di", None) is not None else None,
                 )
+
+                # ADX / trend strength
+                if getattr(ind, "adx_14", None) is not None:
+                    adx_14_snap = round(float(ind.adx_14), 2)
+                    if adx_14_snap >= 25:
+                        trend_strength_class = "STRONG"
+                    elif adx_14_snap >= 15:
+                        trend_strength_class = "MODERATE"
+                    else:
+                        trend_strength_class = "WEAK"
+
+                # OBV trend (compare current vs previous row)
+                if getattr(ind, "obv", None) is not None and ind_prev is not None and getattr(ind_prev, "obv", None) is not None:
+                    curr_obv = float(ind.obv)
+                    prev_obv = float(ind_prev.obv)
+                    if curr_obv > prev_obv:
+                        obv_trend = "UP"
+                    elif curr_obv < prev_obv:
+                        obv_trend = "DOWN"
+                    else:
+                        obv_trend = "FLAT"
+
+                # Supertrend direction
+                supertrend_dir_snap = getattr(ind, "supertrend_dir", None)
+
+                # Stochastic state
+                stoch_k_val = float(ind.stoch_k) if getattr(ind, "stoch_k", None) is not None else None
+                if stoch_k_val is not None:
+                    if stoch_k_val >= 80:
+                        stoch_state = "OVERBOUGHT"
+                    elif stoch_k_val <= 20:
+                        stoch_state = "OVERSOLD"
+                    else:
+                        stoch_state = "NEUTRAL"
 
             weekly_trend = self._compute_weekly_trend(symbol_id, mtf["weekly_ema"])
             if regime_bias is not None and weekly_trend is not None:
-                mtf_confirmed = (regime_bias == "BULLISH" and weekly_trend == "UP")
+                mtf_confirmed = (regime_bias in ("BULLISH", "VERY_BULLISH") and weekly_trend == "UP")
 
             # 6c. Rolling weekly returns (%) — 1W/2W/3W/4W = 5/10/15/20 trading days back.
             #     prices[] is ordered newest→oldest, so prices[n] is n trading days ago.
@@ -280,6 +325,11 @@ class ScreeningService:
                     ret_2w=ret_2w,
                     ret_3w=ret_3w,
                     ret_4w=ret_4w,
+                    adx_14=adx_14_snap,
+                    trend_strength_class=trend_strength_class,
+                    obv_trend=obv_trend,
+                    supertrend_dir=supertrend_dir_snap,
+                    stoch_state=stoch_state,
                 )
                 self.db.add(snapshot)
             else:
@@ -310,6 +360,11 @@ class ScreeningService:
                 snapshot.ret_2w = ret_2w
                 snapshot.ret_3w = ret_3w
                 snapshot.ret_4w = ret_4w
+                snapshot.adx_14 = adx_14_snap
+                snapshot.trend_strength_class = trend_strength_class
+                snapshot.obv_trend = obv_trend
+                snapshot.supertrend_dir = supertrend_dir_snap
+                snapshot.stoch_state = stoch_state
             if commit:
                 self.db.commit()
         except Exception as e:

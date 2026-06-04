@@ -50,7 +50,7 @@ export interface PortfolioHolding {
   current_val: number;
   pnl: number;
   return_pct: number;
-  bias: 'BULLISH' | 'NEUTRAL' | 'BEARISH' | null;
+  bias: 'VERY_BULLISH' | 'BULLISH' | 'NEUTRAL' | 'BEARISH' | 'VERY_BEARISH' | null;
   mtf_confirmed: boolean | null;
   weekly_trend: 'UP' | 'DOWN' | null;
   atr_pct: number | null;
@@ -66,8 +66,11 @@ export interface PortfolioHolding {
   ret_3w: number | null;
   ret_4w: number | null;
   target_1: number | null;
+  target_2?: number | null;
+  target_3?: number | null;
   potential_gain_pct: number | null;
   rr_ratio?: number | null;
+  position_size_shares?: number | null;
 }
 
 export interface ReplacementCandidate {
@@ -77,7 +80,7 @@ export interface ReplacementCandidate {
   rsi_14: number | null;
   atr_pct: number | null;
   vol_class: 'LOW' | 'MEDIUM' | 'HIGH' | null;
-  bias: 'BULLISH' | 'NEUTRAL' | 'BEARISH' | null;
+  bias: 'VERY_BULLISH' | 'BULLISH' | 'NEUTRAL' | 'BEARISH' | 'VERY_BEARISH' | null;
   weekly_trend: 'UP' | 'DOWN' | null;
   ret_1w: number | null;
   ret_2w: number | null;
@@ -85,7 +88,11 @@ export interface ReplacementCandidate {
   ret_4w: number | null;
   stop_loss: number | null;
   target_1: number | null;
+  target_2?: number | null;
+  target_3?: number | null;
   potential_gain_pct: number | null;
+  rr_ratio?: number | null;
+  position_size_shares?: number | null;
 }
 
 export interface PortfolioAggregates {
@@ -186,8 +193,17 @@ export interface ScreenerRow {
   atr_pct?: number | null;
   stop_loss?: number | null;
   target_1?: number | null;
+  target_2?: number | null;
+  target_3?: number | null;
   potential_gain_pct?: number | null;
   rr_ratio?: number | null;
+  position_size_shares?: number | null;
+  trade_quality_score?: number | null;
+  adx_14?: number | null;
+  trend_strength_class?: string | null;
+  obv_trend?: string | null;
+  supertrend_dir?: string | null;
+  stoch_state?: string | null;
 }
 
 export interface CorporateAction {

@@ -1,5 +1,6 @@
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 from loguru import logger
@@ -25,47 +26,120 @@ def _detect_provider(connection_string: str) -> str:
 
 # ── MSSQL LocalDB helpers (Windows-only) ────────────────────────────────────
 
+def _localdb_pipe() -> str:
+    """Returns the named pipe for MSSQLLocalDB, or empty string if not ready."""
+    try:
+        r = subprocess.run(["sqllocaldb", "i", "MSSQLLocalDB"], capture_output=True, text=True, check=False)
+        for line in r.stdout.splitlines():
+            if "Instance pipe name" in line:
+                pipe = line.split(":", 1)[-1].strip()
+                return pipe
+    except Exception:
+        pass
+    return ""
+
+
+def _kill_stuck_sqlservr() -> None:
+    """Kills any sqlservr.exe process that is holding a stale LocalDB handle."""
+    try:
+        r = subprocess.run(
+            ["tasklist", "/FI", "IMAGENAME eq sqlservr.exe", "/FO", "CSV", "/NH"],
+            capture_output=True, text=True, check=False,
+        )
+        for line in r.stdout.strip().splitlines():
+            parts = [p.strip('"') for p in line.split(",")]
+            if len(parts) >= 2:
+                pid = parts[1]
+                subprocess.run(["taskkill", "/PID", pid, "/F"], capture_output=True, check=False)
+                logger.info(f"Killed stuck sqlservr.exe (PID {pid}).")
+    except Exception as e:
+        logger.debug(f"_kill_stuck_sqlservr: {e}")
+
+
 def ensure_localdb_started() -> None:
-    """Ensures SQL Server LocalDB instance is started (Windows only)."""
+    """Ensures the MSSQLLocalDB LocalDB instance is started and its named pipe is ready."""
     if sys.platform != "win32":
         return
     try:
-        result = subprocess.run(["sqllocaldb", "info", "MSSQLLocalDB"], capture_output=True, text=True, check=False)
-        if result.returncode != 0:
-            logger.warning("LocalDB 'MSSQLLocalDB' not found — attempting to create it...")
-            subprocess.run(["sqllocaldb", "create", "MSSQLLocalDB"], capture_output=True)
+        # Create instance if it doesn't exist yet
+        check = subprocess.run(["sqllocaldb", "i", "MSSQLLocalDB"], capture_output=True, text=True, check=False)
+        if check.returncode != 0:
+            logger.warning("LocalDB 'MSSQLLocalDB' not found — creating...")
+            subprocess.run(["sqllocaldb", "create", "MSSQLLocalDB"], capture_output=True, check=False)
 
         logger.info("Ensuring SQL Server LocalDB 'MSSQLLocalDB' instance is started...")
-        start_result = subprocess.run(["sqllocaldb", "start", "MSSQLLocalDB"], capture_output=True, text=True, check=False)
-        if start_result.returncode == 0:
-            logger.info("SQL Server LocalDB 'MSSQLLocalDB' instance is active and running.")
-        else:
-            logger.warning(f"Starting 'MSSQLLocalDB' returned: {start_result.stderr.strip()}")
+
+        # If stopped and stuck, kill the orphaned process first
+        if "Stopped" in check.stdout:
+            _kill_stuck_sqlservr()
+            time.sleep(1)
+
+        subprocess.run(["sqllocaldb", "start", "MSSQLLocalDB"], capture_output=True, check=False)
+
+        # Wait up to 20 s for the named pipe to appear (process starts async)
+        deadline = time.monotonic() + 20
+        while time.monotonic() < deadline:
+            pipe = _localdb_pipe()
+            if pipe:
+                logger.info(f"SQL Server LocalDB 'MSSQLLocalDB' is ready (pipe: {pipe}).")
+                return
+            time.sleep(1)
+
+        logger.warning("LocalDB started but named pipe not detected within 20 s — proceeding anyway.")
     except FileNotFoundError:
-        logger.error("sqllocaldb executable not found. Please install Microsoft SQL Server LocalDB.")
+        logger.error("sqllocaldb not found. Install Microsoft SQL Server LocalDB.")
     except Exception as e:
-        logger.error(f"Failed to check/start LocalDB: {e}")
+        logger.error(f"Failed to start LocalDB: {e}")
 
 
 def create_mssql_database_if_not_exists(connection_string: str) -> None:
-    """Connects to the MSSQL master DB and creates the target database if missing."""
-    try:
-        base_url, query_params = connection_string.split("?") if "?" in connection_string else (connection_string, "")
-        db_name = base_url.split("/")[-1]
-        base_master_url = "/".join(base_url.split("/")[:-1]) + "/master"
-        master_conn = f"{base_master_url}?{query_params}" if query_params else base_master_url
+    """Connects to the MSSQL master DB and creates the target database if missing.
 
-        logger.info(f"Checking if target database '{db_name}' exists on LocalDB...")
+    Retries up to 3 times with a 3-second back-off to handle the window between
+    sqllocaldb reporting 'started' and the named pipe actually accepting connections.
+    """
+    base_url, query_params = connection_string.split("?") if "?" in connection_string else (connection_string, "")
+    db_name = base_url.split("/")[-1]
+    base_master_url = "/".join(base_url.split("/")[:-1]) + "/master"
+    master_conn = f"{base_master_url}?{query_params}" if query_params else base_master_url
+
+    logger.info(f"Checking if target database '{db_name}' exists on LocalDB...")
+    last_exc: Exception | None = None
+    for attempt in range(1, 4):
         master_engine = create_engine(master_conn, isolation_level="AUTOCOMMIT")
-        with master_engine.connect() as conn:
-            conn.execute(text(f"IF DB_ID('{db_name}') IS NULL CREATE DATABASE [{db_name}];"))
-            logger.info(f"Database '{db_name}' verified / created successfully.")
-        master_engine.dispose()
-    except OperationalError as e:
-        logger.error(f"Failed to connect to MSSQL master: {e}")
-        raise DatabaseConnectionError(f"MSSQL bootstrap failed: {e}") from e
-    except Exception as e:
-        raise DatabaseConnectionError(f"MSSQL bootstrap failed: {e}") from e
+        try:
+            with master_engine.connect() as conn:
+                # Check if already attached
+                already = conn.execute(text(f"SELECT DB_ID('{db_name}')")).scalar()
+                if already is not None:
+                    logger.info(f"Database '{db_name}' is already attached.")
+                    return
+
+                # Try to attach existing MDF first; fall back to CREATE for fresh installs.
+                # LocalDB stores user DBs in %USERPROFILE% by default.
+                import os as _os
+                mdf = _os.path.join(_os.environ.get("USERPROFILE", "C:\\Users\\Default"), f"{db_name}.mdf")
+                if _os.path.exists(mdf):
+                    logger.info(f"Attaching existing MDF: {mdf}")
+                    conn.execute(text(
+                        f"CREATE DATABASE [{db_name}] ON (FILENAME = N'{mdf}') FOR ATTACH_REBUILD_LOG;"
+                    ))
+                else:
+                    conn.execute(text(f"CREATE DATABASE [{db_name}];"))
+                logger.info(f"Database '{db_name}' verified / created successfully.")
+            master_engine.dispose()
+            return
+        except OperationalError as e:
+            last_exc = e
+            logger.warning(f"MSSQL master connection attempt {attempt}/3 failed — retrying in 3 s...")
+            master_engine.dispose(close=True)
+            time.sleep(3)
+        except Exception as e:
+            master_engine.dispose(close=True)
+            raise DatabaseConnectionError(f"MSSQL bootstrap failed: {e}") from e
+
+    logger.error(f"Failed to connect to MSSQL master after 3 attempts: {last_exc}")
+    raise DatabaseConnectionError(f"MSSQL bootstrap failed: {last_exc}") from last_exc
 
 
 # ── SQLite helpers ────────────────────────────────────────────────────────────
@@ -173,15 +247,30 @@ class DatabaseManager:
         dialect = self.engine.dialect.name  # 'mssql' / 'sqlite' / 'postgresql'
         # (table, column, generic_type, mssql_type)
         specs = [
-            ("screening_snapshots", "atr_pct",       "FLOAT",        "FLOAT"),
-            ("screening_snapshots", "vol_class",     "VARCHAR(10)",  "VARCHAR(10)"),
-            ("screening_snapshots", "regime_bias",   "VARCHAR(10)",  "VARCHAR(10)"),
-            ("screening_snapshots", "weekly_trend",  "VARCHAR(10)",  "VARCHAR(10)"),
-            ("screening_snapshots", "mtf_confirmed", "BOOLEAN",      "BIT"),
-            ("screening_snapshots", "ret_1w",        "FLOAT",        "FLOAT"),
-            ("screening_snapshots", "ret_2w",        "FLOAT",        "FLOAT"),
-            ("screening_snapshots", "ret_3w",        "FLOAT",        "FLOAT"),
-            ("screening_snapshots", "ret_4w",        "FLOAT",        "FLOAT"),
+            ("screening_snapshots", "atr_pct",              "FLOAT",        "FLOAT"),
+            ("screening_snapshots", "vol_class",            "VARCHAR(10)",  "VARCHAR(10)"),
+            ("screening_snapshots", "regime_bias",          "VARCHAR(20)",  "VARCHAR(20)"),
+            ("screening_snapshots", "weekly_trend",         "VARCHAR(10)",  "VARCHAR(10)"),
+            ("screening_snapshots", "mtf_confirmed",        "BOOLEAN",      "BIT"),
+            ("screening_snapshots", "ret_1w",               "FLOAT",        "FLOAT"),
+            ("screening_snapshots", "ret_2w",               "FLOAT",        "FLOAT"),
+            ("screening_snapshots", "ret_3w",               "FLOAT",        "FLOAT"),
+            ("screening_snapshots", "ret_4w",               "FLOAT",        "FLOAT"),
+            # New indicator snapshot fields
+            ("screening_snapshots", "adx_14",               "FLOAT",        "FLOAT"),
+            ("screening_snapshots", "trend_strength_class", "VARCHAR(10)",  "VARCHAR(10)"),
+            ("screening_snapshots", "obv_trend",            "VARCHAR(10)",  "VARCHAR(10)"),
+            ("screening_snapshots", "supertrend_dir",       "VARCHAR(10)",  "VARCHAR(10)"),
+            ("screening_snapshots", "stoch_state",          "VARCHAR(15)",  "VARCHAR(15)"),
+            # New DailyIndicator columns
+            ("daily_indicators",    "adx_14",               "FLOAT",        "FLOAT"),
+            ("daily_indicators",    "plus_di",              "FLOAT",        "FLOAT"),
+            ("daily_indicators",    "minus_di",             "FLOAT",        "FLOAT"),
+            ("daily_indicators",    "obv",                  "FLOAT",        "FLOAT"),
+            ("daily_indicators",    "supertrend",           "FLOAT",        "FLOAT"),
+            ("daily_indicators",    "supertrend_dir",       "VARCHAR(10)",  "VARCHAR(10)"),
+            ("daily_indicators",    "stoch_k",              "FLOAT",        "FLOAT"),
+            ("daily_indicators",    "stoch_d",              "FLOAT",        "FLOAT"),
         ]
         insp = sa_inspect(self.engine)
         existing_by_table: dict[str, set[str]] = {}
@@ -207,6 +296,21 @@ class DatabaseManager:
             except Exception as e:
                 logger.warning(f"ensure_columns: could not add {table}.{col}: {e}")
 
+        # Widen regime_bias from VARCHAR(10) to VARCHAR(20) for 5-tier values (VERY_BULLISH = 12 chars)
+        try:
+            if dialect == "mssql":
+                widen_ddl = "ALTER TABLE screening_snapshots ALTER COLUMN regime_bias VARCHAR(20) NULL"
+            elif dialect == "postgresql":
+                widen_ddl = "ALTER TABLE screening_snapshots ALTER COLUMN regime_bias TYPE VARCHAR(20)"
+            else:
+                widen_ddl = None  # SQLite doesn't enforce VARCHAR length
+            if widen_ddl:
+                with self.engine.begin() as conn:
+                    conn.execute(text(widen_ddl))
+                logger.info("ensure_columns: widened screening_snapshots.regime_bias to VARCHAR(20)")
+        except Exception as e:
+            logger.debug(f"ensure_columns: regime_bias widen skipped (may already be correct width): {e}")
+
     def get_session(self):
         """Returns a new isolated database session."""
         if self.session_factory is None:
@@ -219,7 +323,12 @@ class DatabaseManager:
             self.Session.remove()
 
     def dispose(self) -> None:
-        """Disposes the engine connection pool."""
+        """Disposes the engine connection pool, forcibly closing all connections.
+
+        close=True ensures checked-out connections (e.g. from a background sync
+        thread still in flight) are also closed, so MSSQL/LocalDB releases its
+        process cleanly instead of hanging until timeout.
+        """
         if self.engine is not None:
             logger.info("Disposing database engine pool...")
-            self.engine.dispose()
+            self.engine.dispose(close=True)

@@ -51,12 +51,19 @@ export const PortfolioPanel: React.FC = () => {
   const pnlText = (v: number) => (v >= 0 ? 'text-emerald-400' : 'text-rose-400');
 
   const biasChip = (bias: string | null) => {
-    if (bias === 'BULLISH') return { c: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/25', Icon: TrendingUp };
-    if (bias === 'BEARISH') return { c: 'text-rose-400 bg-rose-500/10 border-rose-500/25', Icon: TrendingDown };
+    if (bias === 'VERY_BULLISH') return { c: 'text-emerald-200 bg-emerald-500/25 border-emerald-400/50', Icon: TrendingUp };
+    if (bias === 'BULLISH')      return { c: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/25', Icon: TrendingUp };
+    if (bias === 'VERY_BEARISH') return { c: 'text-rose-200 bg-rose-500/25 border-rose-400/50', Icon: TrendingDown };
+    if (bias === 'BEARISH')      return { c: 'text-rose-400 bg-rose-500/10 border-rose-500/25', Icon: TrendingDown };
     return { c: 'text-slate-400 bg-slate-500/10 border-slate-600/30', Icon: Minus };
   };
-  const biasAccent = (bias: string | null) =>
-    bias === 'BULLISH' ? 'bg-emerald-500' : bias === 'BEARISH' ? 'bg-rose-500' : 'bg-slate-600';
+  const biasAccent = (bias: string | null) => {
+    if (bias === 'VERY_BULLISH') return 'bg-emerald-300';
+    if (bias === 'BULLISH')      return 'bg-emerald-500';
+    if (bias === 'VERY_BEARISH') return 'bg-rose-300';
+    if (bias === 'BEARISH')      return 'bg-rose-500';
+    return 'bg-slate-600';
+  };
   const volText = (v: string | null) =>
     v === 'LOW' ? 'text-emerald-400' : v === 'HIGH' ? 'text-rose-400' : 'text-amber-400';
 
@@ -367,7 +374,12 @@ export const PortfolioPanel: React.FC = () => {
                     </td>
                     <td className="py-3 px-3 text-right font-mono text-slate-300 whitespace-nowrap">
                       {h.target_1 !== null
-                        ? <>₹{fmtINR0(h.target_1)}<span className="text-emerald-400/80 text-[10px]"> +{fmt(h.potential_gain_pct ?? 0, 1)}%</span></>
+                        ? <div className="flex flex-col items-end gap-0.5">
+                            <span>T1 ₹{fmtINR0(h.target_1)}<span className="text-emerald-400/80 text-[10px]"> +{fmt(h.potential_gain_pct ?? 0, 1)}%</span></span>
+                            {h.target_2 != null && <span className="text-emerald-400/60 text-[10px]">T2 ₹{fmtINR0(h.target_2)}</span>}
+                            {h.target_3 != null && <span className="text-emerald-400/40 text-[10px]">T3 ₹{fmtINR0(h.target_3)}</span>}
+                            {h.position_size_shares != null && <span className="text-purple-400 text-[10px]">{h.position_size_shares.toLocaleString('en-IN')} sh</span>}
+                          </div>
                         : '—'}
                     </td>
                     <td className="py-3 px-3 text-right font-mono text-xs">
@@ -461,9 +473,29 @@ export const PortfolioPanel: React.FC = () => {
 
                 {/* Trade setup: stop / target / upside */}
                 {c.target_1 !== null && (
-                  <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-800/60 text-[10px] font-mono">
-                    <span className="text-rose-400/80">SL ₹{fmtINR0(c.stop_loss ?? 0)}</span>
-                    <span className="text-emerald-400">T1 ₹{fmtINR0(c.target_1)} <span className="text-emerald-400/70">+{fmt(c.potential_gain_pct ?? 0, 1)}%</span></span>
+                  <div className="mt-2 pt-2 border-t border-slate-800/60 text-[10px] font-mono">
+                    <div className="flex items-center justify-between">
+                      <span className="text-rose-400/80">SL ₹{fmtINR0(c.stop_loss ?? 0)}</span>
+                      <div className="flex items-center gap-1.5">
+                        {c.rr_ratio != null && (
+                          <span className={`px-1 rounded font-bold ${
+                            c.rr_ratio >= 2.0 ? 'text-emerald-400 bg-emerald-950/30'
+                            : c.rr_ratio >= 1.0 ? 'text-indigo-400 bg-indigo-950/30'
+                            : 'text-rose-400 bg-rose-950/30'
+                          }`}>{c.rr_ratio.toFixed(1)}x</span>
+                        )}
+                        {c.position_size_shares != null && (
+                          <span className="text-purple-400">{c.position_size_shares.toLocaleString('en-IN')} sh</span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between mt-0.5">
+                      <span className="text-emerald-400">T1 ₹{fmtINR0(c.target_1)} <span className="text-emerald-400/70">+{fmt(c.potential_gain_pct ?? 0, 1)}%</span></span>
+                      <div className="flex items-center gap-1.5">
+                        {c.target_2 != null && <span className="text-emerald-400/60">T2 ₹{fmtINR0(c.target_2)}</span>}
+                        {c.target_3 != null && <span className="text-emerald-400/40">T3 ₹{fmtINR0(c.target_3)}</span>}
+                      </div>
+                    </div>
                   </div>
                 )}
               </button>
