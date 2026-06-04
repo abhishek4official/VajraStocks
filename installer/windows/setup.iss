@@ -89,16 +89,16 @@ var
   UninstExe:  string;
 begin
   if CurStep = ssInstall then begin
-    UninstPath := ExpandConstant(
-      'Software\Microsoft\Windows\CurrentVersion\Uninstall\{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}_is1'
-    );
+    // Plain string assignment — do NOT wrap in ExpandConstant() or Inno will
+    // try to interpret the GUID braces as a constant name and throw an error.
+    UninstPath := 'Software\Microsoft\Windows\CurrentVersion\Uninstall\' +
+                  '{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}_is1';
     if RegQueryStringValue(HKLM, UninstPath, 'UninstallString', UninstExe) or
        RegQueryStringValue(HKCU, UninstPath, 'UninstallString', UninstExe) then begin
       UninstExe := RemoveQuotes(UninstExe);
-      if FileExists(UninstExe) then begin
+      if FileExists(UninstExe) then
         Exec(UninstExe, '/SILENT /NORESTART', '', SW_HIDE,
              ewWaitUntilTerminated, ResultCode);
-      end;
     end;
   end;
 end;
