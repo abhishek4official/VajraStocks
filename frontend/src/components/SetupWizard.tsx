@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Database, Cpu, Download, CheckCircle, ChevronRight, Loader2, LineChart } from 'lucide-react';
+import { API_BASE } from '../lib/apiBase';
 
-const BASE = `${import.meta.env.VITE_API_BASE_URL}/api/v1`;
+const BASE = API_BASE;
 
 type Step = 'ai' | 'database' | 'symbols' | 'done';
 

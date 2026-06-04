@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useSettings } from './hooks/useSettings';
+import { API_BASE } from './lib/apiBase';
 import { SettingsContext } from './contexts/SettingsContext';
 import { useStockStore } from './store/useStockStore';
 import { Sidebar } from './components/Sidebar';
@@ -35,7 +36,7 @@ function App() {
   const settingsState = useSettings();
 
   React.useEffect(() => {
-    fetch(`${import.meta.env.VITE_API_BASE_URL}/api/v1/setup/status`)
+    fetch(`${API_BASE}/setup/status`)
       .then(r => r.json())
       .then(d => setSetupNeeded(d.setup_needed === true))
       .catch(() => setSetupNeeded(false));

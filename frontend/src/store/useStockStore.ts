@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { apiService } from '../services/api';
+import { API_BASE } from '../lib/apiBase';
 import type {
   SymbolDetail,
   CandleData,
@@ -262,7 +263,7 @@ function getInitialTab(): TabId {
 
 // Load screener limit from DB settings asynchronously (non-blocking)
 function loadScreenerLimitFromDB(): void {
-  const BASE = `${import.meta.env.VITE_API_BASE_URL}/api/v1`;
+  const BASE = API_BASE;
   fetch(`${BASE}/settings`)
     .then(r => (r.ok ? r.json() : null))
     .then((data: Record<string, Array<{ key: string; value: string; value_type: string }>> | null) => {
@@ -547,7 +548,7 @@ export const useStockStore = create<StockState>((set, get) => ({
     // no browser console error when NIFTY hasn't been synced yet.
     let benchmarkSymbol = '^NSEI';
     try {
-      const BASE = `${import.meta.env.VITE_API_BASE_URL}/api/v1`;
+      const BASE = API_BASE;
       const res = await fetch(`${BASE}/settings`);
       if (res.ok) {
         const data = await res.json();
@@ -636,7 +637,7 @@ export const useStockStore = create<StockState>((set, get) => ({
     });
 
     try {
-      const url = `${import.meta.env.VITE_API_BASE_URL}/api/v1/agents/chat-stream?prompt=${encodeURIComponent(prompt)}`;
+      const url = `${API_BASE}/agents/chat-stream?prompt=${encodeURIComponent(prompt)}`;
       const eventSource = new EventSource(url);
 
       eventSource.onmessage = (event) => {

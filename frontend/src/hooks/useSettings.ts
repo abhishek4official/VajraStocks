@@ -9,8 +9,9 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
+import { API_BASE } from '../lib/apiBase';
 
-const BASE = `${import.meta.env.VITE_API_BASE_URL}/api/v1`;
+const BASE = API_BASE;
 
 export interface Setting {
   id: number;
