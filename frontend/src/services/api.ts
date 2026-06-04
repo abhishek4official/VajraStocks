@@ -1,9 +1,6 @@
-// VITE_API_BASE_URL is only set in dev (.env) so the Vite dev server on :5173
-// can proxy calls to the FastAPI backend on :8000.
-// In production (served by FastAPI / installed app) the env var is absent —
-// fall back to an empty string so all calls use relative URLs (/api/v1/...)
-// which resolve to the same origin automatically.
-const BASE_URL = `${import.meta.env.VITE_API_BASE_URL ?? ''}/api/v1`;
+import { API_BASE } from '../lib/apiBase';
+
+const BASE_URL = API_BASE;
 
 export interface SymbolDetail {
   id: number;
