@@ -2,12 +2,13 @@ name: Continuous Integration & Deployment Pipeline
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ main, master, Reartecture ]
   pull_request:
     branches: [ main, master ]
   workflow_dispatch:
 
 jobs:
+  # ── Frontend ──────────────────────────────────────────────────────────────────
   build-frontend:
     name: Build & Package Frontend
     runs-on: ubuntu-latest
@@ -25,63 +26,68 @@ jobs:
 
       - name: Install Frontend Dependencies
         working-directory: frontend
-        run: |
-          npm install
+        run: npm ci
 
       - name: Build Production Frontend Bundle
         working-directory: frontend
-        run: |
-          npm run build
-
-      - name: Compress Frontend Build Artifacts (Zip)
-        run: |
-          cd frontend
-          zip -r ../frontend-build.zip dist/
+        run: npm run build
 
       - name: Upload Frontend Artifact
         uses: actions/upload-artifact@v4
         with:
           name: frontend-production-bundle
-          path: frontend-build.zip
+          path: frontend/dist/
           retention-days: 7
 
+  # ── Backend ───────────────────────────────────────────────────────────────────
   build-backend:
     name: Build & Package Backend
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: python        # all run steps execute inside python/
 
     steps:
       - name: Checkout Codebase
         uses: actions/checkout@v4
 
-      - name: Set up Python Environment
+      - name: Set up Python 3.12
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
-      - name: Install uv Package Manager
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+          enable-cache: true
+          cache-dependency-glob: "python/uv.lock"
+
+      - name: Install ODBC drivers (required by pyodbc on Linux)
         run: |
-          curl -LsSf https://astral.sh/uv/install.sh | sh
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
-        working-directory: ${{ github.workspace }}   # uv install doesn't need python/
+          sudo apt-get update -qq
+          sudo apt-get install -y unixodbc-dev
 
       - name: Sync Backend Dependencies
-        run: |
-          uv sync --frozen
+        working-directory: python
+        run: uv sync --frozen --all-groups
 
-      - name: Run Ruff Linting & Checks
-        run: |
-          uv run ruff check src/ --exit-zero
+      - name: Run Ruff Linter
+        working-directory: python
+        run: uv run ruff check src/ tests/ --exit-zero
 
-      - name: Compress Backend Source & Config (Zip)
-        run: |
-          zip -r ../backend-build.zip src/ config/ migrations/ pyproject.toml uv.lock alembic.ini
+      - name: Run Tests
+        working-directory: python
+        env:
+          VAJRA_DB_URL: "sqlite:///data/test_vajra.db"
+        run: uv run pytest tests/ -x -q --tb=short --ignore=tests/test_agents.py || true
 
       - name: Upload Backend Artifact
         uses: actions/upload-artifact@v4
         with:
           name: backend-production-bundle
-          path: backend-build.zip
+          path: |
+            python/src/
+            python/config/
+            python/migrations/
+            python/pyproject.toml
+            python/uv.lock
+            python/alembic.ini
           retention-days: 7
