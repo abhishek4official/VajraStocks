@@ -1,0 +1,51 @@
+# Default configuration bundled with the VajraStocks installer.
+# This file is copied into the bundle's config/ directory at build time.
+#
+# IMPORTANT: Uses SQLite so the app works on any machine without SQL Server.
+# Users can switch to MSSQL/PostgreSQL via Settings → Database after install.
+
+app:
+  env: production
+  name: VajraStocks
+
+database:
+  # Absolute path is injected by the launcher via VAJRA_DB_URL env var.
+  # This value is only used if VAJRA_DB_URL is not set (e.g. running from source).
+  connection_string: "sqlite:///data/vajra.db"
+  provider: sqlite
+  pool_size: 5
+  max_overflow: 10
+  pool_recycle: 1800
+
+downloader:
+  history_years: 3
+  batch_size: 50
+  rate_limit_per_second: 5
+  max_retries: 5
+  backoff_factor: 2.0
+  timeout_seconds: 30
+
+symbols:
+  active_equities_url: https://archives.nseindia.com/content/equities/EQUITY_L_ACTIVE.csv
+  fallback_csv_path: config/EQUITY_L_ACTIVE.csv
+  default_indices:
+    - ^NSEI
+    - ^NSEBANK
+  include_indices: true
+
+validation:
+  max_price_pct_change_limit: 0.5
+  enable_volume_check: true
+  enable_empty_row_check: true
+
+logging:
+  console_level: INFO
+  file_level: DEBUG
+  file_path: logs/vajra.log
+  rotation: 10 MB
+  retention: 30 days
+
+ai:
+  provider: ollama
+  base_url: http://localhost:11434
+  model: qwen2.5-coder:7b
