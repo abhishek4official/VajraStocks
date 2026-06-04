@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useStockStore } from '../store/useStockStore';
+import { useSettingsCtx } from '../contexts/SettingsContext';
 import { 
   RefreshCw, 
   Settings, 
@@ -12,27 +13,29 @@ import {
 } from 'lucide-react';
 
 export const SyncPanel: React.FC = () => {
-  const { 
-    syncJobs, 
-    syncStatuses, 
-    fetchSyncLogs, 
-    triggerFullSync, 
-    triggerRecalculate, 
-    isSyncing 
+  const {
+    syncJobs,
+    syncStatuses,
+    fetchSyncLogs,
+    triggerFullSync,
+    triggerRecalculate,
+    isSyncing
   } = useStockStore();
+
+  const { get } = useSettingsCtx();
+  const pollIntervalMs = get('UI', 'sync_poll_interval_ms', 5000);
 
   const [activeSubTab, setActiveSubTab] = useState<'history' | 'status'>('history');
 
   useEffect(() => {
     fetchSyncLogs();
-    
-    // Poll every 5 seconds while syncing/running jobs to give real time updates!
+    // Poll interval driven by DB setting UI/sync_poll_interval_ms (default 5000 ms)
     const interval = setInterval(() => {
       fetchSyncLogs();
-    }, 5000);
+    }, pollIntervalMs);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [pollIntervalMs]);
 
   const totalRegistered = syncStatuses.length;
   const successfulCount = syncStatuses.filter(s => s.last_attempt_status === 'SUCCESS').length;

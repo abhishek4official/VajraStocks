@@ -121,32 +121,48 @@ export const apiService = {
 
   // 2. Charts endpoints
   async getCandles(symbol: string): Promise<CandleData[]> {
-    const response = await fetch(`${BASE_URL}/charts/${symbol}/candles`);
+    const response = await fetch(`${BASE_URL}/charts/${encodeURIComponent(symbol)}/candles`);
     if (!response.ok) throw new Error('Failed to fetch candlestick data');
     return response.json();
   },
 
+  /**
+   * Fetch candles for the benchmark / index symbol (e.g. ^NSEI).
+   * Returns an empty array silently when the symbol is not yet synced —
+   * no 404 error logged in the browser console.
+   */
+  async getBenchmarkCandles(symbol: string): Promise<CandleData[]> {
+    try {
+      const response = await fetch(`${BASE_URL}/charts/${encodeURIComponent(symbol)}/candles`);
+      if (response.status === 404) return [];          // not synced yet — silent fallback
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return response.json();
+    } catch {
+      return [];
+    }
+  },
+
   async getHeikinAshi(symbol: string): Promise<CandleData[]> {
-    const response = await fetch(`${BASE_URL}/charts/${symbol}/heikin-ashi`);
+    const response = await fetch(`${BASE_URL}/charts/${encodeURIComponent(symbol)}/heikin-ashi`);
     if (!response.ok) throw new Error('Failed to fetch Heikin-Ashi data');
     return response.json();
   },
 
   async getRenkoBricks(symbol: string): Promise<RenkoBrick[]> {
-    const response = await fetch(`${BASE_URL}/charts/${symbol}/renko`);
+    const response = await fetch(`${BASE_URL}/charts/${encodeURIComponent(symbol)}/renko`);
     if (!response.ok) throw new Error('Failed to fetch Renko brick data');
     return response.json();
   },
 
   async getLineBreakLines(symbol: string): Promise<LineBreakLine[]> {
-    const response = await fetch(`${BASE_URL}/charts/${symbol}/line-break`);
+    const response = await fetch(`${BASE_URL}/charts/${encodeURIComponent(symbol)}/line-break`);
     if (!response.ok) throw new Error('Failed to fetch Line Break data');
     return response.json();
   },
 
   // 3. Technical Indicators endpoint
   async getIndicators(symbol: string): Promise<IndicatorData[]> {
-    const response = await fetch(`${BASE_URL}/indicators/${symbol}`);
+    const response = await fetch(`${BASE_URL}/indicators/${encodeURIComponent(symbol)}`);
     if (!response.ok) throw new Error('Failed to fetch indicators data');
     return response.json();
   },

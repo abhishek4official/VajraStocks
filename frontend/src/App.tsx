@@ -1,4 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { useSettings } from './hooks/useSettings';
+import { SettingsContext } from './contexts/SettingsContext';
 import { useStockStore } from './store/useStockStore';
 import { Sidebar } from './components/Sidebar';
 import { PriceChart } from './components/PriceChart';
@@ -11,6 +13,8 @@ import { PortfolioPanel } from './components/PortfolioPanel';
 import { WatchlistPanel } from './components/WatchlistPanel';
 import { TradePlanCard } from './components/TradePlanCard';
 import { ComparePanel } from './components/ComparePanel';
+import { SettingsPanel } from './components/SettingsPanel';
+import { SetupWizard } from './components/SetupWizard';
 import {
   LineChart,
   Search,
@@ -23,7 +27,36 @@ import {
 } from 'lucide-react';
 import './App.css';
 
+// Thin wrapper: decides between loading / setup wizard / dashboard.
+// Keeping this separate guarantees a stable hook order in Dashboard.
 function App() {
+  const [setupNeeded, setSetupNeeded] = React.useState<boolean | null>(null);
+  // Single settings fetch shared by all child components via context
+  const settingsState = useSettings();
+
+  React.useEffect(() => {
+    fetch(`${import.meta.env.VITE_API_BASE_URL}/api/v1/setup/status`)
+      .then(r => r.json())
+      .then(d => setSetupNeeded(d.setup_needed === true))
+      .catch(() => setSetupNeeded(false));
+  }, []);
+
+  if (setupNeeded === null) return (
+    <div className="min-h-screen bg-[#07080a] flex items-center justify-center text-slate-400 text-sm">
+      Starting VajraStocks…
+    </div>
+  );
+
+  if (setupNeeded) return <SetupWizard onComplete={() => setSetupNeeded(false)} />;
+
+  return (
+    <SettingsContext.Provider value={settingsState}>
+      <Dashboard />
+    </SettingsContext.Provider>
+  );
+}
+
+function Dashboard() {
   const {
     activeTab,
     setActiveTab,
@@ -151,6 +184,7 @@ function App() {
             { id: 'watchlist',   label: 'Watchlist',   Icon: Bookmark    },
             { id: 'compare',     label: 'Compare',     Icon: TrendingUp  },
             { id: 'ai-research', label: 'AI Research', Icon: Cpu         },
+            { id: 'settings',    label: 'Settings',    Icon: Settings    },
           ] as const).map(({ id, label, Icon }) => (
             <button
               key={id}
@@ -428,6 +462,9 @@ function App() {
 
         {/* Compare */}
         {activeTab === 'compare' && <ComparePanel />}
+
+        {/* Settings */}
+        {activeTab === 'settings' && <SettingsPanel />}
 
         {/* TAB 6: Watchlist */}
         {activeTab === 'watchlist' && <WatchlistPanel />}

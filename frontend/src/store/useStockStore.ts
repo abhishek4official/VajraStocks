@@ -71,7 +71,7 @@ export interface WatchlistAlert {
   createdAt: string;
 }
 
-type TabId = 'explorer' | 'screener' | 'sync' | 'ai-research' | 'portfolio' | 'watchlist' | 'compare';
+type TabId = 'explorer' | 'screener' | 'sync' | 'ai-research' | 'portfolio' | 'watchlist' | 'compare' | 'settings';
 type ChartTimeframe = '1W' | '1M' | '3M' | '6M' | '1Y' | 'MAX';
 
 // ─── Store shape ──────────────────────────────────────────────────────────────
@@ -256,8 +256,28 @@ function parseZerodhaCSV(csvText: string): PortfolioHolding[] {
 
 function getInitialTab(): TabId {
   const path = window.location.pathname.replace(/^\/+/, '').split('/')[0];
-  const valid: TabId[] = ['explorer', 'screener', 'sync', 'ai-research', 'portfolio', 'watchlist', 'compare'];
+  const valid: TabId[] = ['explorer', 'screener', 'sync', 'ai-research', 'portfolio', 'watchlist', 'compare', 'settings'];
   return valid.includes(path as TabId) ? (path as TabId) : 'explorer';
+}
+
+// Load screener limit from DB settings asynchronously (non-blocking)
+function loadScreenerLimitFromDB(): void {
+  const BASE = `${import.meta.env.VITE_API_BASE_URL}/api/v1`;
+  fetch(`${BASE}/settings`)
+    .then(r => (r.ok ? r.json() : null))
+    .then((data: Record<string, Array<{ key: string; value: string; value_type: string }>> | null) => {
+      if (!data) return;
+      const limitRow = data['SCREENER']?.find(s => s.key === 'default_limit');
+      if (limitRow?.value) {
+        const limit = parseInt(limitRow.value, 10);
+        if (!isNaN(limit) && limit > 0) {
+          useStockStore.setState(s => ({
+            screenerFilters: { ...s.screenerFilters, limit },
+          }));
+        }
+      }
+    })
+    .catch(() => { /* keep 2500 default */ });
 }
 
 // ─── Store ────────────────────────────────────────────────────────────────────
@@ -522,13 +542,22 @@ export const useStockStore = create<StockState>((set, get) => ({
   },
 
   fetchNiftyCandles: async () => {
+    // Read benchmark symbol from DB settings; fall back to ^NSEI.
+    // Uses getBenchmarkCandles which returns [] silently on 404 —
+    // no browser console error when NIFTY hasn't been synced yet.
+    let benchmarkSymbol = '^NSEI';
     try {
-      const candles = await apiService.getCandles('^NSEI');
-      set({ niftyCandles: candles });
-    } catch {
-      // NIFTY not synced yet — silently ignore, overlay will be hidden
-      set({ niftyCandles: [] });
-    }
+      const BASE = `${import.meta.env.VITE_API_BASE_URL}/api/v1`;
+      const res = await fetch(`${BASE}/settings`);
+      if (res.ok) {
+        const data = await res.json();
+        const row = data['MARKET']?.find((s: { key: string; value: string }) => s.key === 'rs_benchmark_symbol');
+        if (row?.value) benchmarkSymbol = row.value;
+      }
+    } catch { /* keep default ^NSEI */ }
+
+    const candles = await apiService.getBenchmarkCandles(benchmarkSymbol);
+    set({ niftyCandles: candles });
   },
 
   runScreener: async () => {
@@ -667,3 +696,6 @@ export const useStockStore = create<StockState>((set, get) => ({
     }
   },
 }));
+
+// Load DB-backed screener limit once the store is created (non-blocking)
+loadScreenerLimitFromDB();
