@@ -72,20 +72,19 @@ async def initialize(body: SetupRequest, request: Request):
 
 
 async def _background_symbol_download(request: Request):
-    """Runs the symbol bootstrap in a background asyncio task."""
+    """Runs the symbol bootstrap using DB-backed config (no config.yaml)."""
     import asyncio
-    from stocks.config import Config
-    from stocks.db.connection import DatabaseManager
-    from stocks.services.symbol import SymbolService
     from loguru import logger
+    from stocks.api.deps import get_config
 
-    await asyncio.sleep(0.5)  # let the HTTP response flush first
+    await asyncio.sleep(0.5)
     try:
         logger.info("Background: starting initial symbol download...")
-        db_manager: DatabaseManager = request.app.state.db_manager
+        cfg = get_config(request)
+        db_manager = request.app.state.db_manager
         session = db_manager.get_session()
         try:
-            cfg = Config.load()
+            from stocks.services.symbol import SymbolService
             svc = SymbolService(cfg, session)
             parsed = svc.fetch_active_symbols_from_nse()
             count = svc.sync_symbols(parsed)

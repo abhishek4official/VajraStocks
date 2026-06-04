@@ -57,8 +57,11 @@ def get_all_symbols(active_only: bool = True, db: Session = Depends(get_db)):
 @router.get("/{symbol}", response_model=SymbolDetailResponse)
 def get_symbol_by_ticker(symbol: str, db: Session = Depends(get_db)):
     """Retrieves detailed profile metadata for a single requested stock ticker."""
-    clean_sym = symbol.strip().upper()
-    raw_sym = clean_sym.replace(".NS", "")
+    from urllib.parse import unquote
+    clean_sym = unquote(symbol).strip().upper()   # handle %5ENSEI → ^NSEI
+    raw_sym = clean_sym.replace(".NS", "").replace(".BSE", "")
+    if not clean_sym.endswith(".NS") and not clean_sym.startswith("^"):
+        clean_sym = f"{raw_sym}.NS"
 
     stmt = (
         select(Symbol, SymbolSyncState)

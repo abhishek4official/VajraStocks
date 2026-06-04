@@ -1,10 +1,16 @@
 import React, { useMemo, useState } from 'react';
 import { useStockStore } from '../store/useStockStore';
+import { useSettingsCtx } from '../contexts/SettingsContext';
 import { Target, TrendingUp, TrendingDown, AlertTriangle } from 'lucide-react';
 
 export const TradePlanCard: React.FC = () => {
   const { candles, indicators, activeSymbolDetail } = useStockStore();
-  const [riskAmount, setRiskAmount] = useState<number>(5000);
+  const { get } = useSettingsCtx();
+  // Default risk amount and brokerage driven by DB settings PORTFOLIO/*
+  const [riskAmount, setRiskAmount] = useState<number>(
+    () => get('PORTFOLIO', 'default_risk_amount', 5000)
+  );
+  const brokeragePct = get('PORTFOLIO', 'brokerage_pct', 0.03) / 100; // stored as 0.03 means 0.03%
 
   const plan = useMemo(() => {
     if (!candles.length || !indicators.length) return null;
@@ -16,19 +22,23 @@ export const TradePlanCard: React.FC = () => {
     const atr = latestInd?.atr_14 ?? entry * 0.02; // fallback 2% if no ATR
     const sma200 = latestInd?.sma_200 ?? null;
 
-    const stopLoss   = entry - atr * 1.5;
-    const target1    = entry + atr * 2.0;   // 1.33:1 R/R
-    const target2    = entry + atr * 4.0;   // 2.67:1 R/R
+    const stopLoss    = entry - atr * 1.5;
+    const target1     = entry + atr * 2.0;   // 1.33:1 R/R
+    const target2     = entry + atr * 4.0;   // 2.67:1 R/R
     const riskPerUnit = entry - stopLoss;
-    const qty        = riskPerUnit > 0 ? Math.floor(riskAmount / riskPerUnit) : 0;
-    const rrRatio    = riskPerUnit > 0 ? ((target1 - entry) / riskPerUnit) : 0;
+    const qty         = riskPerUnit > 0 ? Math.floor(riskAmount / riskPerUnit) : 0;
+    const rrRatio     = riskPerUnit > 0 ? ((target1 - entry) / riskPerUnit) : 0;
+    // Net P&L after brokerage (two legs: buy + sell)
+    const grossPnl    = qty * (target1 - entry);
+    const brokerage   = 2 * brokeragePct * qty * entry;
+    const netPnl      = grossPnl - brokerage;
 
     // Trend bias from SMA 200
     const trend = sma200
       ? (entry > sma200 ? 'BULLISH' : 'BEARISH')
       : 'NEUTRAL';
 
-    return { entry, atr, stopLoss, target1, target2, qty, rrRatio, trend, sma200 };
+    return { entry, atr, stopLoss, target1, target2, qty, rrRatio, trend, sma200, netPnl, brokerage };
   }, [candles, indicators, riskAmount]);
 
   if (!plan) return null;

@@ -55,6 +55,25 @@ DEFAULT_SETTINGS: list[tuple[str, str, str, str, str, bool]] = [
     ("AI", "ai_model",      "qwen2.5-coder:7b",          "string",  "Model name to use",                 False),
     ("AI", "ai_api_key",    "",                          "string",  "API key for cloud providers",       True),
     ("AI", "ai_temperature","0.2",                       "float",   "Default LLM temperature",           False),
+
+    # SCREENER
+    ("SCREENER", "default_limit",           "2500",  "integer", "Max rows returned by screener",                  False),
+    ("SCREENER", "default_rsi_min",         "",      "string",  "Pre-filled RSI min filter (empty = off)",        False),
+    ("SCREENER", "default_rsi_max",         "",      "string",  "Pre-filled RSI max filter (empty = off)",        False),
+    ("SCREENER", "default_volume_breakout", "ANY",   "string",  "Default volume breakout filter: ANY/1.5X/2.0X/3.0X", False),
+    ("SCREENER", "default_ha_dir",          "",      "string",  "Default Heikin-Ashi direction filter (empty = off)", False),
+
+    # PORTFOLIO
+    ("PORTFOLIO", "default_risk_amount",  "5000", "float",   "Default capital at risk per trade (₹)",  False),
+    ("PORTFOLIO", "default_currency",     "INR",  "string",  "Display currency symbol",                False),
+    ("PORTFOLIO", "brokerage_pct",        "0.03", "float",   "Brokerage % per leg (e.g. 0.03 = 0.03%)", False),
+    ("PORTFOLIO", "capital",              "0",    "float",   "Total trading capital (₹) for position sizing", False),
+
+    # UI
+    ("UI", "sync_poll_interval_ms",   "5000",  "integer", "Sync panel auto-refresh interval (ms)",          False),
+    ("UI", "chart_default_timeframe", "1Y",    "string",  "Default chart timeframe: 1W/1M/3M/6M/1Y/MAX",   False),
+    ("UI", "screener_auto_run",       "false", "boolean", "Automatically run screener when tab opens",      False),
+    ("UI", "sidebar_default_sort",    "symbol","string",  "Sidebar sort order: symbol / company_name",      False),
 ]
 
 

@@ -5,44 +5,10 @@ from fastapi.responses import StreamingResponse
 from loguru import logger
 from sqlalchemy.orm import Session
 
-from stocks.api.deps import get_db
+from stocks.api.deps import get_config, get_db
 from stocks.services.agents.orchestrator import Orchestrator
 
 router = APIRouter(prefix="/agents", tags=["AI Quant Agents"])
-
-
-def _build_config_from_settings(request: Request):
-    """Builds a minimal Config-compatible object from DB settings for the Orchestrator."""
-    from stocks.config import AIConfig, Config, DatabaseConfig, DownloaderConfig, SymbolsConfig, ValidationConfig, AppConfig, LoggingConfig
-    from stocks.services.settings_service import SettingsService
-
-    session = request.app.state.db_manager.get_session()
-    try:
-        svc = SettingsService(session)
-        cfg = Config(
-            app=AppConfig(
-                name=svc.get_str("APPLICATION", "app_name", "VajraStocks"),
-                env=svc.get_str("APPLICATION", "app_env", "production"),
-            ),
-            database=DatabaseConfig(
-                connection_string=svc.get_str("DATABASE", "db_connection_string", "sqlite:///data/vajra.db"),
-            ),
-            downloader=DownloaderConfig(),
-            symbols=SymbolsConfig(
-                active_equities_url=svc.get_str("MARKET", "nse_equities_url"),
-                fallback_csv_path=svc.get_str("MARKET", "nse_fallback_csv_path"),
-            ),
-            validation=ValidationConfig(),
-            logging=LoggingConfig(),
-            ai=AIConfig(
-                provider=svc.get_str("AI", "ai_provider", "ollama"),
-                base_url=svc.get_str("AI", "ai_base_url", "http://localhost:11434"),
-                model=svc.get_str("AI", "ai_model", "qwen2.5-coder:7b"),
-            ),
-        )
-        return cfg
-    finally:
-        session.close()
 
 
 @router.get("/chat-stream")
@@ -54,7 +20,7 @@ async def chat_stream(
     """Executes a dynamic multi-agent technical research workflow and streams progress events in real-time."""
     logger.info(f"AI Agent Chat request initiated with prompt: '{prompt}'")
 
-    config = _build_config_from_settings(request)
+    config = get_config(request)   # reads AI settings live from DB — no config.yaml
     orchestrator = Orchestrator(config, db)
 
     async def event_generator():

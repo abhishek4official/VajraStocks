@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Database, Cpu, Download, CheckCircle, ChevronRight, Loader2, LineChart } from 'lucide-react';
 
 const BASE = `${import.meta.env.VITE_API_BASE_URL}/api/v1`;
@@ -23,6 +23,26 @@ export const SetupWizard: React.FC<{ onComplete: () => void }> = ({ onComplete }
   const [downloadSymbols, setDownloadSymbols] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Pre-populate from existing DB settings so re-runs show current values
+  useEffect(() => {
+    fetch(`${BASE}/settings`)
+      .then(r => r.ok ? r.json() : null)
+      .then((data: Record<string, Array<{ key: string; value: string }>> | null) => {
+        if (!data) return;
+        const ai = (k: string) => data['AI']?.find(s => s.key === k)?.value;
+        const db = (k: string) => data['DATABASE']?.find(s => s.key === k)?.value;
+        if (ai('ai_provider')) setAiProvider(ai('ai_provider')!);
+        if (ai('ai_base_url')) setAiBaseUrl(ai('ai_base_url')!);
+        if (ai('ai_model'))    setAiModel(ai('ai_model')!);
+        if (db('db_provider')) setDbProvider(db('db_provider')!);
+        const connStr = db('db_connection_string') ?? '';
+        // Strip sqlite:/// prefix for display in the path field
+        if (connStr.startsWith('sqlite:///')) setDbPath(connStr.replace('sqlite:///', ''));
+        else if (connStr) setDbPath(connStr);
+      })
+      .catch(() => { /* keep hardcoded defaults if settings unavailable */ });
+  }, []);
 
   const currentIdx = STEPS.findIndex(s => s.id === step);
 

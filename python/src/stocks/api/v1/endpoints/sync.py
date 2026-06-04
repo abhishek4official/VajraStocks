@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from stocks.api.deps import get_db
+from stocks.api.deps import get_config, get_db
 from stocks.db.models import Symbol, SymbolSyncState, SyncJob
 from stocks.services.database import DatabaseService
 from stocks.services.sync_engine import SyncEngine
@@ -40,19 +40,10 @@ class SymbolSyncStatusResponse(BaseModel):
 
 # ── Background workers ────────────────────────────────────────────────────────
 
-def _get_config_and_manager(request: Request):
-    """Resolves Config + DatabaseManager from app.state."""
-    from stocks.config import Config
-    db_manager = request.app.state.db_manager
-    try:
-        cfg = Config.load()
-    except Exception:
-        cfg = Config()
-    return cfg, db_manager
-
-
 def _execute_async_sync(request: Request, symbols: list[str] | None = None):
-    cfg, db_manager = _get_config_and_manager(request)
+    """Runs a full or partial sync using config values read from the DB."""
+    cfg = get_config(request)
+    db_manager = request.app.state.db_manager
     engine = SyncEngine(cfg, db_manager)
     try:
         engine.run_sync(specific_symbols=symbols)
@@ -61,10 +52,12 @@ def _execute_async_sync(request: Request, symbols: list[str] | None = None):
 
 
 def _execute_async_recalculate(request: Request, symbol_ticker: str | None = None):
+    """Recalculates all derived data (indicators, HA, Renko, snapshots) from raw prices."""
     from sqlalchemy import delete
     from stocks.db.models import DailyHeikinAshi, DailyIndicator, LineBreakLine, RenkoBrick
 
-    cfg, db_manager = _get_config_and_manager(request)
+    cfg = get_config(request)
+    db_manager = request.app.state.db_manager
     session = db_manager.get_session()
     db_service = DatabaseService(cfg, session)
     sync_engine = SyncEngine(cfg, db_manager)

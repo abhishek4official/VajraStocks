@@ -39,13 +39,27 @@ class LineBreakData(BaseModel):
 
 
 def _get_symbol_id_or_404(symbol: str, db: Session) -> int:
-    """Helper to query the symbol_id or raise a 404 error if missing."""
-    clean_sym = symbol.strip().upper()
-    raw_sym = clean_sym.replace(".NS", "")
+    """
+    Resolves a symbol string to a DB id, handling all common formats:
+      RELIANCE  →  RELIANCE.NS
+      RELIANCE.NS  →  RELIANCE.NS
+      ^NSEI  →  ^NSEI  (index, no .NS suffix)
+      %5ENSEI (URL-encoded ^)  →  ^NSEI  (FastAPI decodes automatically,
+                                          but we guard against edge cases)
+    """
+    from urllib.parse import unquote
+    clean_sym = unquote(symbol).strip().upper()   # decode %5E → ^ just in case
+    raw_sym = clean_sym.replace(".NS", "").replace(".BSE", "")
     if not clean_sym.endswith(".NS") and not clean_sym.startswith("^"):
-        clean_sym = f"{clean_sym}.NS"
+        clean_sym = f"{raw_sym}.NS"
 
-    symbol_id = db.scalar(select(Symbol.id).where((Symbol.symbol == clean_sym) | (Symbol.symbol == raw_sym)))
+    symbol_id = db.scalar(
+        select(Symbol.id).where(
+            (Symbol.symbol == clean_sym) |
+            (Symbol.symbol == raw_sym) |
+            (Symbol.symbol == unquote(symbol).strip().upper())   # exact match fallback
+        )
+    )
     if not symbol_id:
         raise HTTPException(status_code=404, detail=f"Symbol '{symbol}' was not found in the database.")
     return symbol_id

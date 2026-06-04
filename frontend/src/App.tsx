@@ -1,4 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useSettings } from './hooks/useSettings';
+import { SettingsContext } from './contexts/SettingsContext';
 import { useStockStore } from './store/useStockStore';
 import { Sidebar } from './components/Sidebar';
 import { PriceChart } from './components/PriceChart';
@@ -29,12 +31,14 @@ import './App.css';
 // Keeping this separate guarantees a stable hook order in Dashboard.
 function App() {
   const [setupNeeded, setSetupNeeded] = React.useState<boolean | null>(null);
+  // Single settings fetch shared by all child components via context
+  const settingsState = useSettings();
 
   React.useEffect(() => {
     fetch(`${import.meta.env.VITE_API_BASE_URL}/api/v1/setup/status`)
       .then(r => r.json())
       .then(d => setSetupNeeded(d.setup_needed === true))
-      .catch(() => setSetupNeeded(false)); // if API is unreachable, skip wizard
+      .catch(() => setSetupNeeded(false));
   }, []);
 
   if (setupNeeded === null) return (
@@ -45,7 +49,11 @@ function App() {
 
   if (setupNeeded) return <SetupWizard onComplete={() => setSetupNeeded(false)} />;
 
-  return <Dashboard />;
+  return (
+    <SettingsContext.Provider value={settingsState}>
+      <Dashboard />
+    </SettingsContext.Provider>
+  );
 }
 
 function Dashboard() {
