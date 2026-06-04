@@ -269,16 +269,7 @@ jobs:
               | head -40 > /tmp/commits.txt
           fi
 
-          echo "${VERSION}" > /tmp/version.txt
-
-          python3 -c "
-import pathlib
-version = pathlib.Path('/tmp/version.txt').read_text().strip()
-commits = pathlib.Path('/tmp/commits.txt').read_text().strip() or '- Initial release'
-template = pathlib.Path('installer/release_notes_template.md').read_text()
-notes = template.replace('VERSION_PLACEHOLDER', version).replace('COMMITS_PLACEHOLDER', commits)
-pathlib.Path('release/ReleaseNotes.md').write_text(notes)
-"
+          python3 installer/gen_release_notes.py "${VERSION}" /tmp/commits.txt
 
       - name: Generate checksums
         run: |
