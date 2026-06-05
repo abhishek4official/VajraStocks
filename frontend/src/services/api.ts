@@ -25,12 +25,19 @@ export interface TradePlan {
   target_2: number;
   entry_zone: string;
   position_size_shares: number;
-  risk_reward_ratio: number;
+  rr_ratio: number;
   sma_200: number | null;
   rsi_14: number | null;
   risk_per_trade: number;
   brokerage_pct: number;
   has_indicators: boolean;
+}
+
+export interface ConfluenceLevel {
+  price: number;
+  level_type: 'SUPPORT' | 'RESISTANCE';
+  strength_score: number;
+  components: string;
 }
 
 export interface PortfolioHolding {
@@ -43,7 +50,7 @@ export interface PortfolioHolding {
   current_val: number;
   pnl: number;
   return_pct: number;
-  bias: 'BULLISH' | 'NEUTRAL' | 'BEARISH' | null;
+  bias: 'VERY_BULLISH' | 'BULLISH' | 'NEUTRAL' | 'BEARISH' | 'VERY_BEARISH' | null;
   mtf_confirmed: boolean | null;
   weekly_trend: 'UP' | 'DOWN' | null;
   atr_pct: number | null;
@@ -59,7 +66,11 @@ export interface PortfolioHolding {
   ret_3w: number | null;
   ret_4w: number | null;
   target_1: number | null;
+  target_2?: number | null;
+  target_3?: number | null;
   potential_gain_pct: number | null;
+  rr_ratio?: number | null;
+  position_size_shares?: number | null;
 }
 
 export interface ReplacementCandidate {
@@ -69,7 +80,7 @@ export interface ReplacementCandidate {
   rsi_14: number | null;
   atr_pct: number | null;
   vol_class: 'LOW' | 'MEDIUM' | 'HIGH' | null;
-  bias: 'BULLISH' | 'NEUTRAL' | 'BEARISH' | null;
+  bias: 'VERY_BULLISH' | 'BULLISH' | 'NEUTRAL' | 'BEARISH' | 'VERY_BEARISH' | null;
   weekly_trend: 'UP' | 'DOWN' | null;
   ret_1w: number | null;
   ret_2w: number | null;
@@ -77,7 +88,15 @@ export interface ReplacementCandidate {
   ret_4w: number | null;
   stop_loss: number | null;
   target_1: number | null;
+  target_2?: number | null;
+  target_3?: number | null;
   potential_gain_pct: number | null;
+  rr_ratio?: number | null;
+  position_size_shares?: number | null;
+  adx_14?: number | null;
+  trend_strength_class?: string | null;
+  obv_trend?: string | null;
+  supertrend_dir?: string | null;
 }
 
 export interface PortfolioAggregates {
@@ -100,11 +119,25 @@ export interface PortfolioAggregates {
   max_cluster_pct: number;
   weak_holdings: string[];
   replacement_candidates: ReplacementCandidate[];
+  correlation_clusters: { pair: [string, string]; rho: number }[];
+  portfolio_beta: number | null;
+  diversification_score: number | null;
 }
 
 export interface PortfolioData {
   holdings: PortfolioHolding[];
   aggregates: PortfolioAggregates;
+}
+
+export interface StockAlert {
+  id: number;
+  symbol: string;
+  alert_type: string;
+  condition_value: number | null;
+  status: 'TRIGGERED' | 'DISMISSED';
+  scope: string;
+  message: string;
+  triggered_at: string;
 }
 
 export interface CandleData {
@@ -169,6 +202,8 @@ export interface ScreenerRow {
   is_gap_up?: boolean | null;
   is_gap_down?: boolean | null;
   rs_score_1m?: number | null;
+  regime_bias?: string | null;
+  weekly_trend?: string | null;
   weekly_avg_volume?: number | null;
   volume_breakout_ratio?: number | null;
   ret_1w?: number | null;
@@ -178,7 +213,22 @@ export interface ScreenerRow {
   atr_pct?: number | null;
   stop_loss?: number | null;
   target_1?: number | null;
+  target_2?: number | null;
+  target_3?: number | null;
   potential_gain_pct?: number | null;
+  rr_ratio?: number | null;
+  position_size_shares?: number | null;
+  trade_quality_score?: number | null;
+  adx_14?: number | null;
+  trend_strength_class?: string | null;
+  obv_trend?: string | null;
+  supertrend_dir?: string | null;
+  stoch_state?: string | null;
+  composite_score?: number | null;
+  trend_score_val?: number | null;
+  volume_score_val?: number | null;
+  rs_score_val?: number | null;
+  momentum_score_val?: number | null;
 }
 
 export interface CorporateAction {
@@ -231,6 +281,12 @@ export const apiService = {
     } catch {
       return null;
     }
+  },
+
+  async getConfluenceLevels(symbol: string): Promise<ConfluenceLevel[]> {
+    const response = await fetch(`${BASE_URL}/symbols/${encodeURIComponent(symbol)}/confluence-levels`);
+    if (!response.ok) throw new Error(`Failed to fetch confluence levels for ${symbol}`);
+    return response.json();
   },
 
   // 2. Charts endpoints
@@ -424,5 +480,32 @@ export const apiService = {
     const response = await fetch(`${BASE_URL}/sync/status${query}`);
     if (!response.ok) throw new Error('Failed to fetch symbol sync status health');
     return response.json();
-  }
+  },
+
+  async cancelSync(): Promise<{ status: string; message: string }> {
+    const response = await fetch(`${BASE_URL}/sync/cancel`, { method: 'POST' });
+    if (!response.ok) throw new Error('Failed to cancel active sync jobs');
+    return response.json();
+  },
+
+  // 7. Alerts
+  async getAlerts(status?: string, limit = 100): Promise<StockAlert[]> {
+    const params = new URLSearchParams();
+    if (status) params.set('status', status);
+    params.set('limit', String(limit));
+    const response = await fetch(`${BASE_URL}/alerts?${params}`);
+    if (!response.ok) throw new Error('Failed to fetch alerts');
+    return response.json();
+  },
+
+  async dismissAlert(id: number): Promise<void> {
+    const response = await fetch(`${BASE_URL}/alerts/${id}/dismiss`, { method: 'POST' });
+    if (!response.ok) throw new Error('Failed to dismiss alert');
+  },
+
+  async dismissAllAlerts(): Promise<{ dismissed: number }> {
+    const response = await fetch(`${BASE_URL}/alerts/dismiss-all`, { method: 'POST' });
+    if (!response.ok) throw new Error('Failed to dismiss all alerts');
+    return response.json();
+  },
 };

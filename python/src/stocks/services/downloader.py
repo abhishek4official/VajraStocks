@@ -70,11 +70,14 @@ class DownloaderService:
 
         logger.info(f"Downloading historical data for {len(tickers)} symbols from {start_date} to {end_date}...")
 
+        # yfinance end date is exclusive, so we add 1 day to make the download range inclusive
+        exclusive_end_date = end_date + datetime.timedelta(days=1)
+
         # Fetch EOD and actions in a single batch call. auto_adjust=False preserves both Close & Adj Close.
         df = yf.download(
             tickers=tickers,
             start=start_date.strftime("%Y-%m-%d"),
-            end=end_date.strftime("%Y-%m-%d"),
+            end=exclusive_end_date.strftime("%Y-%m-%d"),
             group_by="ticker",
             auto_adjust=False,
             actions=True,

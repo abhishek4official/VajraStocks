@@ -2,11 +2,11 @@ app:
   env: production
   name: nse-historical-downloader
 database:
-  connection_string: mssql+pyodbc://(localdb)\MSSQLLocalDB/vajra_stocks?driver=ODBC+Driver+17+for+SQL+Server&trusted_connection=yes&encrypt=no
+  connection_string: sqlite:///data/vajra.db
   pool_size: 10
   max_overflow: 20
   pool_recycle: 1800
-  provider: mssql
+  provider: sqlite
 downloader:
   history_years: 3
   batch_size: 50

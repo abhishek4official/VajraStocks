@@ -64,6 +64,9 @@ class Symbol(Base):
     screening_snapshot: Mapped[Optional["ScreeningSnapshot"]] = relationship(
         "ScreeningSnapshot", back_populates="symbol_obj", uselist=False, cascade="all, delete-orphan"
     )
+    confluence_levels: Mapped[list["SymbolConfluenceLevel"]] = relationship(
+        "SymbolConfluenceLevel", back_populates="symbol_obj", cascade="all, delete-orphan"
+    )
 
 
 class DailyPrice(Base):
@@ -159,6 +162,7 @@ class DailyIndicator(Base):
     sma_50: Mapped[float | None] = mapped_column(Float, nullable=True)
     sma_200: Mapped[float | None] = mapped_column(Float, nullable=True)
     ema_9: Mapped[float | None] = mapped_column(Float, nullable=True)
+    ema_20: Mapped[float | None] = mapped_column(Float, nullable=True)
     ema_21: Mapped[float | None] = mapped_column(Float, nullable=True)
     macd_line: Mapped[float | None] = mapped_column(Float, nullable=True)
     macd_signal: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -166,6 +170,22 @@ class DailyIndicator(Base):
     bb_upper: Mapped[float | None] = mapped_column(Float, nullable=True)
     bb_middle: Mapped[float | None] = mapped_column(Float, nullable=True)
     bb_lower: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    # Trend strength
+    adx_14: Mapped[float | None] = mapped_column(Float, nullable=True)
+    plus_di: Mapped[float | None] = mapped_column(Float, nullable=True)
+    minus_di: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    # Volume / accumulation
+    obv: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    # Supertrend(10, 3)
+    supertrend: Mapped[float | None] = mapped_column(Float, nullable=True)
+    supertrend_dir: Mapped[str | None] = mapped_column(String(10), nullable=True)  # UP / DOWN
+
+    # Stochastic(14, 3, 3)
+    stoch_k: Mapped[float | None] = mapped_column(Float, nullable=True)
+    stoch_d: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     # Relationships
     symbol_obj: Mapped["Symbol"] = relationship("Symbol", back_populates="indicators")
@@ -290,7 +310,7 @@ class ScreeningSnapshot(Base):
     # MTF / Risk fields (materialized from daily + weekly-resampled data)
     atr_pct: Mapped[float | None] = mapped_column(Float, nullable=True)         # ATR(14) / close * 100
     vol_class: Mapped[str | None] = mapped_column(String(10), nullable=True)    # LOW / MEDIUM / HIGH
-    regime_bias: Mapped[str | None] = mapped_column(String(10), nullable=True)  # BULLISH / NEUTRAL / BEARISH (multi-factor)
+    regime_bias: Mapped[str | None] = mapped_column(String(20), nullable=True)  # VERY_BULLISH / BULLISH / NEUTRAL / BEARISH / VERY_BEARISH
     weekly_trend: Mapped[str | None] = mapped_column(String(10), nullable=True) # UP / DOWN (weekly close vs 40-wk EMA)
     mtf_confirmed: Mapped[bool | None] = mapped_column(Boolean, nullable=True)  # daily bias confirmed by weekly trend
 
@@ -300,6 +320,24 @@ class ScreeningSnapshot(Base):
     ret_3w: Mapped[float | None] = mapped_column(Float, nullable=True)
     ret_4w: Mapped[float | None] = mapped_column(Float, nullable=True)
 
+    # New indicator snapshot fields
+    adx_14: Mapped[float | None] = mapped_column(Float, nullable=True)
+    trend_strength_class: Mapped[str | None] = mapped_column(String(10), nullable=True)  # WEAK / MODERATE / STRONG
+    obv_trend: Mapped[str | None] = mapped_column(String(10), nullable=True)             # UP / DOWN / FLAT
+    supertrend_dir: Mapped[str | None] = mapped_column(String(10), nullable=True)        # UP / DOWN
+    stoch_state: Mapped[str | None] = mapped_column(String(15), nullable=True)           # OVERBOUGHT / OVERSOLD / NEUTRAL
+
+    # Volume profile
+    weekly_avg_volume: Mapped[float | None] = mapped_column(Float, nullable=True)
+    volume_breakout_ratio: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    # Composite scoring (0-100 per component + weighted total)
+    composite_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    trend_score_val: Mapped[float | None] = mapped_column(Float, nullable=True)
+    volume_score_val: Mapped[float | None] = mapped_column(Float, nullable=True)
+    rs_score_val: Mapped[float | None] = mapped_column(Float, nullable=True)
+    momentum_score_val: Mapped[float | None] = mapped_column(Float, nullable=True)
+
     updated_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now())
 
     # Relationships
@@ -308,6 +346,7 @@ class ScreeningSnapshot(Base):
     __table_args__ = (
         Index("ix_snapshot_rsi", "rsi_14"),
         Index("ix_snapshot_sma_200", "sma_200_cross_direction"),
+        Index("ix_snapshot_bias", "regime_bias"),
     )
 
 
@@ -353,4 +392,54 @@ class PortfolioHolding(Base):
     __table_args__ = (
         UniqueConstraint("instrument", name="UQ_PortfolioHolding_Instrument"),
         Index("ix_portfolio_holdings_instrument", "instrument"),
+    )
+
+
+class Alert(Base):
+    """A triggered or armed alert for a symbol — evaluated post-sync."""
+
+    __tablename__ = "alerts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    symbol_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("symbols.id", ondelete="CASCADE"), nullable=True
+    )
+    symbol: Mapped[str] = mapped_column(String(50), nullable=False)
+    alert_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    # PRICE_CROSS_SUPPORT / PRICE_CROSS_RESISTANCE / STOP_HIT / TARGET_HIT /
+    # RSI_EXTREME / MACD_CROSS / SUPERTREND_FLIP / VOLUME_BREAKOUT /
+    # BIAS_UPGRADE / BIAS_DOWNGRADE
+    condition_value: Mapped[float | None] = mapped_column(Float, nullable=True)  # threshold that triggered
+    status: Mapped[str] = mapped_column(String(15), nullable=False, default="TRIGGERED")
+    # TRIGGERED / DISMISSED
+    scope: Mapped[str] = mapped_column(String(15), nullable=False, default="HOLDING")
+    # HOLDING / GLOBAL
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    triggered_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=func.now())
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=func.now())
+
+    __table_args__ = (
+        Index("ix_alerts_symbol_status", "symbol", "status"),
+        Index("ix_alerts_triggered_at", "triggered_at"),
+    )
+
+
+class SymbolConfluenceLevel(Base):
+    """Model representing cached backend-calculated Confluence Support and Resistance levels."""
+
+    __tablename__ = "symbol_confluence_levels"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    symbol_id: Mapped[int] = mapped_column(Integer, ForeignKey("symbols.id", ondelete="CASCADE"), nullable=False)
+    level_type: Mapped[str] = mapped_column(String(10), nullable=False)  # 'SUPPORT' or 'RESISTANCE'
+    price: Mapped[float] = mapped_column(Numeric(18, 4), nullable=False)
+    strength_score: Mapped[int] = mapped_column(Integer, nullable=False)
+    components: Mapped[str] = mapped_column(String(255), nullable=False)  # e.g. "SWING,HVN,EMA200"
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=func.now())
+
+    # Relationships
+    symbol_obj: Mapped["Symbol"] = relationship("Symbol", back_populates="confluence_levels")
+
+    __table_args__ = (
+        Index("ix_confluence_levels_symbol_type", "symbol_id", "level_type"),
     )

@@ -4,6 +4,7 @@ from fastapi import APIRouter
 from stocks.api.v1.endpoints import (
     actions,
     agents,
+    alerts,
     charts,
     indicators,
     portfolio,
@@ -27,3 +28,4 @@ api_router.include_router(agents.router)
 api_router.include_router(settings.router)
 api_router.include_router(setup.router)
 api_router.include_router(portfolio.router)
+api_router.include_router(alerts.router)

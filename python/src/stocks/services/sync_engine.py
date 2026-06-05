@@ -147,6 +147,20 @@ class SyncEngine:
 
                 # Split this group's symbols into downloader batches
                 for chunk_idx in range(0, len(symbols_list), batch_size):
+                    # Check for job cancellation
+                    if db_service.is_sync_job_cancelled(job.id):
+                        logger.warning(f"Sync job {job.run_id} cancelled by user.")
+                        db_service.finalize_sync_job(
+                            job.id, total_symbols, processed_symbols, failed_symbols, "CANCELLED", "Cancelled by user request."
+                        )
+                        return {
+                            "status": "CANCELLED",
+                            "job_id": job.run_id,
+                            "total_symbols": total_symbols,
+                            "processed_symbols": processed_symbols,
+                            "failed_symbols": failed_symbols,
+                            "records_inserted": records_inserted,
+                        }
                     chunk = symbols_list[chunk_idx : chunk_idx + batch_size]
                     tickers_chunk = [s.symbol for s in chunk]
                     symbols_by_ticker = {s.symbol: s for s in chunk}
@@ -202,6 +216,19 @@ class SyncEngine:
 
                         # Resilient Fallback: Download each ticker in the chunk individually
                         for symbol_obj in chunk:
+                            if db_service.is_sync_job_cancelled(job.id):
+                                logger.warning(f"Sync job {job.run_id} cancelled by user during fallback.")
+                                db_service.finalize_sync_job(
+                                    job.id, total_symbols, processed_symbols, failed_symbols, "CANCELLED", "Cancelled by user request."
+                                )
+                                return {
+                                    "status": "CANCELLED",
+                                    "job_id": job.run_id,
+                                    "total_symbols": total_symbols,
+                                    "processed_symbols": processed_symbols,
+                                    "failed_symbols": failed_symbols,
+                                    "records_inserted": records_inserted,
+                                }
                             ticker = symbol_obj.symbol
                             try:
                                 # Fetch individually
@@ -339,7 +366,8 @@ class SyncEngine:
                 "sma_20": None if pd.isna(row.get("sma_20")) else float(row["sma_20"]),
                 "sma_50": None if pd.isna(row.get("sma_50")) else float(row["sma_50"]),
                 "sma_200": None if pd.isna(row.get("sma_200")) else float(row["sma_200"]),
-                "ema_9": None if pd.isna(row.get("ema_9")) else float(row["ema_9"]),
+                "ema_9":  None if pd.isna(row.get("ema_9"))  else float(row["ema_9"]),
+                "ema_20": None if pd.isna(row.get("ema_20")) else float(row["ema_20"]),
                 "ema_21": None if pd.isna(row.get("ema_21")) else float(row["ema_21"]),
                 "macd_line": None if pd.isna(row.get("macd_line")) else float(row["macd_line"]),
                 "macd_signal": None if pd.isna(row.get("macd_signal")) else float(row["macd_signal"]),
@@ -347,6 +375,14 @@ class SyncEngine:
                 "bb_upper": None if pd.isna(row.get("bb_upper")) else float(row["bb_upper"]),
                 "bb_middle": None if pd.isna(row.get("bb_middle")) else float(row["bb_middle"]),
                 "bb_lower": None if pd.isna(row.get("bb_lower")) else float(row["bb_lower"]),
+                "adx_14":   None if pd.isna(row.get("adx_14"))   else float(row["adx_14"]),
+                "plus_di":  None if pd.isna(row.get("plus_di"))   else float(row["plus_di"]),
+                "minus_di": None if pd.isna(row.get("minus_di"))  else float(row["minus_di"]),
+                "obv":      None if pd.isna(row.get("obv"))       else float(row["obv"]),
+                "supertrend":     None if pd.isna(row.get("supertrend"))     else float(row["supertrend"]),
+                "supertrend_dir": None if (row.get("supertrend_dir") is None or (isinstance(row.get("supertrend_dir"), float) and pd.isna(row.get("supertrend_dir")))) else str(row["supertrend_dir"]),
+                "stoch_k":  None if pd.isna(row.get("stoch_k"))   else float(row["stoch_k"]),
+                "stoch_d":  None if pd.isna(row.get("stoch_d"))   else float(row["stoch_d"]),
             }
             indicators_to_save.append(ind_dict)
 
@@ -393,6 +429,13 @@ class SyncEngine:
             f"{len(indicators_to_save)} indicators, {len(ha_candles_to_save)} HA candles, "
             f"{len(renko_bricks_to_save)} Renko bricks, {len(line_breaks_to_save)} Line Break lines."
         )
+
+        try:
+            from stocks.services.quant.confluence_service import ConfluenceService
+            confluence_service = ConfluenceService(db_service.db)
+            confluence_service.calculate_and_save_levels(symbol_obj.id)
+        except Exception as confluence_err:
+            logger.error(f"[{symbol_obj.symbol}] Failed to calculate or save confluence levels: {confluence_err}")
 
     def _verify_and_update_symbol_sync_state(
         self, db_service: DatabaseService, symbol_obj: Any, ticker: str, global_max_date: datetime.date | None

@@ -63,6 +63,7 @@ def _execute_async_recalculate(request: Request, symbol_ticker: str | None = Non
     sync_engine = SyncEngine(cfg, db_manager)
 
     try:
+        request.app.state.cancel_recalculate = False
         active_symbols = db_service.get_active_symbols()
         if symbol_ticker:
             clean_sym = symbol_ticker.strip().upper()
@@ -71,6 +72,10 @@ def _execute_async_recalculate(request: Request, symbol_ticker: str | None = Non
             active_symbols = [s for s in active_symbols if s.symbol == clean_sym]
 
         for symbol_obj in active_symbols:
+            if getattr(request.app.state, "cancel_recalculate", False):
+                from loguru import logger
+                logger.warning("Recalculation cancelled by user request.")
+                break
             session.execute(delete(DailyIndicator).where(DailyIndicator.symbol_id == symbol_obj.id))
             session.execute(delete(DailyHeikinAshi).where(DailyHeikinAshi.symbol_id == symbol_obj.id))
             session.execute(delete(RenkoBrick).where(RenkoBrick.symbol_id == symbol_obj.id))
@@ -156,3 +161,23 @@ def get_symbols_sync_status(status_filter: str | None = None, db: Session = Depe
         }
         for state, sym in results
     ]
+
+
+@router.post("/cancel")
+def cancel_active_sync_jobs(request: Request, db: Session = Depends(get_db)):
+    """Cancels any currently running sync or recalculation jobs."""
+    # 1. Set recalculate cancellation flag
+    request.app.state.cancel_recalculate = True
+
+    # 2. Mark active database sync jobs as CANCELLED
+    running_jobs = db.scalars(select(SyncJob).where(SyncJob.status == "RUNNING")).all()
+    if not running_jobs:
+        return {"status": "ok", "message": "No active sync jobs found. Recalculation cancellation signal sent."}
+
+    for job in running_jobs:
+        job.status = "CANCELLED"
+        job.end_time = datetime.now()
+        job.error_summary = "Cancelled by user request."
+
+    db.commit()
+    return {"status": "ok", "message": f"Cancelled {len(running_jobs)} active sync job(s) and sent recalculation stop signal."}

@@ -9,11 +9,18 @@ from __future__ import annotations
 import csv
 import re
 
+from collections import defaultdict
 from loguru import logger
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from stocks.db.models import PortfolioHolding, ScreeningSnapshot, Symbol
+from stocks.db.models import PortfolioHolding, ScreeningSnapshot, Symbol, SymbolConfluenceLevel
+from stocks.services.quant.confluence_service import ConfluenceService
+from stocks.services.quant.portfolio_risk import (
+    compute_correlation_clusters,
+    compute_diversification_score,
+    compute_portfolio_beta,
+)
 from stocks.services.settings_service import SettingsService
 
 # Column-name aliases (matched as substrings, lower-cased) — mirrors the old
@@ -161,8 +168,11 @@ class PortfolioService:
 
         rows = self.db.scalars(select(PortfolioHolding).order_by(PortfolioHolding.instrument.asc())).all()
 
-        # Batch-load snapshots for the held symbols
+        risk_per_trade = SettingsService(self.db).get_float("PORTFOLIO", "default_risk_amount", 5000.0)
+
+        # Batch-load snapshots and confluence levels for the held symbols
         snap_by_instr: dict[str, ScreeningSnapshot] = {}
+        confl_by_symbol_id: dict[int, list[SymbolConfluenceLevel]] = defaultdict(list)
         if rows:
             instruments = {r.instrument for r in rows}
             ns_symbols = {f"{i}.NS" for i in instruments} | instruments
@@ -171,6 +181,14 @@ class PortfolioService:
             ).all()
             for sn in snaps:
                 snap_by_instr[sn.symbol.replace(".NS", "")] = sn
+
+            symbol_ids = [r.symbol_id for r in rows if r.symbol_id is not None]
+            if symbol_ids:
+                confl_levels = self.db.scalars(
+                    select(SymbolConfluenceLevel).where(SymbolConfluenceLevel.symbol_id.in_(symbol_ids))
+                ).all()
+                for lvl in confl_levels:
+                    confl_by_symbol_id[lvl.symbol_id].append(lvl)
 
         holdings: list[dict] = []
         total_invested = total_current = total_open_risk = 0.0
@@ -185,17 +203,55 @@ class PortfolioService:
             pnl = current_val - invested
             return_pct = (pnl / invested * 100.0) if invested else 0.0
 
-            # Per-position open risk via ATR stop (1.5x ATR below LTP),
-            # plus an ATR-based first target (T1 = LTP + 1.5x ATR).
+            # Get cached confluence levels
+            symbol_levels = confl_by_symbol_id.get(r.symbol_id, [])
+            pos_supports = [lvl for lvl in symbol_levels if lvl.level_type == "SUPPORT"]
+            pos_resistances = [lvl for lvl in symbol_levels if lvl.level_type == "RESISTANCE"]
+
+            pos_supports_sorted = sorted(pos_supports, key=lambda x: float(x.price), reverse=True)
+            support_val = float(pos_supports_sorted[0].price) if pos_supports_sorted else None
+
+            # Per-position open risk via confluence support, plus structural resistance targets
             atr_pct = float(snap.atr_pct) if snap and snap.atr_pct is not None else None
-            stop = open_risk = target_1 = potential_gain_pct = None
+            stop = open_risk = target_1 = target_2 = target_3 = potential_gain_pct = rr_ratio = None
+            position_size_shares = None
             if atr_pct is not None and ltp > 0:
                 atr_abs = atr_pct / 100.0 * ltp
-                stop = round(ltp - 1.5 * atr_abs, 2)
+
+                # Structural support stop-loss
+                if support_val is not None:
+                    stop = round(support_val - 1.5 * atr_abs, 2)
+                    if stop >= ltp:
+                        stop = round(ltp - 2.0 * atr_abs, 2)
+                else:
+                    stop = round(ltp - 1.5 * atr_abs, 2)
+
                 open_risk = round(float(r.qty) * (ltp - stop), 2)
                 total_open_risk += open_risk
-                target_1 = round(ltp + 1.5 * atr_abs, 2)
-                potential_gain_pct = round(1.5 * atr_pct, 2)
+
+                # T1: highest-strength resistance meaningfully above price
+                best_r1 = ConfluenceService.select_best_resistance(pos_resistances, ltp, atr_abs)
+                if best_r1 is not None:
+                    target_1 = round(float(best_r1.price), 2)
+                    above_t1 = sorted(
+                        [rv for rv in pos_resistances if float(rv.price) > float(best_r1.price)],
+                        key=lambda x: float(x.price),
+                    )
+                    if len(above_t1) >= 1:
+                        target_2 = round(float(above_t1[0].price), 2)
+                    if len(above_t1) >= 2:
+                        target_3 = round(float(above_t1[1].price), 2)
+                else:
+                    target_1 = round(ltp + 1.5 * atr_abs, 2)
+                    target_2 = round(ltp + 3.0 * atr_abs, 2)
+
+                potential_gain_pct = round((target_1 - ltp) / ltp * 100.0, 2) if ltp > 0 else 0.0
+
+                risk_per_share = ltp - stop
+                reward_per_share = target_1 - ltp
+                rr_ratio = round(reward_per_share / risk_per_share, 2) if risk_per_share > 0 else None
+                if risk_per_share > 0 and risk_per_trade > 0:
+                    position_size_shares = int(risk_per_trade / risk_per_share) or None
 
             if snap and snap.sma_200_cross_direction == "ABOVE":
                 above_sma200 += 1
@@ -208,9 +264,9 @@ class PortfolioService:
             mtf_ok = snap.mtf_confirmed if snap else None
             weak = False
             weak_reason = None
-            if bias == "BEARISH":
+            if bias in ("BEARISH", "VERY_BEARISH"):
                 weak, weak_reason = True, "Bearish bias"
-            elif bias is not None and mtf_ok is False:
+            elif bias is not None and mtf_ok is False and bias not in ("VERY_BULLISH",):
                 weak, weak_reason = True, "Weekly trend not confirmed"
 
             holdings.append(
@@ -240,7 +296,11 @@ class PortfolioService:
                     "ret_3w": round(float(snap.ret_3w), 2) if snap and snap.ret_3w is not None else None,
                     "ret_4w": round(float(snap.ret_4w), 2) if snap and snap.ret_4w is not None else None,
                     "target_1": target_1,
+                    "target_2": target_2,
+                    "target_3": target_3,
                     "potential_gain_pct": potential_gain_pct,
+                    "rr_ratio": rr_ratio,
+                    "position_size_shares": position_size_shares,
                 }
             )
 
@@ -273,8 +333,29 @@ class PortfolioService:
         weak_holdings = [h["instrument"] for h in holdings if h["weak"]]
         candidates = self._replacement_candidates(
             held_instruments={h["instrument"] for h in holdings},
+            heat_pct=heat_pct,
+            heat_limit=heat_limit,
+            heat_base=heat_base,
             limit=6,
         )
+
+        # Portfolio-level risk (degrade gracefully on sparse data)
+        correlation_clusters: list[dict] = []
+        portfolio_beta: float | None = None
+        diversification_score: int | None = None
+        try:
+            if len(holdings) >= 2:
+                correlation_clusters = compute_correlation_clusters(self.db, holdings)
+                weights = {
+                    h["instrument"]: h["current_val"] / total_current
+                    for h in holdings if total_current > 0
+                }
+                portfolio_beta = compute_portfolio_beta(self.db, holdings, weights)
+                diversification_score = compute_diversification_score(
+                    correlation_clusters, len(holdings), clusters
+                )
+        except Exception as e:
+            logger.warning(f"Portfolio risk calculation failed (non-fatal): {e}")
 
         return {
             "holdings": holdings,
@@ -298,22 +379,33 @@ class PortfolioService:
                 "max_cluster_pct": max_cluster_pct,
                 "weak_holdings": weak_holdings,
                 "replacement_candidates": candidates,
+                "correlation_clusters": correlation_clusters,
+                "portfolio_beta": portfolio_beta,
+                "diversification_score": diversification_score,
             },
         }
 
-    def _replacement_candidates(self, held_instruments: set[str], limit: int = 6) -> list[dict]:
-        """High-RS, bullish, MTF-confirmed names NOT currently held — rotation pool.
+    def _replacement_candidates(
+        self,
+        held_instruments: set[str],
+        heat_pct: float = 0.0,
+        heat_limit: float = 8.0,
+        heat_base: float = 0.0,
+        limit: int = 6,
+    ) -> list[dict]:
+        """High-quality, bullish, MTF-confirmed names NOT currently held — rotation pool.
 
-        Implements the spirit of SRS Module L (Dynamic Stock Replacement): surface
-        strong breakout candidates to rotate weak/stopped positions into.
+        Ranks by risk-adjusted momentum: (ret_4w / atr_pct) + ADX strength + OBV confirmation.
+        Candidates are also heat-aware: position_size_shares is capped so adding the position
+        won't push total portfolio heat past the heat_limit.
         """
         held_ns = {f"{i}.NS" for i in held_instruments} | set(held_instruments)
-        # Rank within the strong-filtered pool by RSI momentum — regime-robust,
-        # unlike rs_score_1m which is unreliable when NIFTY's return is negative.
+        # Fetch a larger pool for client-side ranking, since we can't do the composite
+        # score ordering in SQL without helper columns.
         rows = self.db.scalars(
             select(ScreeningSnapshot)
             .where(
-                ScreeningSnapshot.regime_bias == "BULLISH",
+                ScreeningSnapshot.regime_bias.in_(["BULLISH", "VERY_BULLISH"]),
                 ScreeningSnapshot.mtf_confirmed == True,  # noqa: E712
                 ScreeningSnapshot.rsi_14.is_not(None),
                 ScreeningSnapshot.rsi_14 < 75,  # avoid badly overbought entries
@@ -322,18 +414,92 @@ class PortfolioService:
                 (ScreeningSnapshot.vol_class != "HIGH") | (ScreeningSnapshot.vol_class.is_(None)),
             )
             .order_by(ScreeningSnapshot.rsi_14.desc())
-            .limit(limit)
+            .limit(limit * 5)  # fetch more, re-rank below
         ).all()
+
+        def _momentum_score(sn: ScreeningSnapshot) -> float:
+            score = 0.0
+            ret_4w = float(sn.ret_4w) if sn.ret_4w is not None else 0.0
+            atr_pct = float(sn.atr_pct) if sn.atr_pct is not None and float(sn.atr_pct) > 0 else 1.0
+            score += ret_4w / atr_pct  # momentum per unit of volatility
+            adx = float(getattr(sn, "adx_14", None) or 0)
+            score += adx / 50.0  # ADX strength (0–1 range)
+            if getattr(sn, "obv_trend", None) == "UP":
+                score += 1.0  # accumulation confirmation
+            if sn.regime_bias == "VERY_BULLISH":
+                score += 0.5  # extra weight for highest conviction
+            return score
+
+        ranked = sorted(rows, key=_momentum_score, reverse=True)[:limit]
+        # Batch-load confluence levels for candidates
+        cand_symbol_ids = [sn.symbol_id for sn in rows]
+        confl_by_cand_id = defaultdict(list)
+        if cand_symbol_ids:
+            cand_levels = self.db.scalars(
+                select(SymbolConfluenceLevel).where(SymbolConfluenceLevel.symbol_id.in_(cand_symbol_ids))
+            ).all()
+            for lvl in cand_levels:
+                confl_by_cand_id[lvl.symbol_id].append(lvl)
+
+        cand_risk_per_trade = SettingsService(self.db).get_float("PORTFOLIO", "default_risk_amount", 5000.0)
+
+        # Remaining heat budget: how much more open risk can we add?
+        remaining_heat_pct = max(0.0, heat_limit - heat_pct)
+        remaining_heat_inr = (remaining_heat_pct / 100.0 * heat_base) if heat_base > 0 else None
+
         out = []
-        for sn in rows:
+        for sn in ranked:
             close = round(float(sn.close_price), 2)
             atr_pct = round(float(sn.atr_pct), 2) if sn.atr_pct is not None else None
-            stop = target_1 = gain = None
+
+            cand_levels = confl_by_cand_id.get(sn.symbol_id, [])
+            cand_supports = [lvl for lvl in cand_levels if lvl.level_type == "SUPPORT"]
+            cand_resistances = [lvl for lvl in cand_levels if lvl.level_type == "RESISTANCE"]
+
+            cand_supports_sorted = sorted(cand_supports, key=lambda x: float(x.price), reverse=True)
+            support_val = float(cand_supports_sorted[0].price) if cand_supports_sorted else None
+
+            stop = target_1 = target_2 = target_3 = gain = rr_ratio = position_size_shares = None
             if atr_pct is not None and close > 0:
                 atr_abs = atr_pct / 100.0 * close
-                stop = round(close - 1.5 * atr_abs, 2)
-                target_1 = round(close + 1.5 * atr_abs, 2)
-                gain = round(1.5 * atr_pct, 2)
+
+                # Structural stop-loss
+                if support_val is not None:
+                    stop = round(support_val - 1.5 * atr_abs, 2)
+                    if stop >= close:
+                        stop = round(close - 2.0 * atr_abs, 2)
+                else:
+                    stop = round(close - 1.5 * atr_abs, 2)
+
+                # T1: highest-strength resistance
+                best_r1 = ConfluenceService.select_best_resistance(cand_resistances, close, atr_abs)
+                if best_r1 is not None:
+                    target_1 = round(float(best_r1.price), 2)
+                    above_t1 = sorted(
+                        [rv for rv in cand_resistances if float(rv.price) > float(best_r1.price)],
+                        key=lambda x: float(x.price),
+                    )
+                    if len(above_t1) >= 1:
+                        target_2 = round(float(above_t1[0].price), 2)
+                    if len(above_t1) >= 2:
+                        target_3 = round(float(above_t1[1].price), 2)
+                else:
+                    target_1 = round(close + 1.5 * atr_abs, 2)
+                    target_2 = round(close + 3.0 * atr_abs, 2)
+
+                gain = round((target_1 - close) / close * 100.0, 2) if close > 0 else 0.0
+                risk_per_share = close - stop
+                reward_per_share = target_1 - close
+                rr_ratio = round(reward_per_share / risk_per_share, 2) if risk_per_share > 0 else None
+                if risk_per_share > 0 and cand_risk_per_trade > 0:
+                    raw_size = int(cand_risk_per_trade / risk_per_share) or None
+                    # Heat-aware cap: don't exceed remaining heat budget
+                    if raw_size and remaining_heat_inr is not None and risk_per_share > 0:
+                        max_by_heat = int(remaining_heat_inr / risk_per_share)
+                        position_size_shares = min(raw_size, max_by_heat) if max_by_heat > 0 else raw_size
+                    else:
+                        position_size_shares = raw_size
+
             out.append(
                 {
                     "symbol": sn.symbol.replace(".NS", ""),
@@ -350,7 +516,15 @@ class PortfolioService:
                     "ret_4w": round(float(sn.ret_4w), 2) if sn.ret_4w is not None else None,
                     "stop_loss": stop,
                     "target_1": target_1,
+                    "target_2": target_2,
+                    "target_3": target_3,
                     "potential_gain_pct": gain,
+                    "rr_ratio": rr_ratio,
+                    "position_size_shares": position_size_shares,
+                    "adx_14": round(float(getattr(sn, "adx_14", None) or 0), 1) or None,
+                    "trend_strength_class": getattr(sn, "trend_strength_class", None),
+                    "obv_trend": getattr(sn, "obv_trend", None),
+                    "supertrend_dir": getattr(sn, "supertrend_dir", None),
                 }
             )
         return out
@@ -363,4 +537,10 @@ class PortfolioService:
             biases = [h["bias"] for h in holdings if h["bias"]]
             if biases:
                 bias = max(set(biases), key=biases.count)
-        return {"BULLISH": "BULL", "BEARISH": "BEAR", "NEUTRAL": "NEUTRAL"}.get(bias or "", "NEUTRAL")
+        return {
+            "VERY_BULLISH": "BULL",
+            "BULLISH": "BULL",
+            "NEUTRAL": "NEUTRAL",
+            "BEARISH": "BEAR",
+            "VERY_BEARISH": "BEAR",
+        }.get(bias or "", "NEUTRAL")

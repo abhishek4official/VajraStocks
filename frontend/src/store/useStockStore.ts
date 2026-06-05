@@ -11,7 +11,9 @@ import type {
   CorporateAction,
   SyncJob,
   SymbolSyncStatus,
-  PortfolioData
+  PortfolioData,
+  ConfluenceLevel,
+  StockAlert,
 } from '../services/api';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -83,6 +85,7 @@ interface StockState {
   indicators: IndicatorData[];
   corporateActions: CorporateAction[];
   niftyCandles: CandleData[];
+  confluenceLevels: ConfluenceLevel[];
   // Per-symbol custom horizontal price lines (persisted to localStorage)
   customLines: Record<string, number[]>;
 
@@ -108,6 +111,10 @@ interface StockState {
   portfolio: PortfolioData | null;
   portfolioLoading: boolean;
 
+  // Stock alerts (backend-evaluated post-sync)
+  stockAlerts: StockAlert[];
+  stockAlertsLoading: boolean;
+
   // Watchlists
   watchlists: Watchlist[];
   activeWatchlistId: string | null;
@@ -131,6 +138,11 @@ interface StockState {
   importPortfolioFile: (file: File) => Promise<void>;
   clearPortfolio: () => Promise<void>;
 
+  // Stock alert actions
+  fetchStockAlerts: () => Promise<void>;
+  dismissStockAlert: (id: number) => Promise<void>;
+  dismissAllStockAlerts: () => Promise<void>;
+
   // Watchlist actions
   createWatchlist: (name: string) => void;
   deleteWatchlist: (id: string) => void;
@@ -153,6 +165,7 @@ interface StockState {
   triggerFullSync: () => Promise<void>;
   triggerSymbolSync: (symbol: string) => Promise<void>;
   triggerRecalculate: (symbol?: string) => Promise<void>;
+  cancelSync: () => Promise<void>;
   runAiWorkflow: (prompt: string) => Promise<void>;
 }
 
@@ -233,6 +246,7 @@ export const useStockStore = create<StockState>((set, get) => ({
   indicators: [],
   corporateActions: [],
   niftyCandles: [],
+  confluenceLevels: [],
   customLines: JSON.parse(localStorage.getItem('vajra_lines') || '{}'),
 
   screenerFilters: {
@@ -270,6 +284,8 @@ export const useStockStore = create<StockState>((set, get) => ({
 
   portfolio: null,
   portfolioLoading: false,
+  stockAlerts: [],
+  stockAlertsLoading: false,
   watchlists: loadWatchlists(),
   activeWatchlistId: null,
   alerts: loadAlerts(),
@@ -329,6 +345,36 @@ export const useStockStore = create<StockState>((set, get) => ({
       set({ portfolio: null });
     } catch (err: unknown) {
       set({ error: (err as Error).message || 'Failed to clear portfolio' });
+    }
+  },
+
+  // ── Stock Alerts ───────────────────────────────────────────────────────────
+
+  fetchStockAlerts: async () => {
+    set({ stockAlertsLoading: true });
+    try {
+      const stockAlerts = await apiService.getAlerts('TRIGGERED');
+      set({ stockAlerts, stockAlertsLoading: false });
+    } catch {
+      set({ stockAlertsLoading: false });
+    }
+  },
+
+  dismissStockAlert: async (id: number) => {
+    try {
+      await apiService.dismissAlert(id);
+      set(state => ({ stockAlerts: state.stockAlerts.filter(a => a.id !== id) }));
+    } catch {
+      // silently ignore
+    }
+  },
+
+  dismissAllStockAlerts: async () => {
+    try {
+      await apiService.dismissAllAlerts();
+      set({ stockAlerts: [] });
+    } catch {
+      // silently ignore
     }
   },
 
@@ -468,15 +514,16 @@ export const useStockStore = create<StockState>((set, get) => ({
     if (!symbol) return;
     set({ isLoading: true, error: null });
     try {
-      const [candles, heikinAshi, renkoBricks, lineBreakLines, indicators, corporateActions] = await Promise.all([
+      const [candles, heikinAshi, renkoBricks, lineBreakLines, indicators, corporateActions, confluenceLevels] = await Promise.all([
         apiService.getCandles(symbol),
         apiService.getHeikinAshi(symbol),
         apiService.getRenkoBricks(symbol),
         apiService.getLineBreakLines(symbol),
         apiService.getIndicators(symbol),
         apiService.getCorporateActions(symbol),
+        apiService.getConfluenceLevels(symbol),
       ]);
-      set({ candles, heikinAshi, renkoBricks, lineBreakLines, indicators, corporateActions, isLoading: false });
+      set({ candles, heikinAshi, renkoBricks, lineBreakLines, indicators, corporateActions, confluenceLevels, isLoading: false });
     } catch (err: unknown) {
       set({ error: (err as Error).message || 'Failed to fetch symbol data', isLoading: false });
     }
@@ -577,6 +624,16 @@ export const useStockStore = create<StockState>((set, get) => ({
       }
     } catch (err: unknown) {
       set({ error: (err as Error).message || 'Failed to trigger calculations' });
+    }
+  },
+
+  cancelSync: async () => {
+    set({ error: null });
+    try {
+      await apiService.cancelSync();
+      await get().fetchSyncLogs();
+    } catch (err: unknown) {
+      set({ error: (err as Error).message || 'Failed to cancel active sync jobs' });
     }
   },
 

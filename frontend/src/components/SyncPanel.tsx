@@ -19,8 +19,11 @@ export const SyncPanel: React.FC = () => {
     fetchSyncLogs,
     triggerFullSync,
     triggerRecalculate,
+    cancelSync,
     isSyncing
   } = useStockStore();
+
+  const isJobRunning = syncJobs.some(job => job.status === 'RUNNING');
 
   const { get } = useSettingsCtx();
   const pollIntervalMs = get('UI', 'sync_poll_interval_ms', 5000);
@@ -117,10 +120,26 @@ export const SyncPanel: React.FC = () => {
         </div>
 
         <div className="flex gap-3">
+          {/* Cancel Sync Button */}
+          {isJobRunning && (
+            <button
+              onClick={cancelSync}
+              className="flex items-center gap-2 px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-xs font-bold transition duration-150 cursor-pointer shadow-lg shadow-rose-900/20 animate-pulse"
+            >
+              <AlertOctagon className="w-3.5 h-3.5 text-white" />
+              Stop Active Sync
+            </button>
+          )}
+
           {/* Crawl Job */}
           <button
             onClick={triggerFullSync}
-            className="flex items-center gap-2 px-4 py-2 bg-slate-900 border border-purple-500/30 hover:border-purple-500 text-purple-400 hover:text-white rounded-lg text-xs font-bold transition duration-150 cursor-pointer shadow-lg shadow-purple-900/5"
+            disabled={isJobRunning}
+            className={`flex items-center gap-2 px-4 py-2 bg-slate-900 border ${
+              isJobRunning 
+                ? 'border-slate-800 text-slate-500 cursor-not-allowed' 
+                : 'border-purple-500/30 hover:border-purple-500 text-purple-400 hover:text-white'
+            } rounded-lg text-xs font-bold transition duration-150 cursor-pointer shadow-lg shadow-purple-900/5`}
           >
             <RefreshCw className="w-3.5 h-3.5" />
             Trigger Crawl Sync
@@ -129,7 +148,12 @@ export const SyncPanel: React.FC = () => {
           {/* Engine Recalculate */}
           <button
             onClick={() => triggerRecalculate()}
-            className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-xs font-bold transition duration-150 cursor-pointer shadow-lg shadow-purple-900/20"
+            disabled={isJobRunning}
+            className={`flex items-center gap-2 px-4 py-2 ${
+              isJobRunning
+                ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                : 'bg-purple-600 hover:bg-purple-500 text-white shadow-lg shadow-purple-900/20'
+            } rounded-lg text-xs font-bold transition duration-150 cursor-pointer`}
           >
             <Cpu className="w-3.5 h-3.5" />
             Recalculate All Indicators

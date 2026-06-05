@@ -63,3 +63,7 @@ dev = [
 installer = [
     "pyinstaller>=6.14.0",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+

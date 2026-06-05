@@ -77,10 +77,9 @@ class ScreeningService:
             logger.debug(f"weekly trend compute failed for symbol_id {symbol_id}: {e}")
             return None
 
-    def refresh_snapshot_for_symbol(self, symbol_id: int, nifty_21d_return: float | None = None) -> None:
+    def refresh_snapshot_for_symbol(self, symbol_id: int, nifty_21d_return: float | None = None, commit: bool = True) -> None:
         """Compiles the latest EOD prices and derived structures to upsert the screening snapshot for a symbol."""
         try:
-            # 1. Fetch Symbol details
             symbol_obj = self.db.get(Symbol, symbol_id)
             if not symbol_obj or not symbol_obj.is_active:
                 return
@@ -162,13 +161,15 @@ class ScreeningService:
                 ha_close = float(ha.close)
                 ha_direction = "UP" if float(ha.close) >= float(ha.open) else "DOWN"
 
-            # 4. Fetch latest Technical Indicators
-            ind = self.db.scalar(
+            # 4. Fetch latest 2 Technical Indicator rows (2nd needed for OBV trend direction)
+            ind_rows = self.db.scalars(
                 select(DailyIndicator)
                 .filter_by(symbol_id=symbol_id)
                 .order_by(DailyIndicator.trading_date.desc())
-                .limit(1)
-            )
+                .limit(2)
+            ).all()
+            ind = ind_rows[0] if ind_rows else None
+            ind_prev = ind_rows[1] if len(ind_rows) > 1 else None
 
             rsi_14 = None
             sma_20_cross = None
@@ -201,13 +202,25 @@ class ScreeningService:
             )
             line_break_direction = lb.direction if lb else None
 
-            # 6b. MTF / risk fields (materialized from existing daily + weekly-resampled data)
+            # 6b. MTF / risk fields
             mtf = self._mtf_thresholds()
             atr_pct = None
             vol_class = None
             regime_bias = None
             weekly_trend = None
             mtf_confirmed = None
+            adx_14_snap = None
+            trend_strength_class = None
+            obv_trend = None
+            supertrend_dir_snap = None
+            stoch_state = None
+            composite_score = None
+            trend_score_val = None
+            volume_score_val = None
+            rs_score_val = None
+            momentum_score_val = None
+            macd_hist_prev = None
+
             if ind:
                 atr_14 = float(ind.atr_14) if ind.atr_14 is not None else None
                 if atr_14 is not None and close_price > 0:
@@ -219,19 +232,40 @@ class ScreeningService:
                     else:
                         vol_class = "MEDIUM"
 
-                regime_bias, _ = TradePlannerService.compute_bias(
-                    close=close_price,
-                    sma_50=float(ind.sma_50) if ind.sma_50 is not None else None,
-                    sma_200=float(ind.sma_200) if ind.sma_200 is not None else None,
-                    ema_21=float(ind.ema_21) if ind.ema_21 is not None else None,
-                    macd_histogram=float(ind.macd_histogram) if ind.macd_histogram is not None else None,
-                    rsi_14=float(ind.rsi_14) if ind.rsi_14 is not None else None,
-                    neutral_band_pct=mtf["bias_band"],
-                )
+                # OBV trend (compare current vs previous row)
+                if getattr(ind, "obv", None) is not None and ind_prev is not None and getattr(ind_prev, "obv", None) is not None:
+                    curr_obv = float(ind.obv)
+                    prev_obv = float(ind_prev.obv)
+                    obv_trend = "UP" if curr_obv > prev_obv else ("DOWN" if curr_obv < prev_obv else "FLAT")
+
+                # Supertrend direction
+                supertrend_dir_snap = getattr(ind, "supertrend_dir", None)
+
+                # Stochastic state
+                stoch_k_val = float(ind.stoch_k) if getattr(ind, "stoch_k", None) is not None else None
+                if stoch_k_val is not None:
+                    stoch_state = "OVERBOUGHT" if stoch_k_val >= 80 else ("OVERSOLD" if stoch_k_val <= 20 else "NEUTRAL")
+
+                # ADX trend strength class
+                if getattr(ind, "adx_14", None) is not None:
+                    adx_14_snap = round(float(ind.adx_14), 2)
+                    trend_strength_class = "STRONG" if adx_14_snap >= 25 else ("MODERATE" if adx_14_snap >= 15 else "WEAK")
+
+                # MACD histogram prev (for growing detection)
+                macd_hist_prev = float(ind_prev.macd_histogram) if ind_prev and ind_prev.macd_histogram is not None else None
+
+            # 6b-ii. Composite score — runs after rolling returns are known
+            # (we compute returns first below, then call composite scorer)
 
             weekly_trend = self._compute_weekly_trend(symbol_id, mtf["weekly_ema"])
-            if regime_bias is not None and weekly_trend is not None:
-                mtf_confirmed = (regime_bias == "BULLISH" and weekly_trend == "UP")
+
+            # 6c. Rolling weekly returns (%) — 1W/2W/3W/4W = 5/10/15/20 trading days back.
+            def _ret(days_back: int) -> float | None:
+                if len(prices) > days_back:
+                    past = float(prices[days_back].close)
+                    if past > 0:
+                        return (close_price - past) / past * 100.0
+                return None
 
             # 6c. Rolling weekly returns (%) — 1W/2W/3W/4W = 5/10/15/20 trading days back.
             #     prices[] is ordered newest→oldest, so prices[n] is n trading days ago.
@@ -246,6 +280,59 @@ class ScreeningService:
             ret_2w = _ret(10)
             ret_3w = _ret(15)
             ret_4w = _ret(20)
+
+            # 6c-ii. Volume breakout ratio — today's volume vs 20-day average
+            weekly_avg_volume = None
+            volume_breakout_ratio = None
+            if len(prices) >= 2:
+                vols = [float(p.volume) for p in prices[1:21]]  # exclude today
+                if vols:
+                    avg_vol = sum(vols) / len(vols)
+                    weekly_avg_volume = round(avg_vol, 0)
+                    if avg_vol > 0:
+                        volume_breakout_ratio = round(volume / avg_vol, 2)
+
+            # 6d. Composite scorer — now has all inputs
+            if ind:
+                from stocks.services.quant.composite_scorer import compute_composite
+                from stocks.db.models import ScreeningSnapshot as _SS  # avoid local shadow
+                # volume_breakout_ratio from snapshot if it exists, else None
+                vbr = None
+                try:
+                    existing_snap = self.db.scalar(select(ScreeningSnapshot).filter_by(symbol_id=symbol_id))
+                    vbr = float(existing_snap.volume_breakout_ratio) if existing_snap and getattr(existing_snap, "volume_breakout_ratio", None) else None
+                except Exception:
+                    pass
+                cs = compute_composite(
+                    close=close_price,
+                    ema_20=float(ind.ema_20) if getattr(ind, "ema_20", None) is not None else None,
+                    sma_50=float(ind.sma_50) if ind.sma_50 is not None else None,
+                    sma_200=float(ind.sma_200) if ind.sma_200 is not None else None,
+                    ema_21=float(ind.ema_21) if ind.ema_21 is not None else None,
+                    adx_14=adx_14_snap,
+                    plus_di=float(ind.plus_di) if getattr(ind, "plus_di", None) is not None else None,
+                    minus_di=float(ind.minus_di) if getattr(ind, "minus_di", None) is not None else None,
+                    volume_breakout_ratio=volume_breakout_ratio,
+                    obv_trend=obv_trend,
+                    delivery_pct=None,
+                    rs_score_1m=rs_score_1m,
+                    ret_1w=ret_1w,
+                    ret_4w=ret_4w,
+                    rsi_14=float(ind.rsi_14) if ind.rsi_14 is not None else None,
+                    macd_histogram=float(ind.macd_histogram) if ind.macd_histogram is not None else None,
+                    macd_histogram_prev=macd_hist_prev,
+                    stoch_k=float(ind.stoch_k) if getattr(ind, "stoch_k", None) is not None else None,
+                    supertrend_dir=supertrend_dir_snap,
+                )
+                regime_bias = cs.bias
+                composite_score = cs.composite_score
+                trend_score_val = cs.trend_score
+                volume_score_val = cs.volume_score
+                rs_score_val = cs.rs_score
+                momentum_score_val = cs.momentum_score
+
+            if regime_bias is not None and weekly_trend is not None:
+                mtf_confirmed = (regime_bias in ("BULLISH", "VERY_BULLISH") and weekly_trend == "UP")
 
             # 7. Upsert the ScreeningSnapshot
             snapshot = self.db.scalar(select(ScreeningSnapshot).filter_by(symbol_id=symbol_id))
@@ -281,6 +368,18 @@ class ScreeningService:
                     ret_2w=ret_2w,
                     ret_3w=ret_3w,
                     ret_4w=ret_4w,
+                    adx_14=adx_14_snap,
+                    trend_strength_class=trend_strength_class,
+                    obv_trend=obv_trend,
+                    supertrend_dir=supertrend_dir_snap,
+                    stoch_state=stoch_state,
+                    weekly_avg_volume=weekly_avg_volume,
+                    volume_breakout_ratio=volume_breakout_ratio,
+                    composite_score=composite_score,
+                    trend_score_val=trend_score_val,
+                    volume_score_val=volume_score_val,
+                    rs_score_val=rs_score_val,
+                    momentum_score_val=momentum_score_val,
                 )
                 self.db.add(snapshot)
             else:
@@ -311,10 +410,23 @@ class ScreeningService:
                 snapshot.ret_2w = ret_2w
                 snapshot.ret_3w = ret_3w
                 snapshot.ret_4w = ret_4w
-
-            self.db.commit()
+                snapshot.adx_14 = adx_14_snap
+                snapshot.trend_strength_class = trend_strength_class
+                snapshot.obv_trend = obv_trend
+                snapshot.supertrend_dir = supertrend_dir_snap
+                snapshot.stoch_state = stoch_state
+                snapshot.weekly_avg_volume = weekly_avg_volume
+                snapshot.volume_breakout_ratio = volume_breakout_ratio
+                snapshot.composite_score = composite_score
+                snapshot.trend_score_val = trend_score_val
+                snapshot.volume_score_val = volume_score_val
+                snapshot.rs_score_val = rs_score_val
+                snapshot.momentum_score_val = momentum_score_val
+            if commit:
+                self.db.commit()
         except Exception as e:
-            self.db.rollback()
+            if commit:
+                self.db.rollback()
             logger.error(f"Failed to refresh screening snapshot for symbol_id {symbol_id}: {e}")
             raise e
 
@@ -358,15 +470,19 @@ class ScreeningService:
 
             refreshed_count = 0
             for sym in active_symbols:
-                self.refresh_snapshot_for_symbol(sym.id, nifty_21d_return=nifty_21d_return)
-                refreshed_count += 1
+                try:
+                    self.refresh_snapshot_for_symbol(sym.id, nifty_21d_return=nifty_21d_return, commit=False)
+                    refreshed_count += 1
+                except Exception as sym_err:
+                    logger.error(f"Error refreshing snapshot for symbol {sym.symbol}: {sym_err}")
 
+            self.db.commit()  # Single bulk commit at the end!
             logger.info(f"Successfully refreshed {refreshed_count} screening snapshots.")
             return refreshed_count
         except Exception as e:
+            self.db.rollback()
             logger.error(f"Failed to refresh all screening snapshots: {e}")
             raise e
-
     def query_screener(
         self,
         min_rsi: float | None = None,

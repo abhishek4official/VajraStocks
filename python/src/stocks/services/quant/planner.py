@@ -19,63 +19,54 @@ class TradePlannerService:
         ema_21: float | None,
         macd_histogram: float | None,
         rsi_14: float | None,
-        neutral_band_pct: float = 2.0,
+        neutral_band_pct: float = 2.0,   # kept for API compat, unused
+        adx_14: float | None = None,
+        plus_di: float | None = None,
+        minus_di: float | None = None,
+        # Extended inputs used by composite scorer
+        ema_20: float | None = None,
+        volume_breakout_ratio: float | None = None,
+        obv_trend: str | None = None,
+        rs_score_1m: float | None = None,
+        ret_1w: float | None = None,
+        ret_4w: float | None = None,
+        macd_histogram_prev: float | None = None,
+        stoch_k: float | None = None,
     ) -> tuple[str, list[str]]:
-        """Multi-factor directional bias with a NEUTRAL deadband around SMA200.
+        """Composite 4-component bias scorer.
 
-        Replaces the naive ``close > sma200 ? BULLISH : BEARISH`` binary that
-        collapsed ~56% of symbols to BEARISH. A symbol is only BULLISH/BEARISH
-        when the trend leaves the deadband AND at least one momentum factor
-        (MACD histogram, RSI zone, EMA21 vs SMA50) confirms in the same
-        direction; otherwise it is NEUTRAL.
+        Returns (bias, reasons) where bias in
+        {VERY_BULLISH, BULLISH, NEUTRAL, BEARISH, VERY_BEARISH}.
 
-        Returns (bias, reasons) where bias ∈ {BULLISH, NEUTRAL, BEARISH}.
+        Delegates to CompositeScorer which scores Trend (40%), Volume (25%),
+        RS (20%), Momentum (15%) and derives bias from the weighted total.
         """
-        reasons: list[str] = []
+        from stocks.services.quant.composite_scorer import compute_composite
 
-        if close is None or sma_200 is None or sma_200 <= 0:
-            return "NEUTRAL", ["Insufficient data — no SMA200 baseline"]
+        if close is None or close <= 0:
+            return "NEUTRAL", ["Insufficient data — no close price"]
 
-        band = sma_200 * (max(neutral_band_pct, 0.0) / 100.0)
-        if close > sma_200 + band:
-            trend = "UP"
-            reasons.append(f"Price {close:.2f} > SMA200 {sma_200:.2f} by more than {neutral_band_pct:.1f}%")
-        elif close < sma_200 - band:
-            trend = "DOWN"
-            reasons.append(f"Price {close:.2f} < SMA200 {sma_200:.2f} by more than {neutral_band_pct:.1f}%")
-        else:
-            trend = "FLAT"
-            reasons.append(f"Price within ±{neutral_band_pct:.1f}% of SMA200 — neutral band")
-
-        confirms_up = 0
-        confirms_down = 0
-        if macd_histogram is not None:
-            if macd_histogram > 0:
-                confirms_up += 1
-                reasons.append("MACD histogram positive")
-            elif macd_histogram < 0:
-                confirms_down += 1
-                reasons.append("MACD histogram negative")
-        if rsi_14 is not None:
-            if rsi_14 >= 55:
-                confirms_up += 1
-                reasons.append(f"RSI {rsi_14:.0f} ≥ 55")
-            elif rsi_14 <= 45:
-                confirms_down += 1
-                reasons.append(f"RSI {rsi_14:.0f} ≤ 45")
-        if ema_21 is not None and sma_50 is not None:
-            if ema_21 > sma_50:
-                confirms_up += 1
-                reasons.append("EMA21 above SMA50")
-            elif ema_21 < sma_50:
-                confirms_down += 1
-                reasons.append("EMA21 below SMA50")
-
-        if trend == "UP" and confirms_up >= 1:
-            return "BULLISH", reasons
-        if trend == "DOWN" and confirms_down >= 1:
-            return "BEARISH", reasons
-        return "NEUTRAL", reasons
+        result = compute_composite(
+            close=close,
+            ema_20=ema_20,
+            sma_50=sma_50,
+            sma_200=sma_200,
+            ema_21=ema_21,
+            adx_14=adx_14,
+            plus_di=plus_di,
+            minus_di=minus_di,
+            volume_breakout_ratio=volume_breakout_ratio,
+            obv_trend=obv_trend,
+            delivery_pct=None,
+            rs_score_1m=rs_score_1m,
+            ret_1w=ret_1w,
+            ret_4w=ret_4w,
+            rsi_14=rsi_14,
+            macd_histogram=macd_histogram,
+            macd_histogram_prev=macd_histogram_prev,
+            stoch_k=stoch_k,
+        )
+        return result.bias, result.reasons
 
     def calculate_trade_plan(
         self, symbol: str, latest_price: float, atr_14: float, support: float, resistance: float
@@ -107,8 +98,12 @@ class TradePlannerService:
 
         mid_entry = (entry_lower + entry_upper) / 2.0
 
-        target_1 = round(mid_entry + (1.5 * atr_14), 2)
-        target_2 = round(mid_entry + (3.0 * atr_14), 2)
+        if resistance > mid_entry:
+            target_1 = round(resistance, 2)
+        else:
+            target_1 = round(mid_entry + (1.5 * atr_14), 2)
+
+        target_2 = round(target_1 + (1.5 * atr_14), 2)
 
         # Calculate Position Sizing
         risk_distance = mid_entry - stop_loss
