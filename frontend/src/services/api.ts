@@ -229,6 +229,68 @@ export interface ScreenerRow {
   volume_score_val?: number | null;
   rs_score_val?: number | null;
   momentum_score_val?: number | null;
+  strategy_signals?: Record<string, { signal: string; score: number | null }>;
+}
+
+// ── Strategy Screener ─────────────────────────────────────────────────────────
+export interface StrategyParamSpec {
+  type: string;
+  default: number | string | boolean;
+  minimum?: number;
+  maximum?: number;
+  group?: string;
+  description?: string;
+}
+
+export interface StrategyMeta {
+  id: string;
+  name: string;
+  version: string;
+  description: string;
+  param_schema: Record<string, StrategyParamSpec>;
+  data_needs: Record<string, unknown>;
+}
+
+export interface StrategySignalRow {
+  symbol_id: number;
+  symbol: string;
+  company_name: string;
+  strategy_id: string;
+  as_of: string;
+  signal: 'BUY' | 'SELL' | 'WATCH' | 'NONE';
+  score: number | null;
+  last_close: number | null;
+  entry_ref: number | null;
+  initial_stop: number | null;
+  target: number | null;
+  risk_pct: number | null;
+  rr: number | null;
+  key_metrics: Record<string, number | string | null>;
+  gates: Record<string, boolean>;
+  reasons: string[];
+}
+
+export interface StrategySignalsResponse {
+  strategy_id: string;
+  as_of: string | null;
+  stale: boolean;
+  counts: Record<string, number>;
+  rows: StrategySignalRow[];
+}
+
+export interface StrategyMatrixRow {
+  symbol: string;
+  company_name: string;
+  cells: Record<string, { signal: string; score: number | null }>;
+  consensus: Record<string, number>;
+  best_score: number;
+}
+
+export interface StrategyMatrixResponse {
+  strategies: { id: string; name: string }[];
+  as_of: string | null;
+  stale: boolean;
+  rows: StrategyMatrixRow[];
 }
 
 export interface CorporateAction {
@@ -416,6 +478,61 @@ export const apiService = {
       })
     });
     if (!response.ok) throw new Error('Failed to run screening criteria');
+    return response.json();
+  },
+
+  // 4b. Strategy Screener endpoints
+  async getStrategies(): Promise<StrategyMeta[]> {
+    const response = await fetch(`${BASE_URL}/strategies`);
+    if (!response.ok) throw new Error('Failed to fetch strategies');
+    return response.json();
+  },
+
+  async getStrategySignals(
+    strategyId: string,
+    opts: { signal?: string; min_score?: number; limit?: number } = {},
+  ): Promise<StrategySignalsResponse> {
+    const query = new URLSearchParams();
+    if (opts.signal) query.append('signal', opts.signal);
+    if (opts.min_score !== undefined) query.append('min_score', String(opts.min_score));
+    if (opts.limit !== undefined) query.append('limit', String(opts.limit));
+    const response = await fetch(`${BASE_URL}/strategies/${encodeURIComponent(strategyId)}/signals?${query}`);
+    if (!response.ok) throw new Error('Failed to fetch strategy signals');
+    return response.json();
+  },
+
+  async getStrategyMatrix(
+    opts: { signals?: string; min_score?: number; only_active?: boolean; limit?: number } = {},
+  ): Promise<StrategyMatrixResponse> {
+    const query = new URLSearchParams();
+    if (opts.signals) query.append('signals', opts.signals);
+    if (opts.min_score !== undefined) query.append('min_score', String(opts.min_score));
+    if (opts.only_active !== undefined) query.append('only_active', String(opts.only_active));
+    if (opts.limit !== undefined) query.append('limit', String(opts.limit));
+    const response = await fetch(`${BASE_URL}/strategies/matrix?${query}`);
+    if (!response.ok) throw new Error('Failed to fetch strategy matrix');
+    return response.json();
+  },
+
+  async getStrategySignalDetail(strategyId: string, symbol: string): Promise<StrategySignalRow> {
+    const response = await fetch(
+      `${BASE_URL}/strategies/${encodeURIComponent(strategyId)}/signals/${encodeURIComponent(symbol)}`,
+    );
+    if (!response.ok) throw new Error(`No signal for ${symbol}`);
+    return response.json();
+  },
+
+  async recomputeStrategy(
+    strategyId: string,
+    params?: Record<string, number | string | boolean>,
+    forceMarketOk = false,
+  ): Promise<{ message: string }> {
+    const response = await fetch(`${BASE_URL}/strategies/${encodeURIComponent(strategyId)}/recompute`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...(params ? { params } : {}), force_market_ok: forceMarketOk }),
+    });
+    if (!response.ok) throw new Error('Failed to trigger strategy recompute');
     return response.json();
   },
 

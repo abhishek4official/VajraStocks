@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from stocks.api.deps import get_db
 from stocks.config import Config as _Config
-from stocks.db.models import SymbolConfluenceLevel
+from stocks.db.models import StrategySignal, SymbolConfluenceLevel
 from stocks.services.quant.confluence_service import ConfluenceService
 
 config = _Config.load()
@@ -247,6 +247,7 @@ class ScreenerRowResponse(BaseModel):
     volume_score_val: float | None = None
     rs_score_val: float | None = None
     momentum_score_val: float | None = None
+    strategy_signals: dict = {}   # {strategy_id: {"signal": str, "score": float|None}}
 
     class Config:
         from_attributes = True
@@ -267,7 +268,26 @@ def _build_confl_map(db: Session, symbol_ids: list[int]) -> dict:
     return confl_by_symbol_id
 
 
-def _build_row(r, confl_by_symbol_id: dict, risk_per_trade: float) -> dict:
+def _build_strategy_signal_map(db: Session, symbol_ids: list[int]) -> dict:
+    """Batch-loads materialized strategy signals for the given symbol IDs.
+
+    Returns {symbol_id: {strategy_id: {"signal": str, "score": float|None}}} so the
+    screener can show each stock's per-strategy signal alongside its technicals.
+    """
+    out: dict = defaultdict(dict)
+    if not symbol_ids:
+        return out
+    chunk_size = 1000
+    for i in range(0, len(symbol_ids), chunk_size):
+        chunk = symbol_ids[i : i + chunk_size]
+        for s in db.scalars(
+            select(StrategySignal).where(StrategySignal.symbol_id.in_(chunk))
+        ).all():
+            out[s.symbol_id][s.strategy_id] = {"signal": s.signal, "score": s.score}
+    return out
+
+
+def _build_row(r, confl_by_symbol_id: dict, risk_per_trade: float, strat_by_symbol_id: dict | None = None) -> dict:
     """Builds a single screener response row dict from a ScreeningSnapshot."""
     close = float(r.close_price)
     setup = _structural_trade_setup(close, r.atr_pct, confl_by_symbol_id.get(r.symbol_id, []), risk_per_trade)
@@ -315,6 +335,7 @@ def _build_row(r, confl_by_symbol_id: dict, risk_per_trade: float) -> dict:
         "volume_score_val": getattr(r, "volume_score_val", None),
         "rs_score_val": getattr(r, "rs_score_val", None),
         "momentum_score_val": getattr(r, "momentum_score_val", None),
+        "strategy_signals": (strat_by_symbol_id or {}).get(r.symbol_id, {}),
     }
 
 
@@ -362,8 +383,10 @@ def get_screening_results_get(
     )
 
     risk_per_trade = SettingsService(db).get_float("PORTFOLIO", "default_risk_amount", 5000.0)
-    confl_by_symbol_id = _build_confl_map(db, [r.symbol_id for r in results])
-    return [_build_row(r, confl_by_symbol_id, risk_per_trade) for r in results]
+    ids = [r.symbol_id for r in results]
+    confl_by_symbol_id = _build_confl_map(db, ids)
+    strat_by_symbol_id = _build_strategy_signal_map(db, ids)
+    return [_build_row(r, confl_by_symbol_id, risk_per_trade, strat_by_symbol_id) for r in results]
 
 
 @router.post("/run", response_model=list[ScreenerRowResponse])
@@ -391,5 +414,7 @@ def get_screening_results_post(params: ScreeningParams, db: Session = Depends(ge
     )
 
     risk_per_trade = SettingsService(db).get_float("PORTFOLIO", "default_risk_amount", 5000.0)
-    confl_by_symbol_id = _build_confl_map(db, [r.symbol_id for r in results])
-    return [_build_row(r, confl_by_symbol_id, risk_per_trade) for r in results]
+    ids = [r.symbol_id for r in results]
+    confl_by_symbol_id = _build_confl_map(db, ids)
+    strat_by_symbol_id = _build_strategy_signal_map(db, ids)
+    return [_build_row(r, confl_by_symbol_id, risk_per_trade, strat_by_symbol_id) for r in results]

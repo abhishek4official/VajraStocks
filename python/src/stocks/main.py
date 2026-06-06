@@ -319,10 +319,45 @@ def recalculate_derived(config_path: str, symbols: str, limit: int | None):
         screening_service = ScreeningService(config, session)
         screening_service.refresh_all_snapshots()
 
+        logger.info("Materializing strategy signals (all strategies)...")
+        from stocks.services.strategy_screener import StrategyScreenerService
+
+        StrategyScreenerService(config, session).refresh_all_strategies()
+
         logger.info(f"Derived data recalculation run finished. Processed: {processed}, Failed: {failed}")
         db_manager.dispose()
     except Exception as e:
         logger.critical(f"Recalculation process crashed: {e}")
+        sys.exit(1)
+
+
+@cli.command()
+@click.option("--config-path", default="config/config.yaml", help="Path to config.yaml configuration file.")
+@click.option("--strategy", default=None, help="Strategy id to materialize (default: registered default).")
+def recalculate_strategy(config_path: str, strategy: str | None):
+    """Rebuilds the materialized strategy_signals table from prices already in the DB.
+
+    Useful after deploying a new strategy version without re-running a full sync.
+    """
+    config_file = Path(config_path)
+    try:
+        config = Config.load(config_file)
+        setup_logging(config)
+
+        db_manager = DatabaseManager.from_config(config)
+        db_manager.initialize()
+        session = db_manager.get_session()
+
+        from stocks.services.strategies.registry import DEFAULT_STRATEGY_ID
+        from stocks.services.strategy_screener import StrategyScreenerService
+
+        strategy_id = strategy or DEFAULT_STRATEGY_ID
+        logger.info(f"Materializing strategy signals for '{strategy_id}'...")
+        count = StrategyScreenerService(config, session).refresh_all_signals(strategy_id)
+        logger.info(f"Strategy signal materialization finished. {count} signals written.")
+        db_manager.dispose()
+    except Exception as e:
+        logger.critical(f"Strategy recalculation crashed: {e}")
         sys.exit(1)
 
 

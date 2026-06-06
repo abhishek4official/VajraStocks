@@ -8,6 +8,7 @@ import { PriceChart } from './components/PriceChart';
 import { MetricsTable } from './components/MetricsTable';
 import { CorporateActionsTimeline } from './components/CorporateActionsTimeline';
 import { ScreenerPanel } from './components/ScreenerPanel';
+import { StrategyPanel } from './components/StrategyPanel';
 import { SyncPanel } from './components/SyncPanel';
 import { AgentTerminal } from './components/AgentTerminal';
 import { PortfolioPanel } from './components/PortfolioPanel';
@@ -25,6 +26,7 @@ import {
   IndianRupee,
   Bookmark,
   TrendingUp,
+  Target,
   Bell,
   X,
 } from 'lucide-react';
@@ -78,6 +80,7 @@ function Dashboard() {
     isLoading,
     addToWatchlist,
     watchlists,
+    activeWatchlistId,
     customLines,
     addCustomLine,
     removeCustomLines,
@@ -137,7 +140,7 @@ function Dashboard() {
 
     const handlePopState = () => {
       const path = window.location.pathname.replace(/^\/+/, '').split('/')[0];
-      const valid = ['explorer', 'screener', 'sync', 'ai-research', 'portfolio', 'watchlist'];
+      const valid = ['explorer', 'screener', 'strategy', 'sync', 'ai-research', 'portfolio', 'watchlist'];
       const tab = valid.includes(path) ? path : 'explorer';
       useStockStore.setState({ activeTab: tab as any });
     };
@@ -152,6 +155,7 @@ function Dashboard() {
       switch (e.key.toLowerCase()) {
         case 'e': setActiveTab('explorer');    break;
         case 's': setActiveTab('screener');    break;
+        case 't': setActiveTab('strategy');    break;
         case 'p': setActiveTab('portfolio');   break;
         case 'w': setActiveTab('watchlist');   break;
         case 'a': setActiveTab('ai-research'); break;
@@ -191,6 +195,7 @@ function Dashboard() {
           {([
             { id: 'explorer',    label: 'Explorer',    Icon: Layers      },
             { id: 'screener',    label: 'Screener',    Icon: Search      },
+            { id: 'strategy',    label: 'Strategy',    Icon: Target      },
             { id: 'portfolio',   label: 'Portfolio',   Icon: IndianRupee },
             { id: 'watchlist',   label: 'Watchlist',   Icon: Bookmark    },
             { id: 'compare',     label: 'Compare',     Icon: TrendingUp  },
@@ -326,7 +331,7 @@ function Dashboard() {
                       <h2 className="text-sm text-slate-400">{activeSymbolDetail.company_name}</h2>
                     </div>
                     <button
-                      onClick={() => { const wl = watchlists[0]; if (wl && activeSymbolDetail) addToWatchlist(wl.id, activeSymbolDetail.symbol); }}
+                      onClick={() => { const targetId = activeWatchlistId ?? watchlists[0]?.id; if (targetId && activeSymbolDetail) addToWatchlist(targetId, activeSymbolDetail.symbol); }}
                       title="Add to Watchlist"
                       className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 hover:border-indigo-500/60 text-slate-400 hover:text-indigo-400 text-xs font-semibold transition cursor-pointer"
                     >
@@ -519,6 +524,9 @@ function Dashboard() {
 
         {/* TAB 2: Screener Workspace */}
         {activeTab === 'screener' && <ScreenerPanel />}
+
+        {/* TAB 2b: Strategy Screener Workspace */}
+        {activeTab === 'strategy' && <StrategyPanel />}
 
         {/* TAB 3: Synchronization Workspace */}
         {activeTab === 'sync' && <SyncPanel />}

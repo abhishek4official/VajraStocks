@@ -281,6 +281,15 @@ class SyncEngine:
             except Exception as snap_err:
                 logger.error(f"Failed to refresh screening snapshots post-sync: {snap_err}")
 
+            # Post-Sync Hook: Materialize strategy signals (Pre-Breakout) for the Strategy screen.
+            # Runs after snapshots so market-breadth (% above 200DMA) is available.
+            try:
+                from stocks.services.strategy_screener import StrategyScreenerService
+
+                StrategyScreenerService(self.config, session).refresh_all_strategies()
+            except Exception as strat_err:
+                logger.error(f"Failed to materialize strategy signals post-sync: {strat_err}")
+
             # 6. Finalize Sync Job status
             final_status = "SUCCESS"
             if failed_symbols > 0:
