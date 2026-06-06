@@ -319,10 +319,10 @@ def recalculate_derived(config_path: str, symbols: str, limit: int | None):
         screening_service = ScreeningService(config, session)
         screening_service.refresh_all_snapshots()
 
-        logger.info("Materializing strategy signals (Pre-Breakout)...")
+        logger.info("Materializing strategy signals (all strategies)...")
         from stocks.services.strategy_screener import StrategyScreenerService
 
-        StrategyScreenerService(config, session).refresh_all_signals()
+        StrategyScreenerService(config, session).refresh_all_strategies()
 
         logger.info(f"Derived data recalculation run finished. Processed: {processed}, Failed: {failed}")
         db_manager.dispose()

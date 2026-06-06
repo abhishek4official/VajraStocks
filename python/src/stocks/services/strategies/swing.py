@@ -60,6 +60,62 @@ def rsi(c, n):
     return (100 - 100 / (1 + rs)).fillna(50.0)
 
 
+def adx(h, l, c, length):
+    up = h.diff()
+    down = -l.diff()
+    plus_dm = np.where((up > down) & (up > 0), up, 0.0)
+    minus_dm = np.where((down > up) & (down > 0), down, 0.0)
+    tr = true_range(h, l, c)
+    atr_val = tr.ewm(alpha=1.0 / length, adjust=False, min_periods=length).mean()
+    plus_di = 100 * pd.Series(plus_dm, index=h.index).ewm(
+        alpha=1.0 / length, adjust=False, min_periods=length).mean() / atr_val
+    minus_di = 100 * pd.Series(minus_dm, index=h.index).ewm(
+        alpha=1.0 / length, adjust=False, min_periods=length).mean() / atr_val
+    dx = 100 * (plus_di - minus_di).abs() / (plus_di + minus_di).replace(0, np.nan)
+    return dx.ewm(alpha=1.0 / length, adjust=False, min_periods=length).mean()
+
+
+def bollinger(c, length, mult):
+    mid = c.rolling(length, min_periods=length).mean()
+    sd = c.rolling(length, min_periods=length).std(ddof=0)
+    return mid - mult * sd, mid, mid + mult * sd
+
+
+def keltner(h, l, c, length, atr_len, mult):
+    mid = ema(c, length)
+    rng = atr(h, l, c, atr_len)
+    return mid - mult * rng, mid, mid + mult * rng
+
+
+def swing_structure(high, low, left, right):
+    n = len(high)
+    piv_hi = np.full(n, np.nan)
+    piv_lo = np.full(n, np.nan)
+    h = high.values
+    lo = low.values
+    for i in range(left, n - right):
+        window_h = h[i - left:i + right + 1]
+        window_l = lo[i - left:i + right + 1]
+        if h[i] == window_h.max() and (window_h.argmax() == left):
+            piv_hi[i] = h[i]
+        if lo[i] == window_l.min() and (window_l.argmin() == left):
+            piv_lo[i] = lo[i]
+    last_hi = pd.Series(piv_hi, index=high.index).ffill()
+    prev_hi = pd.Series(piv_hi, index=high.index).ffill().shift(right + 1)
+    last_lo = pd.Series(piv_lo, index=low.index).ffill()
+    prev_lo = pd.Series(piv_lo, index=low.index).ffill().shift(right + 1)
+    structure = pd.Series(0, index=high.index)
+    structure[(last_hi > prev_hi) & (last_lo > prev_lo)] = 1
+    structure[(last_hi < prev_hi) & (last_lo < prev_lo)] = -1
+    return structure
+
+
+def atr_percentile(atr_pct, lookback):
+    def _rank(x):
+        return (x[-1] >= x).mean()
+    return atr_pct.rolling(lookback, min_periods=max(5, lookback // 4)).apply(_rank, raw=True)
+
+
 # =============================================================================
 # Shared base: timeframe scaling, market filter, ATR sizing, portfolio rebalance
 # =============================================================================
@@ -455,6 +511,69 @@ class WeinsteinStage2(_PortfolioStrategy):
         return out
 
 
+# =============================================================================
+# 6) RS Moving-Average Cross F1 (MA cross gated by a 10-point master score)
+# =============================================================================
+class RSMovingAverageCrossF1(_PortfolioStrategy):
+    metadata = {"name": "RS Moving Average Cross F1", "direction": "long_only",
+                "source": "MA crossover + 10-point master score (RS, trend, squeeze, structure)"}
+    parameters = dict(_BASE, **{
+        "fast_window": 20,             # fast MA (bars on the active timeframe)
+        "slow_window": 50,             # slow MA
+        "buy_score_min": 7,            # master-score threshold for a BUY (0-10)
+        "hold_score_min": 5,           # master-score threshold to keep holding
+        "atr_len_days": 20,
+        "stop_atr_mult": 3.0,
+        "trail_atr_mult": 4.5,
+        "crossover_volume_filter": True,
+        "max_position_weight": 0.20,
+    })
+
+    def _bench_roc_mapped(self, dates, n):
+        b = self._bench_close.reindex(pd.to_datetime(dates))
+        return b.pct_change(n).values
+
+    def _features(self, g):
+        out, h, l, c = self._base_cols(g)
+        P = self.parameters
+        v = g["volume"] if "volume" in g.columns else pd.Series(np.nan, index=g.index)
+
+        fast = c.rolling(int(P["fast_window"]), min_periods=int(P["fast_window"])).mean()
+        slow = c.rolling(int(P["slow_window"]), min_periods=int(P["slow_window"])).mean()
+
+        # ── 10-point master score ───────────────────────────────────────────
+        sma200 = sma(c, self._bd(P.get("regime_ma_days", 200)))
+        c1 = (c > sma200) & (sma200.diff() > 0)                       # 1 primary trend
+        c2 = ema(c, self._bd(10)) > ema(c, self._bd(40))             # 2 golden cross
+        v_avg = v.rolling(20, min_periods=5).mean()
+        c3 = (v > 1.3 * v_avg) if v.notna().any() else pd.Series(False, index=g.index)  # 3 rvol
+        bb_l, _, bb_u = bollinger(c, 20, 2.0)
+        kc_l, _, kc_u = keltner(h, l, c, 20, 20, 1.5)
+        in_sq = (bb_l > kc_l) & (bb_u < kc_u)
+        c4 = in_sq | in_sq.shift(1, fill_value=False) | in_sq.rolling(10, min_periods=1).max().fillna(0).astype(bool)
+        c5 = adx(h, l, c, 14) > 18.0                                  # 5 trend strength
+        rsi_val = rsi(c, 14)
+        c6 = (rsi_val > 50) & (rsi_val <= 75)                        # 6 momentum zone
+        hi52 = h.rolling(self._bd(252), min_periods=self._bd(252)).max().bfill().ffill()
+        c7 = c >= 0.85 * hi52                                         # 7 near highs
+        stock_roc = roc(c, self._bd(126))
+        b_roc = pd.Series(self._bench_roc_mapped(g["date"].values, self._bd(126)), index=g.index).fillna(0.0)
+        c8 = stock_roc.fillna(0.0) > b_roc                           # 8 relative strength
+        atr_rank = atr_percentile(atr(h, l, c, 14) / c, 52)
+        c9 = atr_rank.fillna(1.0) < 0.50                            # 9 vol contraction
+        c10 = swing_structure(h, l, 3, 3) == 1                       # 10 HH/HL structure
+        score = sum(x.astype(int) for x in (c1, c2, c3, c4, c5, c6, c7, c8, c9, c10))
+
+        vol_ok = pd.Series(True, index=g.index)
+        if P.get("crossover_volume_filter", True) and v.notna().any():
+            vol_ok = v >= 1.2 * v_avg
+
+        out["score"] = score.values
+        out["eligible"] = ((fast > slow) & (score >= P["buy_score_min"]) & vol_ok).fillna(False).values
+        out["hold_ok"] = ((fast > slow) & (score >= P["hold_score_min"])).fillna(False).values
+        return out
+
+
 # Registry for convenience
 STRATEGIES = {
     "momentum": CrossSectionalMomentum,
@@ -462,4 +581,5 @@ STRATEGIES = {
     "dual": DualMomentum,
     "minervini": MinerviniTrendTemplate,
     "weinstein": WeinsteinStage2,
+    "rs_ma_cross": RSMovingAverageCrossF1,
 }

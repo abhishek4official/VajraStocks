@@ -1,7 +1,40 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useStockStore } from '../store/useStockStore';
 import { Play, Eye, Filter, RefreshCw, BarChart2, Download, Bookmark, Zap } from 'lucide-react';
-import type { ScreenerRow } from '../services/api';
+import type { ScreenerRow, StrategyMeta } from '../services/api';
+import { apiService } from '../services/api';
+
+// Per-strategy signal chip styling shown in the screener "Patterns / Signals" cell.
+const STRAT_SIG_STYLE: Record<string, string> = {
+  BUY: 'text-emerald-400 bg-emerald-950/30 border-emerald-800/50',
+  WATCH: 'text-amber-400 bg-amber-950/30 border-amber-800/50',
+  SELL: 'text-rose-400 bg-rose-950/30 border-rose-800/50',
+  NONE: 'text-slate-500 bg-slate-900/40 border-slate-800',
+};
+const stratCode = (name: string) =>
+  name.replace(/[^A-Za-z0-9 ]/g, '').split(' ').map(w => w[0]).join('').slice(0, 3).toUpperCase();
+
+// Per-column in-table filters are cached locally so they survive reloads / tab switches.
+const COL_FILTERS_KEY = 'vajra_screener_col_filters';
+const SHOW_COL_FILTERS_KEY = 'vajra_screener_show_col_filters';
+const DEFAULT_COL_FILTERS = {
+  symbol: '', company_name: '', close_price: '', price_pct_change: '', regime_bias: '',
+  ret_1w: '', ret_2w: '', ret_3w: '', ret_4w: '', stop_loss: '', target_1: '', target_2: '',
+  target_3: '', potential_gain_pct: '', rr_ratio: '', trade_quality_score: '',
+  position_size_shares: '', weekly_avg_volume: '', volume_breakout_ratio: '', rsi_14: '',
+  sma_20_cross_direction: '', sma_50_cross_direction: '', sma_200_cross_direction: '',
+  macd_trend: '', ha_direction: '', renko_direction: '', line_break_direction: '',
+  rs_score_1m: '', patterns: '',
+};
+type ColFilters = typeof DEFAULT_COL_FILTERS;
+
+function loadColFilters(): ColFilters {
+  try {
+    const raw = localStorage.getItem(COL_FILTERS_KEY);
+    if (raw) return { ...DEFAULT_COL_FILTERS, ...JSON.parse(raw) };
+  } catch { /* ignore */ }
+  return { ...DEFAULT_COL_FILTERS };
+}
 
 // ── Screener presets ─────────────────────────────────────────────────────────
 const PRESETS = [
@@ -128,80 +161,33 @@ export const ScreenerPanel: React.FC = () => {
   const PAGE_SIZE = 50;
   const [searchQuery, setSearchQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
+  const [strategies, setStrategies] = useState<StrategyMeta[]>([]);
 
-  // Column-level filters state
-  const [showColFilters, setShowColFilters] = useState(true);
-  const [colFilters, setColFilters] = useState({
-    symbol: '',
-    company_name: '',
-    close_price: '',
-    price_pct_change: '',
-    regime_bias: '',
-    ret_1w: '',
-    ret_2w: '',
-    ret_3w: '',
-    ret_4w: '',
-    stop_loss: '',
-    target_1: '',
-    target_2: '',
-    target_3: '',
-    potential_gain_pct: '',
-    rr_ratio: '',
-    trade_quality_score: '',
-    position_size_shares: '',
-    weekly_avg_volume: '',
-    volume_breakout_ratio: '',
-    rsi_14: '',
-    sma_20_cross_direction: '',
-    sma_50_cross_direction: '',
-    sma_200_cross_direction: '',
-    macd_trend: '',
-    ha_direction: '',
-    renko_direction: '',
-    line_break_direction: '',
-    rs_score_1m: '',
-    patterns: '',
+  // Column-level filters state (cached in localStorage so they persist across reloads).
+  const [showColFilters, setShowColFilters] = useState(() => {
+    try { return localStorage.getItem(SHOW_COL_FILTERS_KEY) !== 'false'; } catch { return true; }
   });
+  const [colFilters, setColFilters] = useState<ColFilters>(loadColFilters);
+
+  // Persist the in-table filters + toggle whenever they change.
+  useEffect(() => {
+    try { localStorage.setItem(COL_FILTERS_KEY, JSON.stringify(colFilters)); } catch { /* ignore */ }
+  }, [colFilters]);
+  useEffect(() => {
+    try { localStorage.setItem(SHOW_COL_FILTERS_KEY, String(showColFilters)); } catch { /* ignore */ }
+  }, [showColFilters]);
 
   const isAnyColFilterActive = useMemo(() => {
     return Object.values(colFilters).some(val => val !== '');
   }, [colFilters]);
 
   const handleClearColFilters = () => {
-    setColFilters({
-      symbol: '',
-      company_name: '',
-      close_price: '',
-      price_pct_change: '',
-      regime_bias: '',
-      ret_1w: '',
-      ret_2w: '',
-      ret_3w: '',
-      ret_4w: '',
-      stop_loss: '',
-      target_1: '',
-      target_2: '',
-      target_3: '',
-      potential_gain_pct: '',
-      rr_ratio: '',
-      trade_quality_score: '',
-      position_size_shares: '',
-      weekly_avg_volume: '',
-      volume_breakout_ratio: '',
-      rsi_14: '',
-      sma_20_cross_direction: '',
-      sma_50_cross_direction: '',
-      sma_200_cross_direction: '',
-      macd_trend: '',
-      ha_direction: '',
-      renko_direction: '',
-      line_break_direction: '',
-      rs_score_1m: '',
-      patterns: '',
-    });
+    setColFilters({ ...DEFAULT_COL_FILTERS });
   };
 
   useEffect(() => { runScreener(); }, []);
+  // Load the registered strategies once for the per-strategy signal chips (stable column order).
+  useEffect(() => { apiService.getStrategies().then(setStrategies).catch(() => setStrategies([])); }, []);
   // Reset to first page whenever results, search query, or column filters update
   useEffect(() => { setVisibleCount(PAGE_SIZE); }, [screenerResults, searchQuery, colFilters]);
 
@@ -1621,6 +1607,27 @@ export const ScreenerPanel: React.FC = () => {
                             <span className="text-slate-650">—</span>
                           )}
                         </div>
+                        {/* Per-strategy signals (Buy / Watch / Sell; Near-miss shows score) */}
+                        {strategies.length > 0 && row.strategy_signals && (
+                          <div className="flex flex-wrap gap-0.5 justify-center mt-1 pt-1 border-t border-slate-850">
+                            {strategies.map(st => {
+                              const cell = row.strategy_signals?.[st.id];
+                              const sig = cell?.signal ?? 'NONE';
+                              const label = sig === 'NONE'
+                                ? (cell?.score != null ? String(Math.round(cell.score)) : '·')
+                                : stratCode(st.name);
+                              return (
+                                <span
+                                  key={st.id}
+                                  title={`${st.name}: ${sig === 'NONE' ? 'Near-miss' : sig}${cell?.score != null ? ` · score ${cell.score}` : ''}`}
+                                  className={`text-[8px] font-bold px-1 py-0.5 rounded border leading-none ${STRAT_SIG_STYLE[sig]}`}
+                                >
+                                  {label}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        )}
                       </td>
                       {/* Actions */}
                       <td className="py-2 px-1.5 text-right">

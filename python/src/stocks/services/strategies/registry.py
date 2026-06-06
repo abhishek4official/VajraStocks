@@ -12,7 +12,7 @@ from typing import Any
 from stocks.services.strategies import swing
 
 # Display ordering of the registered strategies.
-_ORDER = ["minervini", "high52", "weinstein", "momentum", "dual"]
+_ORDER = ["rs_ma_cross", "minervini", "high52", "weinstein", "momentum", "dual"]
 
 # Human-friendly grouping for the auto-rendered param panel.
 _GROUP = {
@@ -23,7 +23,17 @@ _GROUP = {
     "profit_target_R": "Risk", "weighting": "Risk",
 }
 
+_GROUP.update({
+    "fast_window": "Signal", "slow_window": "Signal", "buy_score_min": "Signal",
+    "hold_score_min": "Signal", "crossover_volume_filter": "Signal",
+})
+
 _DESC = {
+    "fast_window": "Fast moving-average length (bars)",
+    "slow_window": "Slow moving-average length (bars)",
+    "buy_score_min": "Master-score threshold (0-10) required for BUY",
+    "hold_score_min": "Master-score threshold (0-10) to keep holding",
+    "crossover_volume_filter": "Require above-average volume on the cross",
     "timeframe": "Bar timeframe: weekly / monthly",
     "benchmark_symbol": "Relative-strength benchmark (set by app)",
     "use_market_filter": "Gate entries by the index regime (uncheck = always risk-on)",

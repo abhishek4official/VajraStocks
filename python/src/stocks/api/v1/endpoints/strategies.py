@@ -92,6 +92,56 @@ def get_strategies():
     return [strategy_meta(s) for s in list_strategies()]
 
 
+@router.get("/matrix")
+def get_strategy_matrix(
+    signals: str | None = None,        # CSV filter; a row is kept if ANY strategy matches
+    min_score: float = 0.0,
+    only_active: bool = True,          # drop rows where every strategy is NONE
+    limit: int = 2500,
+    db: Session = Depends(get_db),
+):
+    """Symbol × strategy grid: one row per symbol, a Buy/Watch/Sell/Near-miss cell per
+    strategy, plus a consensus tally. Pivots the materialized signals in one query."""
+    strategies = list_strategies()
+    sids = [a.id for a in strategies]
+    wanted = [s.strip().upper() for s in signals.split(",") if s.strip()] if signals else None
+
+    rows = db.scalars(
+        select(StrategySignal).where(StrategySignal.strategy_id.in_(sids))
+    ).all()
+
+    by_symbol: dict[str, dict] = {}
+    for r in rows:
+        cell = by_symbol.setdefault(r.symbol, {
+            "symbol": r.symbol, "company_name": r.company_name,
+            "cells": {}, "consensus": {"BUY": 0, "WATCH": 0, "SELL": 0}, "best_score": 0.0,
+        })
+        cell["cells"][r.strategy_id] = {"signal": r.signal, "score": r.score}
+        if r.signal in cell["consensus"]:
+            cell["consensus"][r.signal] += 1
+        if r.score and r.score > cell["best_score"]:
+            cell["best_score"] = r.score
+
+    out = list(by_symbol.values())
+    if only_active:
+        out = [x for x in out if any(c["signal"] != "NONE" for c in x["cells"].values())]
+    if wanted:
+        out = [x for x in out if any(c["signal"] in wanted for c in x["cells"].values())]
+    if min_score:
+        out = [x for x in out if x["best_score"] >= min_score]
+    out.sort(key=lambda x: (x["consensus"]["BUY"], x["consensus"]["WATCH"], x["best_score"]), reverse=True)
+    out = out[:limit]
+
+    as_of = db.scalar(select(func.max(StrategySignal.as_of)))
+    latest_price_date = db.scalar(select(func.max(DailyPrice.trading_date)))
+    return {
+        "strategies": [{"id": a.id, "name": a.name} for a in strategies],
+        "as_of": as_of.strftime("%Y-%m-%d") if as_of else None,
+        "stale": bool(as_of and latest_price_date and as_of < latest_price_date),
+        "rows": out,
+    }
+
+
 @router.get("/{strategy_id}/signals", response_model=StrategySignalsResponse)
 def get_strategy_signals(
     strategy_id: str,

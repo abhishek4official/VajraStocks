@@ -286,7 +286,7 @@ class SyncEngine:
             try:
                 from stocks.services.strategy_screener import StrategyScreenerService
 
-                StrategyScreenerService(self.config, session).refresh_all_signals()
+                StrategyScreenerService(self.config, session).refresh_all_strategies()
             except Exception as strat_err:
                 logger.error(f"Failed to materialize strategy signals post-sync: {strat_err}")
 

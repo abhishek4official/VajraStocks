@@ -90,7 +90,7 @@ def _execute_async_recalculate(request: Request, symbol_ticker: str | None = Non
         ScreeningService(cfg, session).refresh_all_snapshots()
 
         from stocks.services.strategy_screener import StrategyScreenerService
-        StrategyScreenerService(cfg, session).refresh_all_signals()
+        StrategyScreenerService(cfg, session).refresh_all_strategies()
     except Exception:
         pass
     finally:

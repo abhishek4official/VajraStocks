@@ -229,6 +229,7 @@ export interface ScreenerRow {
   volume_score_val?: number | null;
   rs_score_val?: number | null;
   momentum_score_val?: number | null;
+  strategy_signals?: Record<string, { signal: string; score: number | null }>;
 }
 
 // ── Strategy Screener ─────────────────────────────────────────────────────────
@@ -275,6 +276,21 @@ export interface StrategySignalsResponse {
   stale: boolean;
   counts: Record<string, number>;
   rows: StrategySignalRow[];
+}
+
+export interface StrategyMatrixRow {
+  symbol: string;
+  company_name: string;
+  cells: Record<string, { signal: string; score: number | null }>;
+  consensus: Record<string, number>;
+  best_score: number;
+}
+
+export interface StrategyMatrixResponse {
+  strategies: { id: string; name: string }[];
+  as_of: string | null;
+  stale: boolean;
+  rows: StrategyMatrixRow[];
 }
 
 export interface CorporateAction {
@@ -482,6 +498,19 @@ export const apiService = {
     if (opts.limit !== undefined) query.append('limit', String(opts.limit));
     const response = await fetch(`${BASE_URL}/strategies/${encodeURIComponent(strategyId)}/signals?${query}`);
     if (!response.ok) throw new Error('Failed to fetch strategy signals');
+    return response.json();
+  },
+
+  async getStrategyMatrix(
+    opts: { signals?: string; min_score?: number; only_active?: boolean; limit?: number } = {},
+  ): Promise<StrategyMatrixResponse> {
+    const query = new URLSearchParams();
+    if (opts.signals) query.append('signals', opts.signals);
+    if (opts.min_score !== undefined) query.append('min_score', String(opts.min_score));
+    if (opts.only_active !== undefined) query.append('only_active', String(opts.only_active));
+    if (opts.limit !== undefined) query.append('limit', String(opts.limit));
+    const response = await fetch(`${BASE_URL}/strategies/matrix?${query}`);
+    if (!response.ok) throw new Error('Failed to fetch strategy matrix');
     return response.json();
   },
 

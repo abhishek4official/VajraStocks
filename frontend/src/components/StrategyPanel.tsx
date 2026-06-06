@@ -1,10 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useStockStore } from '../store/useStockStore';
 import { apiService } from '../services/api';
-import type { StrategyMeta, StrategySignalsResponse } from '../services/api';
+import type { StrategyMeta, StrategySignalsResponse, StrategyMatrixResponse } from '../services/api';
 import {
   Play, RefreshCw, Download, AlertTriangle, ChevronDown, ChevronRight,
-  Target, Bookmark, Sliders,
+  Target, Bookmark, Sliders, List, Grid3x3,
 } from 'lucide-react';
 
 type SignalKind = 'BUY' | 'WATCH' | 'SELL' | 'NONE';
@@ -38,6 +38,9 @@ export const StrategyPanel: React.FC = () => {
   const [expanded, setExpanded] = useState<number | null>(null);
   const [sortField, setSortField] = useState<SortField>('score');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+  const [viewMode, setViewMode] = useState<'list' | 'matrix'>('list');
+  const [matrix, setMatrix] = useState<StrategyMatrixResponse | null>(null);
+  const [matrixLoading, setMatrixLoading] = useState(false);
 
   const activeStrategy = useMemo(
     () => strategies.find(s => s.id === strategyId) || null,
@@ -100,6 +103,25 @@ export const StrategyPanel: React.FC = () => {
     if (strategyId) loadSignals(strategyId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [strategyId, selectedSignals, minScore]);
+
+  const loadMatrix = async () => {
+    setMatrixLoading(true);
+    try {
+      setMatrix(await apiService.getStrategyMatrix({
+        signals: selectedSignals.join(','), min_score: minScore, only_active: true, limit: 2500,
+      }));
+    } catch {
+      setMatrix(null);
+    } finally {
+      setMatrixLoading(false);
+    }
+  };
+
+  // Load the matrix when its view is active or its filters change.
+  useEffect(() => {
+    if (viewMode === 'matrix') loadMatrix();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewMode, selectedSignals, minScore]);
 
   const handleRecompute = async () => {
     if (!strategyId) return;
@@ -209,11 +231,24 @@ export const StrategyPanel: React.FC = () => {
             )}
           </div>
           <div className="flex items-center gap-2">
+            <div className="flex bg-slate-950/80 p-0.5 rounded-lg border border-slate-800">
+              {([['list', List, 'List'], ['matrix', Grid3x3, 'Matrix']] as const).map(([mode, Icon, label]) => (
+                <button
+                  key={mode}
+                  onClick={() => setViewMode(mode)}
+                  className={`flex items-center gap-1 px-2.5 py-1.5 rounded-md text-[11px] font-bold transition cursor-pointer ${
+                    viewMode === mode ? 'bg-purple-600 text-white' : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <Icon className="w-3.5 h-3.5" /> {label}
+                </button>
+              ))}
+            </div>
             <button
-              onClick={() => loadSignals()}
+              onClick={() => (viewMode === 'matrix' ? loadMatrix() : loadSignals())}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 transition cursor-pointer"
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} /> Refresh
+              <RefreshCw className={`w-3.5 h-3.5 ${loading || matrixLoading ? 'animate-spin' : ''}`} /> Refresh
             </button>
             <label
               title="Bypass the market-regime gate so BUY entries can fire regardless of NIFTY trend / breadth"
@@ -395,7 +430,62 @@ export const StrategyPanel: React.FC = () => {
         )}
       </div>
 
-      {/* Results table */}
+      {/* Results — List or Matrix */}
+      {viewMode === 'matrix' ? (
+        <div className="flex-1 overflow-auto rounded-xl border border-slate-800/80 bg-[#0d0f14]">
+          {matrixLoading ? (
+            <div className="flex items-center justify-center h-40 text-slate-500 text-sm">
+              <RefreshCw className="w-4 h-4 animate-spin mr-2" /> Loading matrix…
+            </div>
+          ) : !matrix || matrix.rows.length === 0 ? (
+            <div className="flex items-center justify-center h-40 text-slate-500 text-sm">No active signals across strategies.</div>
+          ) : (
+            <table className="w-full text-xs">
+              <thead className="sticky top-0 bg-[#121620] border-b border-slate-800 text-slate-400 z-10">
+                <tr>
+                  <th className="px-3 py-2 text-left font-bold sticky left-0 bg-[#121620]">Symbol</th>
+                  {matrix.strategies.map(s => (
+                    <th key={s.id} className="px-2 py-2 text-center font-bold whitespace-nowrap" title={s.name}>
+                      {s.name.split(/[ (]/)[0]}
+                    </th>
+                  ))}
+                  <th className="px-3 py-2 text-center font-bold">Consensus</th>
+                </tr>
+              </thead>
+              <tbody>
+                {matrix.rows.map(row => (
+                  <tr key={row.symbol} className="border-b border-slate-800/50 hover:bg-slate-800/30">
+                    <td className="px-3 py-2 sticky left-0 bg-[#0d0f14]">
+                      <button onClick={() => openSymbol(row.symbol)} className="font-bold text-slate-100 hover:text-purple-400 cursor-pointer">
+                        {row.symbol.replace('.NS', '')}
+                      </button>
+                    </td>
+                    {matrix.strategies.map(s => {
+                      const cell = row.cells[s.id];
+                      const sig = cell?.signal ?? 'NONE';
+                      return (
+                        <td key={s.id} className="px-2 py-1.5 text-center">
+                          <span
+                            title={cell ? `${s.name} · score ${cell.score ?? '-'}` : s.name}
+                            className={`inline-block px-1.5 py-0.5 rounded text-[9px] font-bold border ${SIGNAL_STYLE[sig]}`}
+                          >
+                            {SIGNAL_LABEL[sig as SignalKind] ?? sig}
+                          </span>
+                        </td>
+                      );
+                    })}
+                    <td className="px-3 py-2 text-center font-mono text-[10px] whitespace-nowrap">
+                      {row.consensus.BUY > 0 && <span className="text-emerald-400 mr-1">{row.consensus.BUY}B</span>}
+                      {row.consensus.WATCH > 0 && <span className="text-amber-400 mr-1">{row.consensus.WATCH}W</span>}
+                      {row.consensus.SELL > 0 && <span className="text-rose-400">{row.consensus.SELL}S</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      ) : (
       <div className="flex-1 overflow-auto rounded-xl border border-slate-800/80 bg-[#0d0f14]">
         {loading ? (
           <div className="flex items-center justify-center h-40 text-slate-500 text-sm">
@@ -489,6 +579,7 @@ export const StrategyPanel: React.FC = () => {
           </table>
         )}
       </div>
+      )}
     </div>
   );
 };
