@@ -64,7 +64,7 @@ export interface WatchlistAlert {
   createdAt: string;
 }
 
-type TabId = 'explorer' | 'screener' | 'sync' | 'ai-research' | 'portfolio' | 'watchlist' | 'compare' | 'settings';
+type TabId = 'explorer' | 'screener' | 'strategy' | 'sync' | 'ai-research' | 'portfolio' | 'watchlist' | 'compare' | 'settings';
 type ChartTimeframe = '1W' | '1M' | '3M' | '6M' | '1Y' | 'MAX';
 
 // ─── Store shape ──────────────────────────────────────────────────────────────
@@ -204,8 +204,42 @@ function saveAlerts(a: WatchlistAlert[]) {
 
 function getInitialTab(): TabId {
   const path = window.location.pathname.replace(/^\/+/, '').split('/')[0];
-  const valid: TabId[] = ['explorer', 'screener', 'sync', 'ai-research', 'portfolio', 'watchlist', 'compare', 'settings'];
+  const valid: TabId[] = ['explorer', 'screener', 'strategy', 'sync', 'ai-research', 'portfolio', 'watchlist', 'compare', 'settings'];
   return valid.includes(path as TabId) ? (path as TabId) : 'explorer';
+}
+
+const SCREENER_FILTERS_KEY = 'vajra_screener_filters';
+
+function loadScreenerFilters(): ScreenerFilters {
+  try {
+    const raw = localStorage.getItem(SCREENER_FILTERS_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch { /* ignore */ }
+  return {
+    min_rsi: undefined,
+    max_rsi: undefined,
+    min_price: undefined,
+    max_price: undefined,
+    sma_20_cross: undefined,
+    sma_50_cross: undefined,
+    sma_200_cross: undefined,
+    macd_trend: undefined,
+    ha_dir: undefined,
+    renko_dir: undefined,
+    lb_dir: undefined,
+    min_weekly_avg_volume: undefined,
+    volume_breakout: undefined,
+    only_nr7: undefined,
+    only_inside_bar: undefined,
+    only_gap_up: undefined,
+    only_gap_down: undefined,
+    min_rs_1m: undefined,
+    limit: 2500,
+  };
+}
+
+function saveScreenerFilters(filters: ScreenerFilters) {
+  localStorage.setItem(SCREENER_FILTERS_KEY, JSON.stringify(filters));
 }
 
 // Load screener limit from DB settings asynchronously (non-blocking)
@@ -219,9 +253,11 @@ function loadScreenerLimitFromDB(): void {
       if (limitRow?.value) {
         const limit = parseInt(limitRow.value, 10);
         if (!isNaN(limit) && limit > 0) {
-          useStockStore.setState(s => ({
-            screenerFilters: { ...s.screenerFilters, limit },
-          }));
+          useStockStore.setState(s => {
+            const nextFilters = { ...s.screenerFilters, limit };
+            saveScreenerFilters(nextFilters);
+            return { screenerFilters: nextFilters };
+          });
         }
       }
     })
@@ -249,27 +285,7 @@ export const useStockStore = create<StockState>((set, get) => ({
   confluenceLevels: [],
   customLines: JSON.parse(localStorage.getItem('vajra_lines') || '{}'),
 
-  screenerFilters: {
-    min_rsi: undefined,
-    max_rsi: undefined,
-    min_price: undefined,
-    max_price: undefined,
-    sma_20_cross: undefined,
-    sma_50_cross: undefined,
-    sma_200_cross: undefined,
-    macd_trend: undefined,
-    ha_dir: undefined,
-    renko_dir: undefined,
-    lb_dir: undefined,
-    min_weekly_avg_volume: undefined,
-    volume_breakout: undefined,
-    only_nr7: undefined,
-    only_inside_bar: undefined,
-    only_gap_up: undefined,
-    only_gap_down: undefined,
-    min_rs_1m: undefined,
-    limit: 2500,
-  },
+  screenerFilters: loadScreenerFilters(),
   screenerResults: [],
 
   syncJobs: [],
@@ -310,9 +326,11 @@ export const useStockStore = create<StockState>((set, get) => ({
     if (next.has(overlay)) next.delete(overlay); else next.add(overlay);
     set({ chartOverlays: next });
   },
-  setScreenerFilters: (filters) => set({
-    screenerFilters: { ...get().screenerFilters, ...filters }
-  }),
+  setScreenerFilters: (filters) => {
+    const nextFilters = { ...get().screenerFilters, ...filters };
+    saveScreenerFilters(nextFilters);
+    set({ screenerFilters: nextFilters });
+  },
   setAiQuery: (aiQuery) => set({ aiQuery }),
   clearAiConsole: () => set({ aiEvents: [], aiReport: null, aiRecommendation: null, aiConfidence: null }),
 
@@ -381,19 +399,22 @@ export const useStockStore = create<StockState>((set, get) => ({
   // ── Watchlists ─────────────────────────────────────────────────────────────
 
   createWatchlist: (name) => {
-    const wl = [...get().watchlists, { id: crypto.randomUUID(), name, items: [] }];
+    const currentLists = loadWatchlists();
+    const wl = [...currentLists, { id: crypto.randomUUID(), name, items: [] }];
     saveWatchlists(wl);
     set({ watchlists: wl });
   },
 
   deleteWatchlist: (id) => {
-    const wl = get().watchlists.filter(w => w.id !== id);
+    const currentLists = loadWatchlists();
+    const wl = currentLists.filter(w => w.id !== id);
     saveWatchlists(wl);
     set({ watchlists: wl, activeWatchlistId: get().activeWatchlistId === id ? null : get().activeWatchlistId });
   },
 
   renameWatchlist: (id, name) => {
-    const wl = get().watchlists.map(w => w.id === id ? { ...w, name } : w);
+    const currentLists = loadWatchlists();
+    const wl = currentLists.map(w => w.id === id ? { ...w, name } : w);
     saveWatchlists(wl);
     set({ watchlists: wl });
   },
@@ -401,7 +422,8 @@ export const useStockStore = create<StockState>((set, get) => ({
   setActiveWatchlist: (id) => set({ activeWatchlistId: id }),
 
   addToWatchlist: (watchlistId, symbol) => {
-    const wl = get().watchlists.map(w => {
+    const currentLists = loadWatchlists();
+    const wl = currentLists.map(w => {
       if (w.id !== watchlistId) return w;
       if (w.items.some(i => i.symbol === symbol)) return w; // already present
       return { ...w, items: [...w.items, { symbol, addedAt: new Date().toISOString() }] };
@@ -462,7 +484,8 @@ export const useStockStore = create<StockState>((set, get) => ({
   },
 
   removeFromWatchlist: (watchlistId, symbol) => {
-    const wl = get().watchlists.map(w =>
+    const currentLists = loadWatchlists();
+    const wl = currentLists.map(w =>
       w.id !== watchlistId ? w : { ...w, items: w.items.filter(i => i.symbol !== symbol) }
     );
     saveWatchlists(wl);

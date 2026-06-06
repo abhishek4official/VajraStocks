@@ -1,67 +1,67 @@
-import React, { useEffect, useState, useMemo } from 'react';
+﻿import React, { useEffect, useState, useMemo } from 'react';
 import { useStockStore } from '../store/useStockStore';
 import { Play, Eye, Filter, RefreshCw, BarChart2, Download, Bookmark, Zap } from 'lucide-react';
 import type { ScreenerRow } from '../services/api';
 
-// ── Screener presets ─────────────────────────────────────────────────────────
+// ΓöÇΓöÇ Screener presets ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 const PRESETS = [
   {
     name: 'Breakout Scanner',
-    emoji: '🚀',
+    emoji: '≡ƒÜÇ',
     desc: 'Vol >2x + SMA 200 above + HA bullish',
     filters: { volume_breakout: '2.0X' as const, sma_200_cross: 'ABOVE' as const, ha_dir: 'UP' as const },
   },
   {
     name: 'Momentum',
-    emoji: '⚡',
+    emoji: 'ΓÜí',
     desc: 'RSI 55-75 + MACD bullish + all SMAs above',
     filters: { min_rsi: 55, max_rsi: 75, macd_trend: 'BULLISH' as const, sma_20_cross: 'ABOVE' as const, sma_50_cross: 'ABOVE' as const, sma_200_cross: 'ABOVE' as const },
   },
   {
     name: 'Pullback to SMA20',
-    emoji: '📉',
+    emoji: '≡ƒôë',
     desc: 'RSI 40-55 + MACD bullish + SMA 200 above',
     filters: { min_rsi: 40, max_rsi: 55, macd_trend: 'BULLISH' as const, sma_200_cross: 'ABOVE' as const },
   },
   {
     name: 'Oversold Bounce',
-    emoji: '🔄',
+    emoji: '≡ƒöä',
     desc: 'RSI <35 + SMA 200 above',
     filters: { max_rsi: 35, sma_200_cross: 'ABOVE' as const },
   },
   {
     name: 'Volume Surge',
-    emoji: '📊',
-    desc: 'Vol >3x average — unusual activity',
+    emoji: '≡ƒôè',
+    desc: 'Vol >3x average ΓÇö unusual activity',
     filters: { volume_breakout: '3.0X' as const },
   },
   {
     name: 'Swing Reversal',
-    emoji: '↩️',
+    emoji: 'Γå⌐∩╕Å',
     desc: 'RSI <45 + Renko DOWN reversal candidates',
     filters: { max_rsi: 45, renko_dir: 'DOWN' as const },
   },
   {
     name: 'NR7 Squeeze',
-    emoji: '🎯',
-    desc: 'Narrowest range of last 7 days — pre-breakout compression',
+    emoji: '≡ƒÄ»',
+    desc: 'Narrowest range of last 7 days ΓÇö pre-breakout compression',
     filters: { only_nr7: true },
   },
   {
     name: 'Inside Bar',
-    emoji: '📦',
+    emoji: '≡ƒôª',
     desc: 'Low-risk entry with well-defined stop loss',
     filters: { only_inside_bar: true },
   },
   {
     name: 'Gap Up',
-    emoji: '⬆️',
+    emoji: 'Γ¼å∩╕Å',
     desc: 'Opened >1% above yesterday\'s close on high volume',
     filters: { only_gap_up: true, volume_breakout: '1.5X' as const },
   },
   {
     name: 'RS Leaders',
-    emoji: '🏆',
+    emoji: '≡ƒÅå',
     desc: 'Outperforming NIFTY 50 by >20% over 1 month (RS > 1.2)',
     filters: { min_rs_1m: 1.2, sma_200_cross: 'ABOVE' as const },
   },
@@ -117,7 +117,6 @@ export const ScreenerPanel: React.FC = () => {
     setActiveTab,
     setSelectedSymbol,
     watchlists,
-    activeWatchlistId,
     addToWatchlist,
   } = useStockStore();
 
@@ -216,10 +215,10 @@ export const ScreenerPanel: React.FC = () => {
     setActiveTab('explorer');
   };
 
-  // Add ticker to the active watchlist (or the first one if none active)
+  // Add ticker to the first watchlist (or the only one if one exists)
   const handleAddToWatchlist = (symbol: string) => {
-    const targetId = activeWatchlistId ?? watchlists[0]?.id;
-    if (targetId) addToWatchlist(targetId, symbol);
+    const target = watchlists[0];
+    if (target) addToWatchlist(target.id, symbol);
   };
 
   const formatNumber = (val: number | null | undefined, decimals = 2) => {
@@ -246,10 +245,10 @@ export const ScreenerPanel: React.FC = () => {
 
   // Sorting Icon Renderer
   const renderSortIcon = (field: keyof ScreenerRow) => {
-    if (sortField !== field) return <span className="text-slate-650 ml-1 text-[10px]">↕</span>;
+    if (sortField !== field) return <span className="text-slate-650 ml-1 text-[10px]">Γåò</span>;
     return sortDirection === 'asc' 
-      ? <span className="text-purple-400 ml-1 text-[9px]">▲</span> 
-      : <span className="text-purple-400 ml-1 text-[9px]">▼</span>;
+      ? <span className="text-purple-400 ml-1 text-[9px]">Γû▓</span> 
+      : <span className="text-purple-400 ml-1 text-[9px]">Γû╝</span>;
   };
 
   // Sorted Results Memo
@@ -429,7 +428,7 @@ export const ScreenerPanel: React.FC = () => {
         </div>
       </div>
 
-      {/* ── Preset Cards ──────────────────────────────────────────────────── */}
+      {/* ΓöÇΓöÇ Preset Cards ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ */}
       <div className="flex flex-wrap gap-2">
         {PRESETS.map(p => (
           <button
@@ -508,7 +507,7 @@ export const ScreenerPanel: React.FC = () => {
 
             <div className="grid grid-cols-2 gap-2">
               <div className="flex flex-col gap-1.5">
-                <label className="text-[11px] font-semibold text-slate-400">Min Price (₹)</label>
+                <label className="text-[11px] font-semibold text-slate-400">Min Price (Γé╣)</label>
                 <input
                   type="number"
                   placeholder="No Limit"
@@ -518,7 +517,7 @@ export const ScreenerPanel: React.FC = () => {
                 />
               </div>
               <div className="flex flex-col gap-1.5">
-                <label className="text-[11px] font-semibold text-slate-400">Max Price (₹)</label>
+                <label className="text-[11px] font-semibold text-slate-400">Max Price (Γé╣)</label>
                 <input
                   type="number"
                   placeholder="No Limit"
@@ -692,7 +691,7 @@ export const ScreenerPanel: React.FC = () => {
                 onChange={(e) => setScreenerFilters({ min_rs_1m: e.target.value === '' ? undefined : Number(e.target.value) })}
                 className="w-full px-3 py-1.5 text-xs rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
               />
-              <span className="text-[10px] text-slate-500">1.0 = matches NIFTY · &gt;1.2 = outperforming</span>
+              <span className="text-[10px] text-slate-500">1.0 = matches NIFTY ┬╖ &gt;1.2 = outperforming</span>
             </div>
 
             <div className="flex flex-col gap-1.5 mt-1.5">
@@ -865,20 +864,20 @@ export const ScreenerPanel: React.FC = () => {
             /* Column widths for other cells */
             .screener-grid th:nth-child(3), .screener-grid td:nth-child(3) { width: 100px; min-width: 100px; } /* Price */
             .screener-grid th:nth-child(4), .screener-grid td:nth-child(4) { width: 85px; min-width: 85px; } /* Chg% */
-            .screener-grid th:nth-child(5), .screener-grid td:nth-child(5) { width: 105px; min-width: 105px; } /* Avg Vol */
-            .screener-grid th:nth-child(6), .screener-grid td:nth-child(6) { width: 95px; min-width: 95px; } /* Bias */
+            .screener-grid th:nth-child(5), .screener-grid td:nth-child(5) { width: 95px; min-width: 95px; } /* Bias */
+            .screener-grid th:nth-child(6), .screener-grid td:nth-child(6),
             .screener-grid th:nth-child(7), .screener-grid td:nth-child(7),
             .screener-grid th:nth-child(8), .screener-grid td:nth-child(8),
-            .screener-grid th:nth-child(9), .screener-grid td:nth-child(9),
-            .screener-grid th:nth-child(10), .screener-grid td:nth-child(10) { width: 75px; min-width: 75px; } /* 1W-4W */
+            .screener-grid th:nth-child(9), .screener-grid td:nth-child(9) { width: 75px; min-width: 75px; } /* 1W-4W */
+            .screener-grid th:nth-child(10), .screener-grid td:nth-child(10),
             .screener-grid th:nth-child(11), .screener-grid td:nth-child(11),
             .screener-grid th:nth-child(12), .screener-grid td:nth-child(12),
-            .screener-grid th:nth-child(13), .screener-grid td:nth-child(13),
-            .screener-grid th:nth-child(14), .screener-grid td:nth-child(14) { width: 95px; min-width: 95px; } /* Stop/T1/T2/T3 */
-            .screener-grid th:nth-child(15), .screener-grid td:nth-child(15) { width: 90px; min-width: 90px; } /* Upside */
-            .screener-grid th:nth-child(16), .screener-grid td:nth-child(16) { width: 75px; min-width: 75px; } /* R:R */
-            .screener-grid th:nth-child(17), .screener-grid td:nth-child(17) { width: 80px; min-width: 80px; } /* TQS */
-            .screener-grid th:nth-child(18), .screener-grid td:nth-child(18) { width: 100px; min-width: 100px; } /* Shares */
+            .screener-grid th:nth-child(13), .screener-grid td:nth-child(13) { width: 95px; min-width: 95px; } /* Stop/T1/T2/T3 */
+            .screener-grid th:nth-child(14), .screener-grid td:nth-child(14) { width: 90px; min-width: 90px; } /* Upside */
+            .screener-grid th:nth-child(15), .screener-grid td:nth-child(15) { width: 75px; min-width: 75px; } /* R:R */
+            .screener-grid th:nth-child(16), .screener-grid td:nth-child(16) { width: 80px; min-width: 80px; } /* TQS */
+            .screener-grid th:nth-child(17), .screener-grid td:nth-child(17) { width: 100px; min-width: 100px; } /* Shares */
+            .screener-grid th:nth-child(18), .screener-grid td:nth-child(18) { width: 105px; min-width: 105px; } /* Avg Vol */
             .screener-grid th:nth-child(19), .screener-grid td:nth-child(19) { width: 90px; min-width: 90px; } /* Vol Brk */
             .screener-grid th:nth-child(20), .screener-grid td:nth-child(20) { width: 85px; min-width: 85px; } /* RSI */
             .screener-grid th:nth-child(21), .screener-grid td:nth-child(21),
@@ -926,10 +925,7 @@ export const ScreenerPanel: React.FC = () => {
                 <th className="py-2 px-1.5 cursor-pointer hover:text-white transition" title="Price Percentage Change" onClick={() => handleSort('price_pct_change')}>
                   Chg% {renderSortIcon('price_pct_change')}
                 </th>
-                <th className="py-2 px-1.5 text-right cursor-pointer hover:text-white transition" title="Weekly Average Volume" onClick={() => handleSort('weekly_avg_volume')}>
-                  Avg Vol {renderSortIcon('weekly_avg_volume')}
-                </th>
-                <th className="py-2 px-1.5 cursor-pointer hover:text-white transition" title="Composite Bias (5-tier: VERY_BULLISH / BULLISH / NEUTRAL / BEARISH / VERY_BEARISH) — sort by composite score" onClick={() => handleSort('composite_score' as any)}>
+                <th className="py-2 px-1.5 cursor-pointer hover:text-white transition" title="Composite Bias (5-tier: VERY_BULLISH / BULLISH / NEUTRAL / BEARISH / VERY_BEARISH) ΓÇö sort by composite score" onClick={() => handleSort('composite_score' as any)}>
                   Bias {renderSortIcon('composite_score' as any)}
                 </th>
                 <th className="py-2 px-1 text-right cursor-pointer hover:text-white transition" title="1-week rolling return" onClick={() => handleSort('ret_1w')}>
@@ -947,13 +943,13 @@ export const ScreenerPanel: React.FC = () => {
                 <th className="py-2 px-1 text-right cursor-pointer hover:text-white transition" title="Stop Loss (Close - 1.5 * ATR)" onClick={() => handleSort('stop_loss')}>
                   Stop {renderSortIcon('stop_loss')}
                 </th>
-                <th className="py-2 px-1 text-right cursor-pointer hover:text-white transition" title="Target 1 — strongest structural resistance above price" onClick={() => handleSort('target_1')}>
+                <th className="py-2 px-1 text-right cursor-pointer hover:text-white transition" title="Target 1 ΓÇö strongest structural resistance above price" onClick={() => handleSort('target_1')}>
                   T1 {renderSortIcon('target_1')}
                 </th>
-                <th className="py-2 px-1 text-right cursor-pointer hover:text-white transition" title="Target 2 — next structural resistance above T1" onClick={() => handleSort('target_2' as any)}>
+                <th className="py-2 px-1 text-right cursor-pointer hover:text-white transition" title="Target 2 ΓÇö next structural resistance above T1" onClick={() => handleSort('target_2' as any)}>
                   T2 {renderSortIcon('target_2' as any)}
                 </th>
-                <th className="py-2 px-1 text-right cursor-pointer hover:text-white transition" title="Target 3 — third structural resistance" onClick={() => handleSort('target_3' as any)}>
+                <th className="py-2 px-1 text-right cursor-pointer hover:text-white transition" title="Target 3 ΓÇö third structural resistance" onClick={() => handleSort('target_3' as any)}>
                   T3 {renderSortIcon('target_3' as any)}
                 </th>
                 <th className="py-2 px-1 text-right cursor-pointer hover:text-white transition" title="Potential Gain % to Target 1" onClick={() => handleSort('potential_gain_pct')}>
@@ -962,11 +958,14 @@ export const ScreenerPanel: React.FC = () => {
                 <th className="py-2 px-1 text-right cursor-pointer hover:text-white transition" title="Risk-to-Reward Ratio" onClick={() => handleSort('rr_ratio')}>
                   R:R {renderSortIcon('rr_ratio')}
                 </th>
-                <th className="py-2 px-1 text-right cursor-pointer hover:text-white transition" title="Trade Quality Score (0–100): Trend + Momentum + RS + Volume + R:R" onClick={() => handleSort('trade_quality_score' as any)}>
+                <th className="py-2 px-1 text-right cursor-pointer hover:text-white transition" title="Trade Quality Score (0ΓÇô100): Trend + Momentum + RS + Volume + R:R" onClick={() => handleSort('trade_quality_score' as any)}>
                   TQS {renderSortIcon('trade_quality_score' as any)}
                 </th>
-                <th className="py-2 px-1 text-right cursor-pointer hover:text-white transition" title="Suggested position size (shares) based on risk budget ÷ stop distance" onClick={() => handleSort('position_size_shares' as any)}>
+                <th className="py-2 px-1 text-right cursor-pointer hover:text-white transition" title="Suggested position size (shares) based on risk budget ├╖ stop distance" onClick={() => handleSort('position_size_shares' as any)}>
                   Shares {renderSortIcon('position_size_shares' as any)}
+                </th>
+                <th className="py-2 px-1.5 text-right cursor-pointer hover:text-white transition" title="Weekly Average Volume" onClick={() => handleSort('weekly_avg_volume')}>
+                  Avg Vol {renderSortIcon('weekly_avg_volume')}
                 </th>
                 <th className="py-2 px-1.5 text-center cursor-pointer hover:text-white transition" title="Volume Breakout Ratio" onClick={() => handleSort('volume_breakout_ratio')}>
                   Vol Brk {renderSortIcon('volume_breakout_ratio')}
@@ -1044,17 +1043,6 @@ export const ScreenerPanel: React.FC = () => {
                       value={colFilters.price_pct_change}
                       onChange={(e) => setColFilters({ ...colFilters, price_pct_change: e.target.value })}
                       className="w-full min-w-[45px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-purple-500 focus:text-white transition font-mono"
-                    />
-                  </td>
-                  
-                  {/* Avg Vol */}
-                  <td className="py-1 px-1.5">
-                    <input
-                      type="text"
-                      placeholder=">100k"
-                      value={colFilters.weekly_avg_volume}
-                      onChange={(e) => setColFilters({ ...colFilters, weekly_avg_volume: e.target.value })}
-                      className="w-full min-w-[60px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-purple-500 focus:text-white text-right transition font-mono"
                     />
                   </td>
                   
@@ -1195,6 +1183,16 @@ export const ScreenerPanel: React.FC = () => {
                       className="w-full min-w-[50px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-purple-500 focus:text-white text-right transition font-mono"
                     />
                   </td>
+                  {/* Avg Vol */}
+                  <td className="py-1 px-1.5">
+                    <input
+                      type="text"
+                      placeholder=">100k"
+                      value={colFilters.weekly_avg_volume}
+                      onChange={(e) => setColFilters({ ...colFilters, weekly_avg_volume: e.target.value })}
+                      className="w-full min-w-[60px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-purple-500 focus:text-white text-right transition font-mono"
+                    />
+                  </td>
                   {/* Vol Brk */}
                   <td className="py-1 px-1.5 text-center">
                     <input
@@ -1224,8 +1222,8 @@ export const ScreenerPanel: React.FC = () => {
                       className="w-full min-w-[50px] px-0.5 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 focus:outline-none focus:border-purple-500 cursor-pointer font-mono"
                     >
                       <option value="">All</option>
-                      <option value="ABOVE" className="text-indigo-400 font-bold">▲ Above</option>
-                      <option value="BELOW" className="text-amber-500 font-bold">▼ Below</option>
+                      <option value="ABOVE" className="text-indigo-400 font-bold">Γû▓ Above</option>
+                      <option value="BELOW" className="text-amber-500 font-bold">Γû╝ Below</option>
                     </select>
                   </td>
                   {/* S50 */}
@@ -1236,8 +1234,8 @@ export const ScreenerPanel: React.FC = () => {
                       className="w-full min-w-[50px] px-0.5 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 focus:outline-none focus:border-purple-500 cursor-pointer font-mono"
                     >
                       <option value="">All</option>
-                      <option value="ABOVE" className="text-indigo-400 font-bold">▲ Above</option>
-                      <option value="BELOW" className="text-amber-500 font-bold">▼ Below</option>
+                      <option value="ABOVE" className="text-indigo-400 font-bold">Γû▓ Above</option>
+                      <option value="BELOW" className="text-amber-500 font-bold">Γû╝ Below</option>
                     </select>
                   </td>
                   {/* S200 */}
@@ -1248,8 +1246,8 @@ export const ScreenerPanel: React.FC = () => {
                       className="w-full min-w-[50px] px-0.5 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 focus:outline-none focus:border-purple-500 cursor-pointer font-mono"
                     >
                       <option value="">All</option>
-                      <option value="ABOVE" className="text-indigo-400 font-bold">▲ Above</option>
-                      <option value="BELOW" className="text-amber-500 font-bold">▼ Below</option>
+                      <option value="ABOVE" className="text-indigo-400 font-bold">Γû▓ Above</option>
+                      <option value="BELOW" className="text-amber-500 font-bold">Γû╝ Below</option>
                     </select>
                   </td>
                   
@@ -1261,8 +1259,8 @@ export const ScreenerPanel: React.FC = () => {
                       className="w-full min-w-[50px] px-0.5 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 focus:outline-none focus:border-purple-500 cursor-pointer font-mono"
                     >
                       <option value="">All</option>
-                      <option value="BULLISH" className="text-emerald-400 font-bold">▲ Bull</option>
-                      <option value="BEARISH" className="text-rose-400 font-bold">▼ Bear</option>
+                      <option value="BULLISH" className="text-emerald-400 font-bold">Γû▓ Bull</option>
+                      <option value="BEARISH" className="text-rose-400 font-bold">Γû╝ Bear</option>
                     </select>
                   </td>
                   
@@ -1274,8 +1272,8 @@ export const ScreenerPanel: React.FC = () => {
                       className="w-full min-w-[50px] px-0.5 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 focus:outline-none focus:border-purple-500 cursor-pointer font-mono"
                     >
                       <option value="">All</option>
-                      <option value="UP" className="text-emerald-400 font-bold">▲ UP</option>
-                      <option value="DOWN" className="text-rose-400 font-bold">▼ DOWN</option>
+                      <option value="UP" className="text-emerald-400 font-bold">Γû▓ UP</option>
+                      <option value="DOWN" className="text-rose-400 font-bold">Γû╝ DOWN</option>
                     </select>
                   </td>
                   
@@ -1287,8 +1285,8 @@ export const ScreenerPanel: React.FC = () => {
                       className="w-full min-w-[50px] px-0.5 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 focus:outline-none focus:border-purple-500 cursor-pointer font-mono"
                     >
                       <option value="">All</option>
-                      <option value="UP" className="text-emerald-400 font-bold">▲ UP</option>
-                      <option value="DOWN" className="text-rose-400 font-bold">▼ DOWN</option>
+                      <option value="UP" className="text-emerald-400 font-bold">Γû▓ UP</option>
+                      <option value="DOWN" className="text-rose-400 font-bold">Γû╝ DOWN</option>
                     </select>
                   </td>
                   
@@ -1300,8 +1298,8 @@ export const ScreenerPanel: React.FC = () => {
                       className="w-full min-w-[50px] px-0.5 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 focus:outline-none focus:border-purple-500 cursor-pointer font-mono"
                     >
                       <option value="">All</option>
-                      <option value="UP" className="text-emerald-400 font-bold">▲ UP</option>
-                      <option value="DOWN" className="text-rose-400 font-bold">▼ DOWN</option>
+                      <option value="UP" className="text-emerald-400 font-bold">Γû▓ UP</option>
+                      <option value="DOWN" className="text-rose-400 font-bold">Γû╝ DOWN</option>
                     </select>
                   </td>
                   
@@ -1368,17 +1366,12 @@ export const ScreenerPanel: React.FC = () => {
                       
                       {/* Price */}
                       <td className="py-2 px-1.5 font-mono font-semibold">
-                        ₹{formatNumber(row.close_price)}
+                        Γé╣{formatNumber(row.close_price)}
                       </td>
                       
                       {/* Change */}
                       <td className={`py-2 px-1.5 font-mono ${isChangeBullish ? 'text-emerald-400' : 'text-rose-400'}`}>
                         {isChangeBullish ? '+' : ''}{formatNumber(row.price_pct_change)}%
-                      </td>
-
-                      {/* Weekly Avg Vol */}
-                      <td className="py-2 px-1.5 text-right font-mono text-slate-350">
-                        {formatVolume(row.weekly_avg_volume)}
                       </td>
 
                       {/* Bias chip */}
@@ -1391,8 +1384,8 @@ export const ScreenerPanel: React.FC = () => {
                           const rs    = (row as any).rs_score_val as number | null | undefined;
                           const mom   = (row as any).momentum_score_val as number | null | undefined;
                           const tooltip = score != null
-                            ? `Score: ${score.toFixed(1)}\nTrend: ${trend?.toFixed(0) ?? '—'}  Volume: ${vol?.toFixed(0) ?? '—'}  RS: ${rs?.toFixed(0) ?? '—'}  Momentum: ${mom?.toFixed(0) ?? '—'}`
-                            : bias ?? '—';
+                            ? `Score: ${score.toFixed(1)}\nTrend: ${trend?.toFixed(0) ?? 'ΓÇö'}  Volume: ${vol?.toFixed(0) ?? 'ΓÇö'}  RS: ${rs?.toFixed(0) ?? 'ΓÇö'}  Momentum: ${mom?.toFixed(0) ?? 'ΓÇö'}`
+                            : bias ?? 'ΓÇö';
                           const cfg: Record<string, { bg: string; text: string; label: string }> = {
                             VERY_BULLISH: { bg: 'bg-emerald-500/20 border-emerald-400/50', text: 'text-emerald-200', label: 'VB+' },
                             BULLISH:      { bg: 'bg-emerald-500/10 border-emerald-500/30', text: 'text-emerald-400', label: 'Bull' },
@@ -1401,7 +1394,7 @@ export const ScreenerPanel: React.FC = () => {
                             VERY_BEARISH: { bg: 'bg-rose-500/20 border-rose-400/50',        text: 'text-rose-200',   label: 'VB-' },
                           };
                           const c = bias ? (cfg[bias] ?? cfg['NEUTRAL']) : null;
-                          if (!c) return <span className="text-slate-600">—</span>;
+                          if (!c) return <span className="text-slate-600">ΓÇö</span>;
                           return (
                             <span
                               title={tooltip}
@@ -1421,25 +1414,25 @@ export const ScreenerPanel: React.FC = () => {
                         <td key={i} className={`py-2 px-1 text-right font-mono text-xs ${
                           r === null || r === undefined ? 'text-slate-650' : r >= 0 ? 'text-emerald-400' : 'text-rose-400'
                         }`}>
-                          {r === null || r === undefined ? '—' : `${r >= 0 ? '+' : ''}${r.toFixed(1)}%`}
+                          {r === null || r === undefined ? 'ΓÇö' : `${r >= 0 ? '+' : ''}${r.toFixed(1)}%`}
                         </td>
                       ))}
 
                       {/* ATR-based trade setup: Stop / Target 1 / Upside% */}
                       <td className="py-2 px-1 text-right font-mono text-xs text-rose-400/80">
-                        {row.stop_loss == null ? '—' : `₹${formatNumber(row.stop_loss, 1)}`}
+                        {row.stop_loss == null ? 'ΓÇö' : `Γé╣${formatNumber(row.stop_loss, 1)}`}
                       </td>
                       <td className="py-2 px-1 text-right font-mono text-xs text-emerald-400/90">
-                        {row.target_1 == null ? '—' : `₹${formatNumber(row.target_1, 1)}`}
+                        {row.target_1 == null ? 'ΓÇö' : `Γé╣${formatNumber(row.target_1, 1)}`}
                       </td>
                       <td className="py-2 px-1 text-right font-mono text-xs text-emerald-400/60">
-                        {row.target_2 == null ? '—' : `₹${formatNumber(row.target_2, 1)}`}
+                        {row.target_2 == null ? 'ΓÇö' : `Γé╣${formatNumber(row.target_2, 1)}`}
                       </td>
                       <td className="py-2 px-1 text-right font-mono text-xs text-emerald-400/40">
-                        {row.target_3 == null ? '—' : `₹${formatNumber(row.target_3, 1)}`}
+                        {row.target_3 == null ? 'ΓÇö' : `Γé╣${formatNumber(row.target_3, 1)}`}
                       </td>
                       <td className="py-2 px-1 text-right font-mono text-xs text-emerald-400">
-                        {row.potential_gain_pct == null ? '—' : `+${row.potential_gain_pct.toFixed(1)}%`}
+                        {row.potential_gain_pct == null ? 'ΓÇö' : `+${row.potential_gain_pct.toFixed(1)}%`}
                       </td>
 
                       {/* R:R Ratio */}
@@ -1454,7 +1447,7 @@ export const ScreenerPanel: React.FC = () => {
                           }`}>
                             {row.rr_ratio.toFixed(2)}x
                           </span>
-                        ) : <span className="text-slate-600">—</span>}
+                        ) : <span className="text-slate-600">ΓÇö</span>}
                       </td>
 
                       {/* Trade Quality Score */}
@@ -1469,12 +1462,17 @@ export const ScreenerPanel: React.FC = () => {
                           }`}>
                             {row.trade_quality_score.toFixed(0)}
                           </span>
-                        ) : <span className="text-slate-600">—</span>}
+                        ) : <span className="text-slate-600">ΓÇö</span>}
                       </td>
 
                       {/* Position Size */}
                       <td className="py-2 px-1 text-right font-mono text-xs text-purple-400">
-                        {row.position_size_shares != null ? row.position_size_shares.toLocaleString('en-IN') : '—'}
+                        {row.position_size_shares != null ? row.position_size_shares.toLocaleString('en-IN') : 'ΓÇö'}
+                      </td>
+
+                      {/* Weekly Avg Vol */}
+                      <td className="py-2 px-1.5 text-right font-mono text-slate-350">
+                        {formatVolume(row.weekly_avg_volume)}
                       </td>
                       
                       {/* Volume Breakout Badge */}
@@ -1508,77 +1506,77 @@ export const ScreenerPanel: React.FC = () => {
                       {/* SMA 20 */}
                       <td className="py-2 px-1.5 text-center font-mono">
                         {row.sma_20_cross_direction === 'ABOVE' ? (
-                          <span className="text-indigo-400 font-bold" title="Above SMA 20">▲</span>
+                          <span className="text-indigo-400 font-bold" title="Above SMA 20">Γû▓</span>
                         ) : row.sma_20_cross_direction === 'BELOW' ? (
-                          <span className="text-amber-500 font-bold" title="Below SMA 20">▼</span>
+                          <span className="text-amber-500 font-bold" title="Below SMA 20">Γû╝</span>
                         ) : (
-                          <span className="text-slate-600">—</span>
+                          <span className="text-slate-600">ΓÇö</span>
                         )}
                       </td>
 
                       {/* SMA 50 */}
                       <td className="py-2 px-1.5 text-center font-mono">
                         {row.sma_50_cross_direction === 'ABOVE' ? (
-                          <span className="text-indigo-400 font-bold" title="Above SMA 50">▲</span>
+                          <span className="text-indigo-400 font-bold" title="Above SMA 50">Γû▓</span>
                         ) : row.sma_50_cross_direction === 'BELOW' ? (
-                          <span className="text-amber-500 font-bold" title="Below SMA 50">▼</span>
+                          <span className="text-amber-500 font-bold" title="Below SMA 50">Γû╝</span>
                         ) : (
-                          <span className="text-slate-600">—</span>
+                          <span className="text-slate-600">ΓÇö</span>
                         )}
                       </td>
 
                       {/* SMA 200 */}
                       <td className="py-2 px-1.5 text-center font-mono">
                         {row.sma_200_cross_direction === 'ABOVE' ? (
-                          <span className="text-indigo-400 font-bold" title="Above SMA 200">▲</span>
+                          <span className="text-indigo-400 font-bold" title="Above SMA 200">Γû▓</span>
                         ) : row.sma_200_cross_direction === 'BELOW' ? (
-                          <span className="text-amber-500 font-bold" title="Below SMA 200">▼</span>
+                          <span className="text-amber-500 font-bold" title="Below SMA 200">Γû╝</span>
                         ) : (
-                          <span className="text-slate-600">—</span>
+                          <span className="text-slate-600">ΓÇö</span>
                         )}
                       </td>
 
                       {/* MACD Trend */}
                       <td className="py-2 px-1.5 text-center font-mono">
                         {row.macd_trend === 'BULLISH' ? (
-                          <span className="text-emerald-400 font-bold animate-pulse" title="MACD Bullish">▲</span>
+                          <span className="text-emerald-400 font-bold animate-pulse" title="MACD Bullish">Γû▓</span>
                         ) : row.macd_trend === 'BEARISH' ? (
-                          <span className="text-rose-400 font-bold" title="MACD Bearish">▼</span>
+                          <span className="text-rose-400 font-bold" title="MACD Bearish">Γû╝</span>
                         ) : (
-                          <span className="text-slate-600">—</span>
+                          <span className="text-slate-600">ΓÇö</span>
                         )}
                       </td>
                       
                       {/* HA */}
                       <td className="py-2 px-1.5 text-center font-mono">
                         {isHaBullish ? (
-                          <span className="text-emerald-400 font-bold" title="HA Bullish (UP)">▲</span>
+                          <span className="text-emerald-400 font-bold" title="HA Bullish (UP)">Γû▓</span>
                         ) : row.ha_direction === 'DOWN' ? (
-                          <span className="text-rose-400 font-bold" title="HA Bearish (DOWN)">▼</span>
+                          <span className="text-rose-400 font-bold" title="HA Bearish (DOWN)">Γû╝</span>
                         ) : (
-                          <span className="text-slate-600">—</span>
+                          <span className="text-slate-600">ΓÇö</span>
                         )}
                       </td>
 
                       {/* Renko */}
                       <td className="py-2 px-1.5 text-center font-mono">
                         {isRenkoBullish ? (
-                          <span className="text-emerald-400 font-bold" title="Renko Bullish (UP)">▲</span>
+                          <span className="text-emerald-400 font-bold" title="Renko Bullish (UP)">Γû▓</span>
                         ) : row.renko_direction === 'DOWN' ? (
-                          <span className="text-rose-400 font-bold" title="Renko Bearish (DOWN)">▼</span>
+                          <span className="text-rose-400 font-bold" title="Renko Bearish (DOWN)">Γû╝</span>
                         ) : (
-                          <span className="text-slate-600">—</span>
+                          <span className="text-slate-600">ΓÇö</span>
                         )}
                       </td>
 
                       {/* Three Line Break */}
                       <td className="py-2 px-1.5 text-center font-mono">
                         {isLbBullish ? (
-                          <span className="text-emerald-400 font-bold" title="Three Line Break Bullish (UP)">▲</span>
+                          <span className="text-emerald-400 font-bold" title="Three Line Break Bullish (UP)">Γû▓</span>
                         ) : row.line_break_direction === 'DOWN' ? (
-                          <span className="text-rose-400 font-bold" title="Three Line Break Bearish (DOWN)">▼</span>
+                          <span className="text-rose-400 font-bold" title="Three Line Break Bearish (DOWN)">Γû╝</span>
                         ) : (
-                          <span className="text-slate-600">—</span>
+                          <span className="text-slate-600">ΓÇö</span>
                         )}
                       </td>
                       
@@ -1592,7 +1590,7 @@ export const ScreenerPanel: React.FC = () => {
                           }`}>
                             {((row as any).rs_score_1m as number).toFixed(2)}x
                           </span>
-                        ) : <span className="text-slate-600">—</span>}
+                        ) : <span className="text-slate-600">ΓÇö</span>}
                       </td>
                       {/* Patterns / Signals */}
                       <td className="py-2 px-1.5 text-center">
@@ -1618,7 +1616,7 @@ export const ScreenerPanel: React.FC = () => {
                             </span>
                           )}
                           {!row.is_nr7 && !row.is_inside_bar && !row.is_gap_up && !row.is_gap_down && (
-                            <span className="text-slate-650">—</span>
+                            <span className="text-slate-650">ΓÇö</span>
                           )}
                         </div>
                       </td>

@@ -67,6 +67,9 @@ class Symbol(Base):
     confluence_levels: Mapped[list["SymbolConfluenceLevel"]] = relationship(
         "SymbolConfluenceLevel", back_populates="symbol_obj", cascade="all, delete-orphan"
     )
+    strategy_signals: Mapped[list["StrategySignal"]] = relationship(
+        "StrategySignal", back_populates="symbol_obj", cascade="all, delete-orphan"
+    )
 
 
 class DailyPrice(Base):
@@ -442,4 +445,47 @@ class SymbolConfluenceLevel(Base):
 
     __table_args__ = (
         Index("ix_confluence_levels_symbol_type", "symbol_id", "level_type"),
+    )
+
+
+class StrategySignal(Base):
+    """Materialized latest-bar strategy verdict per symbol (mirrors the Signal schema, §8.1).
+
+    One row per (symbol, strategy). Rebuilt after each sync by StrategyScreenerService,
+    exactly like ScreeningSnapshot — so the Strategy screen never does live computation.
+    JSON-ish blobs (key_metrics / gates / reasons) are stored as Text for SQLite + MSSQL
+    portability and parsed by the API layer.
+    """
+
+    __tablename__ = "strategy_signals"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    symbol_id: Mapped[int] = mapped_column(Integer, ForeignKey("symbols.id", ondelete="CASCADE"), nullable=False)
+    symbol: Mapped[str] = mapped_column(String(50), nullable=False)
+    company_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    strategy_id: Mapped[str] = mapped_column(String(50), nullable=False)
+    as_of: Mapped[datetime.date] = mapped_column(Date, nullable=False)
+
+    signal: Mapped[str] = mapped_column(String(10), nullable=False)  # BUY / SELL / WATCH / NONE
+    score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    last_close: Mapped[float | None] = mapped_column(Numeric(18, 4), nullable=True)
+
+    entry_ref: Mapped[float | None] = mapped_column(Numeric(18, 4), nullable=True)
+    initial_stop: Mapped[float | None] = mapped_column(Numeric(18, 4), nullable=True)
+    target: Mapped[float | None] = mapped_column(Numeric(18, 4), nullable=True)
+    risk_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    rr: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    key_metrics: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON
+    gates: Mapped[str | None] = mapped_column(Text, nullable=True)        # JSON
+    reasons: Mapped[str | None] = mapped_column(Text, nullable=True)      # JSON
+
+    updated_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now())
+
+    # Relationships
+    symbol_obj: Mapped["Symbol"] = relationship("Symbol", back_populates="strategy_signals")
+
+    __table_args__ = (
+        UniqueConstraint("symbol_id", "strategy_id", name="UQ_StrategySignal_Symbol_Strategy"),
+        Index("ix_strategy_signals_strategy_signal_score", "strategy_id", "signal", "score"),
     )

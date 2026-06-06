@@ -11,6 +11,7 @@ from stocks.api.v1.endpoints import (
     screening,
     settings,
     setup,
+    strategies,
     symbols,
     sync,
 )
@@ -22,6 +23,7 @@ api_router.include_router(symbols.router)
 api_router.include_router(charts.router)
 api_router.include_router(indicators.router)
 api_router.include_router(screening.router)
+api_router.include_router(strategies.router)
 api_router.include_router(actions.router)
 api_router.include_router(sync.router)
 api_router.include_router(agents.router)

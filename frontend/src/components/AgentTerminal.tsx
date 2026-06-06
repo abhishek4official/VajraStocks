@@ -1,6 +1,166 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useStockStore } from '../store/useStockStore';
-import { Terminal, Send, Sparkles, Cpu, CheckCircle } from 'lucide-react';
+import { 
+  Terminal, 
+  Send, 
+  Sparkles, 
+  Cpu, 
+  CheckCircle,
+  ChevronDown,
+  ChevronUp,
+  Database,
+  TrendingUp,
+  Shield,
+  Layers,
+  Search,
+  Play,
+  HelpCircle,
+  BookOpen
+} from 'lucide-react';
+
+interface AgentSample {
+  id: string;
+  name: string;
+  role: string;
+  model: string;
+  description: string;
+  activationTrigger: string;
+  samples: {
+    label: string;
+    query: string;
+  }[];
+  colorClass: string;
+  iconName: string;
+}
+
+const agentSamples: AgentSample[] = [
+  {
+    id: 'sql_data_agent',
+    name: 'SQL Ingestion & Screening Agent',
+    role: 'Quantitative Database Specialist',
+    model: 'qwen2.5-coder:7b',
+    description: 'Translates natural language stock filtering queries into secure, read-only SQL queries executed directly against local historical market data.',
+    activationTrigger: 'Starts with "STOCKS:", "SELECT", or contains "SQL"',
+    colorClass: 'emerald',
+    iconName: 'database',
+    samples: [
+      {
+        label: 'Filter RSI & Volume',
+        query: 'STOCKS: SELECT symbol, close_price, volume, rsi_14 FROM screening_snapshots WHERE rsi_14 < 30 AND volume > 100000 ORDER BY rsi_14 ASC'
+      },
+      {
+        label: 'Momentum Crosses',
+        query: 'STOCKS: SELECT symbol, close_price, macd_trend, rsi_14 FROM screening_snapshots WHERE macd_trend = \'UP\' AND rsi_14 > 50'
+      }
+    ]
+  },
+  {
+    id: 'market_regime_agent',
+    name: 'Market Regime Agent',
+    role: 'Macro Market Strategist',
+    model: 'deepseek-r1:8b',
+    description: 'Determines index states (Bullish, Bearish, Sideways, Volatile, or Compressed) by assessing moving average channels and volatility bands.',
+    activationTrigger: 'Mentions "market regime", "index trend", "nifty", or "market status"',
+    colorClass: 'purple',
+    iconName: 'trending',
+    samples: [
+      {
+        label: 'Evaluate Market Regime',
+        query: 'Report current market regime'
+      },
+      {
+        label: 'Nifty Trend Audit',
+        query: 'Check Nifty index status and trend boundaries'
+      }
+    ]
+  },
+  {
+    id: 'stock_analysis_agent',
+    name: 'Stock Technical Analysis Agent',
+    role: 'Quantitative Research Analyst',
+    model: 'deepseek-r1:8b',
+    description: 'Audits multi-timeframe indicators (Heikin-Ashi, Renko, Three Line Break) to compute Trend, Momentum, and Risk scores.',
+    activationTrigger: 'Asks to "analyze", "audit", or "score" specific ticker symbols',
+    colorClass: 'indigo',
+    iconName: 'analysis',
+    samples: [
+      {
+        label: 'Audit TCS Setup',
+        query: 'Analyze TCS'
+      },
+      {
+        label: 'Score TRENT setup',
+        query: 'Calculate technical scores for TRENT.NS'
+      }
+    ]
+  },
+  {
+    id: 'opportunity_scanner_agent',
+    name: 'Opportunity Scanner Agent',
+    role: 'Quant Screening Specialist',
+    model: 'deepseek-r1:8b',
+    description: 'Sweeps database indicators in real-time to highlight high-probability breakout, reversal, or momentum continuation setups.',
+    activationTrigger: 'Asks to "scan", "find opportunities", or "detect setups"',
+    colorClass: 'amber',
+    iconName: 'search',
+    samples: [
+      {
+        label: 'Scan Breakout Setups',
+        query: 'Identify momentum breakout setups'
+      },
+      {
+        label: 'Scan Swing Setups',
+        query: 'Find swing trade setups with low risk entry'
+      }
+    ]
+  },
+  {
+    id: 'trade_planner_agent',
+    name: 'Risk & Trade Execution Agent',
+    role: 'Risk Management & Execution Planner',
+    model: 'deepseek-r1:8b',
+    description: 'Calculates entry brackets, mathematical ATR-based stop-losses, and position sizing details tailored to a 1% portfolio risk threshold.',
+    activationTrigger: 'Asks for "trade plan", "stop loss", or "risk planner"',
+    colorClass: 'rose',
+    iconName: 'shield',
+    samples: [
+      {
+        label: 'Plan INFOSYS Trade',
+        query: 'Plan trade setup and risk parameters for INFOSYS'
+      },
+      {
+        label: 'Plan TRENT Trade',
+        query: 'Formulate trade plan for TRENT.NS'
+      }
+    ]
+  }
+];
+
+const renderAgentIcon = (iconName: string, colorClass: string) => {
+  const baseClass = "w-4 h-4";
+  let color = "text-slate-400";
+  if (colorClass === 'emerald') color = "text-emerald-400";
+  if (colorClass === 'purple') color = "text-purple-400";
+  if (colorClass === 'indigo') color = "text-indigo-400";
+  if (colorClass === 'amber') color = "text-amber-400";
+  if (colorClass === 'rose') color = "text-rose-400";
+
+  switch (iconName) {
+    case 'database':
+      return <Database className={`${baseClass} ${color}`} />;
+    case 'trending':
+      return <TrendingUp className={`${baseClass} ${color}`} />;
+    case 'analysis':
+      return <Layers className={`${baseClass} ${color}`} />;
+    case 'search':
+      return <Search className={`${baseClass} ${color}`} />;
+    case 'shield':
+      return <Shield className={`${baseClass} ${color}`} />;
+    default:
+      return <Cpu className={`${baseClass} ${color}`} />;
+  }
+};
+
 
 export const AgentTerminal: React.FC = () => {
   const { 
@@ -14,6 +174,7 @@ export const AgentTerminal: React.FC = () => {
   } = useStockStore();
 
   const [inputVal, setInputVal] = useState('');
+  const [showSamples, setShowSamples] = useState(false);
   const consoleEndRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll the agent event console as stream events arrive
@@ -218,6 +379,82 @@ export const AgentTerminal: React.FC = () => {
           </button>
         </div>
 
+        {/* Accordion: Quick Agent Prompt Samples */}
+        <div className="border border-slate-800 bg-[#0c0f17]/40 rounded-xl overflow-hidden shrink-0 transition-all">
+          <button
+            type="button"
+            onClick={() => setShowSamples(!showSamples)}
+            className="w-full flex items-center justify-between p-3 text-xs font-bold text-slate-350 hover:bg-slate-900/30 transition cursor-pointer"
+          >
+            <span className="flex items-center gap-2 text-white">
+              <HelpCircle className="w-3.5 h-3.5 text-purple-500" />
+              Agent Activators & Prompt Samples
+            </span>
+            <span className="flex items-center gap-1.5 text-[10px] font-normal text-slate-400">
+              {showSamples ? 'Hide Samples' : 'Show Samples'}
+              {showSamples ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            </span>
+          </button>
+          
+          {showSamples && (
+            <div className="p-3 pt-0 border-t border-slate-900 bg-slate-950/20 space-y-3">
+              <div className="text-[10px] text-slate-400">
+                Click any prompt sample below to run it in the console and engage the corresponding quantitative agent.
+              </div>
+              <div className="space-y-2.5">
+                {agentSamples.map((agent) => {
+                  let accentBg = "bg-slate-900/30 border-slate-805";
+                  let badgeColor = "text-slate-400 bg-slate-900 border-slate-800";
+                  if (agent.colorClass === 'emerald') {
+                    accentBg = "bg-emerald-950/5 border-emerald-950/25";
+                    badgeColor = "text-emerald-400 bg-emerald-950/20 border-emerald-900/30";
+                  } else if (agent.colorClass === 'purple') {
+                    accentBg = "bg-purple-950/5 border-purple-950/25";
+                    badgeColor = "text-purple-400 bg-purple-950/20 border-purple-900/30";
+                  } else if (agent.colorClass === 'indigo') {
+                    accentBg = "bg-indigo-950/5 border-indigo-950/25";
+                    badgeColor = "text-indigo-400 bg-indigo-950/20 border-indigo-900/30";
+                  } else if (agent.colorClass === 'amber') {
+                    accentBg = "bg-amber-950/5 border-amber-950/25";
+                    badgeColor = "text-amber-400 bg-amber-950/20 border-amber-900/30";
+                  } else if (agent.colorClass === 'rose') {
+                    accentBg = "bg-rose-950/5 border-rose-950/25";
+                    badgeColor = "text-rose-400 bg-rose-950/20 border-rose-900/30";
+                  }
+
+                  return (
+                    <div key={agent.id} className={`p-2.5 rounded-lg border ${accentBg} space-y-2`}>
+                      <div className="flex flex-wrap items-center justify-between gap-1.5">
+                        <div className="flex items-center gap-1.5">
+                          {renderAgentIcon(agent.iconName, agent.colorClass)}
+                          <span className="text-[11px] font-bold text-white">{agent.name}</span>
+                        </div>
+                        <span className={`text-[9px] px-1.5 py-0.5 rounded border font-mono ${badgeColor}`}>
+                          {agent.model}
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {agent.samples.map((sample, sIdx) => (
+                          <button
+                            key={sIdx}
+                            type="button"
+                            onClick={() => handlePresetClick(sample.query)}
+                            disabled={aiIsLoading}
+                            className="px-2 py-1 text-[10px] font-medium text-slate-300 bg-slate-900/60 border border-slate-800 hover:border-purple-500/50 hover:bg-slate-900 rounded-md cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed transition flex items-center gap-1 text-left"
+                          >
+                            <Play className="w-2.5 h-2.5 text-purple-400 shrink-0" />
+                            {sample.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* Live SSE Logging terminal */}
         <div className="flex-1 bg-[#0c0f17] border border-slate-850 rounded-xl p-4 flex flex-col font-mono text-xs overflow-hidden min-h-[220px]">
           <div className="flex items-center justify-between pb-2 border-b border-slate-850 mb-3 shrink-0 text-slate-400">
@@ -341,11 +578,107 @@ export const AgentTerminal: React.FC = () => {
               {renderMarkdown(aiReport)}
             </div>
           ) : (
-            <div className="h-full flex flex-col items-center justify-center text-slate-650 text-center gap-3 py-16">
-              <Sparkles className="w-12 h-12 text-slate-800 animate-pulse" />
-              <div className="space-y-1">
-                <p className="font-semibold text-slate-600">Unified Investment Report Panel</p>
-                <p className="text-[11px] text-slate-500 max-w-[280px]">Run a multi-agent workflow to synthesize technical data streams and build tactical trade entry maps.</p>
+            <div className="space-y-5">
+              <div className="pb-3 border-b border-slate-850">
+                <h4 className="text-sm font-bold text-white tracking-wide flex items-center gap-2">
+                  <BookOpen className="w-4 h-4 text-purple-500" />
+                  Multi-Agent Quant Registry
+                </h4>
+                <p className="text-xs text-slate-400 mt-1">
+                  VajraStocks orchestrates 5 independent analytical agents. Below is the active agent registry, their LLM profiles, trigger criteria, and sample queries.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4">
+                {agentSamples.map((agent) => {
+                  let accentBg = "bg-slate-900/20 border-slate-850";
+                  let borderHighlight = "border-l-2 border-l-slate-600";
+                  let triggerTextClass = "text-slate-400 bg-slate-900/60 border-slate-800/80";
+                  let badgeColor = "text-slate-400 bg-slate-900 border-slate-800";
+                  
+                  if (agent.colorClass === 'emerald') {
+                    accentBg = "bg-emerald-950/5 border-emerald-950/15";
+                    borderHighlight = "border-l-2 border-l-emerald-500";
+                    triggerTextClass = "text-emerald-300 bg-emerald-950/10 border-emerald-900/20";
+                    badgeColor = "text-emerald-400 bg-emerald-950/20 border-emerald-900/30";
+                  } else if (agent.colorClass === 'purple') {
+                    accentBg = "bg-purple-950/5 border-purple-950/15";
+                    borderHighlight = "border-l-2 border-l-purple-500";
+                    triggerTextClass = "text-purple-300 bg-purple-950/10 border-purple-900/20";
+                    badgeColor = "text-purple-400 bg-purple-950/20 border-purple-900/30";
+                  } else if (agent.colorClass === 'indigo') {
+                    accentBg = "bg-indigo-950/5 border-indigo-950/15";
+                    borderHighlight = "border-l-2 border-l-indigo-500";
+                    triggerTextClass = "text-indigo-300 bg-indigo-950/10 border-indigo-900/20";
+                    badgeColor = "text-indigo-400 bg-indigo-950/20 border-indigo-900/30";
+                  } else if (agent.colorClass === 'amber') {
+                    accentBg = "bg-amber-950/5 border-amber-950/15";
+                    borderHighlight = "border-l-2 border-l-amber-500";
+                    triggerTextClass = "text-amber-300 bg-amber-950/10 border-amber-900/20";
+                    badgeColor = "text-amber-400 bg-amber-950/20 border-amber-900/30";
+                  } else if (agent.colorClass === 'rose') {
+                    accentBg = "bg-rose-950/5 border-rose-950/15";
+                    borderHighlight = "border-l-2 border-l-rose-500";
+                    triggerTextClass = "text-rose-300 bg-rose-950/10 border-rose-900/20";
+                    badgeColor = "text-rose-400 bg-rose-950/20 border-rose-900/30";
+                  }
+
+                  return (
+                    <div 
+                      key={agent.id} 
+                      className={`p-4 rounded-xl border ${accentBg} ${borderHighlight} transition-all duration-200 hover:border-slate-800`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="space-y-0.5">
+                          <div className="flex items-center gap-1.5">
+                            {renderAgentIcon(agent.iconName, agent.colorClass)}
+                            <h5 className="text-xs font-bold text-white">{agent.name}</h5>
+                          </div>
+                          <p className="text-[10px] font-medium text-slate-400">{agent.role}</p>
+                        </div>
+                        <span className={`text-[9px] px-2 py-0.5 rounded-md border font-mono font-bold tracking-wide ${badgeColor}`}>
+                          {agent.model}
+                        </span>
+                      </div>
+
+                      <p className="text-[11px] text-slate-300 mt-2.5 leading-relaxed font-sans">
+                        {agent.description}
+                      </p>
+
+                      <div className="mt-3 flex items-center gap-1.5 text-[10px]">
+                        <span className="font-semibold text-slate-400">Trigger rule:</span>
+                        <code className={`px-1.5 py-0.5 rounded border text-[9px] font-mono font-medium ${triggerTextClass}`}>
+                          {agent.activationTrigger}
+                        </code>
+                      </div>
+
+                      <div className="mt-4 pt-3 border-t border-slate-900 space-y-2">
+                        <span className="text-[10px] font-semibold text-slate-400 block">Test Prompt Scenarios:</span>
+                        <div className="flex flex-col gap-2">
+                          {agent.samples.map((sample, sIdx) => (
+                            <div 
+                              key={sIdx} 
+                              className="flex items-center justify-between gap-3 p-2 rounded-lg bg-slate-950/40 border border-slate-900 hover:border-slate-800 transition"
+                            >
+                              <div className="font-mono text-[10px] text-slate-300 select-all overflow-hidden text-ellipsis whitespace-nowrap flex-1 pr-2">
+                                {sample.query}
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handlePresetClick(sample.query)}
+                                disabled={aiIsLoading}
+                                className="px-2.5 py-1 text-[10px] font-bold text-white bg-purple-600/90 hover:bg-purple-600 rounded-md cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed transition flex items-center gap-1 shrink-0 shadow-md shadow-purple-950/20"
+                              >
+                                <Play className="w-2.5 h-2.5" />
+                                Run
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
