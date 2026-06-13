@@ -37,6 +37,13 @@ interface ScreenerFilters {
   only_gap_up?: boolean;
   only_gap_down?: boolean;
   min_rs_1m?: number;
+  min_cmf?: number;
+  max_cmf?: number;
+  cmf_rising?: boolean;
+  cmf_crossed_zero?: boolean;
+  min_stochrsi_k?: number;
+  max_stochrsi_k?: number;
+  stochrsi_bullish_xover_max_days?: number;
   limit?: number;
 }
 

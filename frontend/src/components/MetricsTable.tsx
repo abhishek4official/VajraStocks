@@ -43,6 +43,9 @@ export const MetricsTable: React.FC = () => {
             <tr className="border-b border-slate-800 text-xs text-slate-400 uppercase tracking-wider font-mono">
               <th className="py-2 px-3">Date</th>
               <th className="py-2 px-3">RSI (14)</th>
+              <th className="py-2 px-3">CMF (20)</th>
+              <th className="py-2 px-3">StochRSI K</th>
+              <th className="py-2 px-3">StochRSI D</th>
               <th className="py-2 px-3">SMA 20</th>
               <th className="py-2 px-3">SMA 50</th>
               <th className="py-2 px-3">SMA 200</th>
@@ -54,7 +57,7 @@ export const MetricsTable: React.FC = () => {
           <tbody className="divide-y divide-slate-850">
             {latestIndicators.length === 0 ? (
               <tr>
-                <td colSpan={8} className="py-8 text-center text-slate-500 text-sm">
+                <td colSpan={11} className="py-8 text-center text-slate-500 text-sm">
                   No technical indicators computed for this symbol yet. Trigger a recalculation job inside the Sync Center.
                 </td>
               </tr>
@@ -71,6 +74,27 @@ export const MetricsTable: React.FC = () => {
                         {formatNumber(ind.rsi_14)}
                       </span>
                     </td>
+                    <td className="py-2.5 px-3 font-mono">
+                      <span className={
+                        ind.cmf_20 == null ? 'text-slate-400'
+                        : ind.cmf_20 >= 0.05 ? 'text-emerald-400 font-semibold'
+                        : ind.cmf_20 <= -0.05 ? 'text-rose-400 font-semibold'
+                        : 'text-slate-300'
+                      }>
+                        {formatNumber(ind.cmf_20, 3)}
+                      </span>
+                    </td>
+                    <td className="py-2.5 px-3 font-mono">
+                      <span className={
+                        ind.stochrsi_k == null ? 'text-slate-400'
+                        : ind.stochrsi_k >= 80 ? 'text-rose-400 font-semibold'
+                        : ind.stochrsi_k <= 20 ? 'text-emerald-400 font-semibold'
+                        : 'text-slate-300'
+                      }>
+                        {formatNumber(ind.stochrsi_k, 1)}
+                      </span>
+                    </td>
+                    <td className="py-2.5 px-3 font-mono text-slate-300">{formatNumber(ind.stochrsi_d, 1)}</td>
                     <td className="py-2.5 px-3 font-mono">{formatNumber(ind.sma_20)}</td>
                     <td className="py-2.5 px-3 font-mono">{formatNumber(ind.sma_50)}</td>
                     <td className="py-2.5 px-3 font-mono">{formatNumber(ind.sma_200)}</td>

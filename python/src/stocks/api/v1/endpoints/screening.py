@@ -195,7 +195,16 @@ class ScreeningParams(BaseModel):
     only_gap_up: bool = False
     only_gap_down: bool = False
     min_rs_1m: float | None = None
-    limit: int = 2500  # No hard cap — return all matches by default
+    # CMF filters
+    min_cmf: float | None = None
+    max_cmf: float | None = None
+    cmf_rising: bool | None = None
+    cmf_crossed_zero: bool | None = None
+    # StochRSI filters
+    max_stochrsi_k: float | None = None
+    min_stochrsi_k: float | None = None
+    stochrsi_bullish_xover_max_days: int | None = None
+    limit: int = 2500
 
 
 class ScreenerRowResponse(BaseModel):
@@ -247,6 +256,16 @@ class ScreenerRowResponse(BaseModel):
     volume_score_val: float | None = None
     rs_score_val: float | None = None
     momentum_score_val: float | None = None
+    cmf_score_val: float | None = None
+    breakout_score_val: float | None = None
+    cmf_20: float | None = None
+    cmf_20_prev: float | None = None
+    cmf_crossed_above_zero: bool | None = None
+    stochrsi_k: float | None = None
+    stochrsi_d: float | None = None
+    stochrsi_zone: str | None = None
+    stochrsi_bullish_xover_days_ago: int | None = None
+    stochrsi_bearish_xover_days_ago: int | None = None
     strategy_signals: dict = {}   # {strategy_id: {"signal": str, "score": float|None}}
 
     class Config:
@@ -335,6 +354,16 @@ def _build_row(r, confl_by_symbol_id: dict, risk_per_trade: float, strat_by_symb
         "volume_score_val": getattr(r, "volume_score_val", None),
         "rs_score_val": getattr(r, "rs_score_val", None),
         "momentum_score_val": getattr(r, "momentum_score_val", None),
+        "cmf_score_val": getattr(r, "cmf_score_val", None),
+        "breakout_score_val": getattr(r, "breakout_score_val", None),
+        "cmf_20": getattr(r, "cmf_20", None),
+        "cmf_20_prev": getattr(r, "cmf_20_prev", None),
+        "cmf_crossed_above_zero": getattr(r, "cmf_crossed_above_zero", None),
+        "stochrsi_k": getattr(r, "stochrsi_k", None),
+        "stochrsi_d": getattr(r, "stochrsi_d", None),
+        "stochrsi_zone": getattr(r, "stochrsi_zone", None),
+        "stochrsi_bullish_xover_days_ago": getattr(r, "stochrsi_bullish_xover_days_ago", None),
+        "stochrsi_bearish_xover_days_ago": getattr(r, "stochrsi_bearish_xover_days_ago", None),
         "strategy_signals": (strat_by_symbol_id or {}).get(r.symbol_id, {}),
     }
 
@@ -357,6 +386,13 @@ def get_screening_results_get(
     only_gap_up: bool = False,
     only_gap_down: bool = False,
     min_rs_1m: float | None = None,
+    min_cmf: float | None = None,
+    max_cmf: float | None = None,
+    cmf_rising: bool | None = None,
+    cmf_crossed_zero: bool | None = None,
+    max_stochrsi_k: float | None = None,
+    min_stochrsi_k: float | None = None,
+    stochrsi_bullish_xover_max_days: int | None = None,
     limit: int = 2500,
     db: Session = Depends(get_db),
 ):
@@ -379,6 +415,13 @@ def get_screening_results_get(
         only_gap_up=only_gap_up,
         only_gap_down=only_gap_down,
         min_rs_1m=min_rs_1m,
+        min_cmf=min_cmf,
+        max_cmf=max_cmf,
+        cmf_rising=cmf_rising,
+        cmf_crossed_zero=cmf_crossed_zero,
+        max_stochrsi_k=max_stochrsi_k,
+        min_stochrsi_k=min_stochrsi_k,
+        stochrsi_bullish_xover_max_days=stochrsi_bullish_xover_max_days,
         limit=limit,
     )
 
@@ -410,6 +453,13 @@ def get_screening_results_post(params: ScreeningParams, db: Session = Depends(ge
         only_gap_up=params.only_gap_up,
         only_gap_down=params.only_gap_down,
         min_rs_1m=params.min_rs_1m,
+        min_cmf=params.min_cmf,
+        max_cmf=params.max_cmf,
+        cmf_rising=params.cmf_rising,
+        cmf_crossed_zero=params.cmf_crossed_zero,
+        max_stochrsi_k=params.max_stochrsi_k,
+        min_stochrsi_k=params.min_stochrsi_k,
+        stochrsi_bullish_xover_max_days=params.stochrsi_bullish_xover_max_days,
         limit=params.limit,
     )
 

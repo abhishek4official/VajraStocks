@@ -147,6 +147,7 @@ export const PortfolioPanel: React.FC = () => {
   const pnl = agg.include_charges ? agg.net_pnl : agg.total_pnl;
   const pnlUp = pnl >= 0;
   const alpha = niftyReturn !== null ? agg.total_return_pct - niftyReturn : null;
+  const openRiskPct = agg.total_current > 0 ? (agg.open_risk / agg.total_current) * 100 : 0;
 
   // Heat gauge scale (limit sits at ~62% of the track so the danger zone is visible)
   const heatScaleMax = Math.max(agg.heat_limit * 1.6, agg.heat_pct * 1.1, 1);
@@ -194,6 +195,10 @@ export const PortfolioPanel: React.FC = () => {
                   {pnlUp ? <ArrowUpRight className="w-3.5 h-3.5" /> : <ArrowDownRight className="w-3.5 h-3.5" />}
                   {signed(agg.total_return_pct)}%
                 </span>
+                <span className="flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-lg border text-amber-400 bg-amber-500/10 border-amber-500/25" title="Open risk as % of portfolio value">
+                  <ShieldAlert className="w-3 h-3" />
+                  Risk {fmt(openRiskPct)}%
+                </span>
               </div>
             </div>
 
@@ -201,17 +206,18 @@ export const PortfolioPanel: React.FC = () => {
             <div className="flex items-center gap-6 sm:gap-8">
               {[
                 { label: 'Invested', value: `₹${fmtINR0(agg.total_invested)}`, color: 'text-slate-200' },
-                { label: agg.include_charges ? 'Net P&L' : 'P&L', value: `${pnlUp ? '+' : ''}₹${fmtINR0(pnl)}`, color: pnlText(pnl) },
+                { label: agg.include_charges ? 'Net P&L' : 'P&L', value: `${pnlUp ? '+' : ''}₹${fmtINR0(pnl)}`, sub: `${signed(agg.total_return_pct)}%`, color: pnlText(pnl) },
                 {
                   label: 'Alpha vs NIFTY',
                   value: alpha !== null ? `${signed(alpha)}%` : '—',
                   color: alpha === null ? 'text-slate-500' : alpha >= 0 ? 'text-purple-300' : 'text-amber-400',
                 },
                 { label: 'Positions', value: String(agg.positions), color: 'text-slate-200' },
-              ].map(({ label, value, color }) => (
+              ].map(({ label, value, color, sub }) => (
                 <div key={label}>
                   <p className="text-[10px] uppercase tracking-wide text-slate-500">{label}</p>
                   <p className={`text-sm font-extrabold font-mono mt-0.5 ${color}`}>{value}</p>
+                  {sub && <p className={`text-[10px] font-mono ${color} opacity-70`}>{sub}</p>}
                 </div>
               ))}
             </div>
@@ -247,6 +253,7 @@ export const PortfolioPanel: React.FC = () => {
             <div className="rounded-lg bg-slate-900/40 border border-slate-800/60 px-2.5 py-2">
               <p className="text-[10px] uppercase tracking-wide text-slate-500">Open Risk</p>
               <p className="text-sm font-bold font-mono text-slate-200 mt-0.5">₹{fmtINR0(agg.open_risk)}</p>
+              <p className="text-[10px] font-mono text-amber-400 mt-0.5">{fmt(openRiskPct)}% of portfolio</p>
             </div>
             <div className="rounded-lg bg-slate-900/40 border border-slate-800/60 px-2.5 py-2">
               <p className="text-[10px] uppercase tracking-wide text-slate-500">Breadth &gt;200d</p>

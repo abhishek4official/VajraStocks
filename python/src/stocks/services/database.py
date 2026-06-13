@@ -273,6 +273,35 @@ class DatabaseService:
             for r in rows
         ]
 
+    def get_prices_for_symbols_batch(
+        self, symbol_ids: list[int], start_date: datetime.date
+    ) -> dict[int, list[dict[str, Any]]]:
+        """Fetches EOD prices for multiple symbols in ONE query, grouped by symbol_id.
+
+        Reduces N individual SELECTs to a single IN() query — used by the
+        pipelined chunk recalculate to avoid per-symbol round-trips.
+        """
+        if not symbol_ids:
+            return {}
+        rows = self.db.scalars(
+            select(DailyPrice)
+            .where(DailyPrice.symbol_id.in_(symbol_ids), DailyPrice.trading_date >= start_date)
+            .order_by(DailyPrice.symbol_id, DailyPrice.trading_date.asc())
+        ).all()
+        result: dict[int, list[dict[str, Any]]] = {sid: [] for sid in symbol_ids}
+        for r in rows:
+            result[r.symbol_id].append({
+                "trading_date": r.trading_date,
+                "open":         float(r.open),
+                "high":         float(r.high),
+                "low":          float(r.low),
+                "close":        float(r.close),
+                "adj_close":    float(r.adj_close),
+                "volume":       int(r.volume),
+                "granularity":  r.granularity,
+            })
+        return result
+
     def save_derived_structures(
         self,
         symbol_id: int,
@@ -280,10 +309,12 @@ class DatabaseService:
         ha_candles: list[dict[str, Any]],
         renko_bricks: list[dict[str, Any]],
         line_breaks: list[dict[str, Any]],
+        commit: bool = True,
     ) -> None:
         """Saves calculated indicators and market structures within an isolated transaction.
 
         Overwrites existing indicator/HA candle records for the same dates to ensure idempotency.
+        Pass commit=False when the caller manages batch commits for throughput.
         """
         from sqlalchemy import delete
 
@@ -340,8 +371,10 @@ class DatabaseService:
                 if lines_to_insert:
                     self.db.bulk_insert_mappings(LineBreakLine, lines_to_insert)
 
-            self.db.commit()
+            if commit:
+                self.db.commit()
         except Exception as e:
-            self.db.rollback()
+            if commit:
+                self.db.rollback()
             logger.error(f"Failed to save derived structures for symbol_id {symbol_id}: {e}")
             raise e

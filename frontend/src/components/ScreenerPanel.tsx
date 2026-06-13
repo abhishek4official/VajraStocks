@@ -22,6 +22,7 @@ const DEFAULT_COL_FILTERS = {
   ret_1w: '', ret_2w: '', ret_3w: '', ret_4w: '', stop_loss: '', target_1: '', target_2: '',
   target_3: '', potential_gain_pct: '', rr_ratio: '', trade_quality_score: '',
   position_size_shares: '', weekly_avg_volume: '', volume_breakout_ratio: '', rsi_14: '',
+  cmf_20: '', stochrsi_k: '', stochrsi_d: '',
   sma_20_cross_direction: '', sma_50_cross_direction: '', sma_200_cross_direction: '',
   macd_trend: '', ha_direction: '', renko_direction: '', line_break_direction: '',
   rs_score_1m: '', patterns: '',
@@ -97,6 +98,18 @@ const PRESETS = [
     emoji: '🏆',
     desc: 'Outperforming NIFTY 50 by >20% over 1 month (RS > 1.2)',
     filters: { min_rs_1m: 1.2, sma_200_cross: 'ABOVE' as const },
+  },
+  {
+    name: 'CMF Accumulation',
+    emoji: '💰',
+    desc: 'Smart money flowing in — CMF > 0.1, rising',
+    filters: { min_cmf: 0.1, cmf_rising: true, sma_200_cross: 'ABOVE' as const },
+  },
+  {
+    name: 'StochRSI Xover',
+    emoji: '📈',
+    desc: 'StochRSI bullish crossover from oversold within 3 days',
+    filters: { stochrsi_bullish_xover_max_days: 3, sma_200_cross: 'ABOVE' as const },
   },
 ];
 
@@ -295,6 +308,9 @@ export const ScreenerPanel: React.FC = () => {
         if (!matchNumericFilter(row.weekly_avg_volume, colFilters.weekly_avg_volume)) return false;
         if (!matchNumericFilter(row.volume_breakout_ratio, colFilters.volume_breakout_ratio)) return false;
         if (!matchNumericFilter(row.rsi_14, colFilters.rsi_14)) return false;
+        if (!matchNumericFilter(row.cmf_20, colFilters.cmf_20)) return false;
+        if (!matchNumericFilter(row.stochrsi_k, colFilters.stochrsi_k)) return false;
+        if (!matchNumericFilter(row.stochrsi_d, colFilters.stochrsi_d)) return false;
         if (colFilters.sma_20_cross_direction && row.sma_20_cross_direction !== colFilters.sma_20_cross_direction) return false;
         if (colFilters.sma_50_cross_direction && row.sma_50_cross_direction !== colFilters.sma_50_cross_direction) return false;
         if (colFilters.sma_200_cross_direction && row.sma_200_cross_direction !== colFilters.sma_200_cross_direction) return false;
@@ -428,11 +444,11 @@ export const ScreenerPanel: React.FC = () => {
                 sma_20_cross: undefined, sma_50_cross: undefined, sma_200_cross: undefined,
                 macd_trend: undefined, ha_dir: undefined, renko_dir: undefined, lb_dir: undefined,
                 volume_breakout: undefined, min_weekly_avg_volume: undefined,
-                only_nr7: undefined,
-                only_inside_bar: undefined,
-                only_gap_up: undefined,
-                only_gap_down: undefined,
+                only_nr7: undefined, only_inside_bar: undefined,
+                only_gap_up: undefined, only_gap_down: undefined,
                 min_rs_1m: undefined,
+                min_cmf: undefined, max_cmf: undefined, cmf_rising: undefined, cmf_crossed_zero: undefined,
+                min_stochrsi_k: undefined, max_stochrsi_k: undefined, stochrsi_bullish_xover_max_days: undefined,
                 ...p.filters,
               });
               runScreener();
@@ -455,7 +471,7 @@ export const ScreenerPanel: React.FC = () => {
 
       {/* Organized Filter Grid (Toggleable) */}
       {showFilters && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 p-5 rounded-xl border border-slate-800/80 bg-[#121620]/30 shadow-inner">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 p-5 rounded-xl border border-slate-800/80 bg-[#121620]/30 shadow-inner">
           
           {/* Column 1: Price & Volume */}
           <div className="flex flex-col gap-4 lg:border-r border-slate-850 lg:pr-4">
@@ -663,7 +679,7 @@ export const ScreenerPanel: React.FC = () => {
           </div>
 
           {/* Column 4: Strength & Patterns */}
-          <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-4 lg:border-r border-slate-850 lg:pr-4">
             <h4 className="text-xs font-bold uppercase tracking-wider text-purple-400 flex items-center gap-1.5 mb-1 select-none">
               <Filter className="w-3.5 h-3.5 text-purple-500" /> Patterns & RS
             </h4>
@@ -701,6 +717,97 @@ export const ScreenerPanel: React.FC = () => {
                   </label>
                 ))}
               </div>
+            </div>
+          </div>
+
+          {/* Column 5: Money Flow & StochRSI */}
+          <div className="flex flex-col gap-4">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-purple-400 flex items-center gap-1.5 mb-1 select-none">
+              <BarChart2 className="w-3.5 h-3.5 text-purple-500" /> Money Flow
+            </h4>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[11px] font-semibold text-slate-400">Min CMF</label>
+                <input
+                  type="number"
+                  step="0.05"
+                  placeholder="-1 to 1"
+                  value={screenerFilters.min_cmf !== undefined ? screenerFilters.min_cmf : ''}
+                  onChange={(e) => setScreenerFilters({ min_cmf: e.target.value === '' ? undefined : Number(e.target.value) })}
+                  className="w-full px-3 py-1.5 text-xs rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[11px] font-semibold text-slate-400">Max CMF</label>
+                <input
+                  type="number"
+                  step="0.05"
+                  placeholder="-1 to 1"
+                  value={screenerFilters.max_cmf !== undefined ? screenerFilters.max_cmf : ''}
+                  onChange={(e) => setScreenerFilters({ max_cmf: e.target.value === '' ? undefined : Number(e.target.value) })}
+                  className="w-full px-3 py-1.5 text-xs rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2 mt-0.5">
+              <label className="flex items-center gap-2 cursor-pointer select-none group">
+                <input
+                  type="checkbox"
+                  checked={!!screenerFilters.cmf_rising}
+                  onChange={(e) => setScreenerFilters({ cmf_rising: e.target.checked || undefined })}
+                  className="accent-purple-500 w-3.5 h-3.5 cursor-pointer rounded"
+                />
+                <span className="text-xs text-slate-300 group-hover:text-white transition">CMF Rising</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer select-none group">
+                <input
+                  type="checkbox"
+                  checked={!!screenerFilters.cmf_crossed_zero}
+                  onChange={(e) => setScreenerFilters({ cmf_crossed_zero: e.target.checked || undefined })}
+                  className="accent-purple-500 w-3.5 h-3.5 cursor-pointer rounded"
+                />
+                <span className="text-xs text-slate-300 group-hover:text-white transition">CMF Crossed Zero</span>
+              </label>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[11px] font-semibold text-slate-400">Min StochRSI K</label>
+                <input
+                  type="number"
+                  step="5"
+                  placeholder="0–100"
+                  value={screenerFilters.min_stochrsi_k !== undefined ? screenerFilters.min_stochrsi_k : ''}
+                  onChange={(e) => setScreenerFilters({ min_stochrsi_k: e.target.value === '' ? undefined : Number(e.target.value) })}
+                  className="w-full px-3 py-1.5 text-xs rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[11px] font-semibold text-slate-400">Max StochRSI K</label>
+                <input
+                  type="number"
+                  step="5"
+                  placeholder="0–100"
+                  value={screenerFilters.max_stochrsi_k !== undefined ? screenerFilters.max_stochrsi_k : ''}
+                  onChange={(e) => setScreenerFilters({ max_stochrsi_k: e.target.value === '' ? undefined : Number(e.target.value) })}
+                  className="w-full px-3 py-1.5 text-xs rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] font-semibold text-slate-400">Bullish Xover Within (days)</label>
+              <input
+                type="number"
+                step="1"
+                placeholder="e.g. 3"
+                value={screenerFilters.stochrsi_bullish_xover_max_days !== undefined ? screenerFilters.stochrsi_bullish_xover_max_days : ''}
+                onChange={(e) => setScreenerFilters({ stochrsi_bullish_xover_max_days: e.target.value === '' ? undefined : Number(e.target.value) })}
+                className="w-full px-3 py-1.5 text-xs rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
+              />
+              <span className="text-[10px] text-slate-500">StochRSI %K crossed above %D within N days</span>
             </div>
           </div>
         </div>
@@ -812,10 +919,10 @@ export const ScreenerPanel: React.FC = () => {
             /* Sticky overrides for headers of pinned columns */
             .screener-grid thead th:nth-child(1) { z-index: 25; background-color: #0c0f17 !important; }
             .screener-grid thead th:nth-child(2) { z-index: 25; background-color: #0c0f17 !important; }
-            .screener-grid thead th:nth-child(30) { z-index: 25; background-color: #0c0f17 !important; }
+            .screener-grid thead th:nth-child(33) { z-index: 25; background-color: #0c0f17 !important; }
             .screener-grid thead tr:nth-child(2) td:nth-child(1) { z-index: 25; background-color: #0c0f17 !important; }
             .screener-grid thead tr:nth-child(2) td:nth-child(2) { z-index: 25; background-color: #0c0f17 !important; }
-            .screener-grid thead tr:nth-child(2) td:nth-child(30) { z-index: 25; background-color: #0c0f17 !important; }
+            .screener-grid thead tr:nth-child(2) td:nth-child(33) { z-index: 25; background-color: #0c0f17 !important; }
 
             /* Zebra striping backgrounds for scrollable cells */
             .screener-grid tbody tr:nth-child(odd) td {
@@ -836,10 +943,10 @@ export const ScreenerPanel: React.FC = () => {
             }
 
             /* Pinned cell backgrounds (right Actions column) */
-            .screener-grid tbody tr:nth-child(odd) td:nth-child(30) {
+            .screener-grid tbody tr:nth-child(odd) td:nth-child(33) {
               background-color: #090b10 !important;
             }
-            .screener-grid tbody tr:nth-child(even) td:nth-child(30) {
+            .screener-grid tbody tr:nth-child(even) td:nth-child(33) {
               background-color: #0f121a !important;
             }
 
@@ -867,26 +974,29 @@ export const ScreenerPanel: React.FC = () => {
             .screener-grid th:nth-child(18), .screener-grid td:nth-child(18) { width: 100px; min-width: 100px; } /* Shares */
             .screener-grid th:nth-child(19), .screener-grid td:nth-child(19) { width: 90px; min-width: 90px; } /* Vol Brk */
             .screener-grid th:nth-child(20), .screener-grid td:nth-child(20) { width: 85px; min-width: 85px; } /* RSI */
-            .screener-grid th:nth-child(21), .screener-grid td:nth-child(21),
-            .screener-grid th:nth-child(22), .screener-grid td:nth-child(22),
-            .screener-grid th:nth-child(23), .screener-grid td:nth-child(23),
+            .screener-grid th:nth-child(21), .screener-grid td:nth-child(21) { width: 75px; min-width: 75px; } /* CMF */
+            .screener-grid th:nth-child(22), .screener-grid td:nth-child(22) { width: 65px; min-width: 65px; } /* StoK */
+            .screener-grid th:nth-child(23), .screener-grid td:nth-child(23) { width: 65px; min-width: 65px; } /* StoD */
             .screener-grid th:nth-child(24), .screener-grid td:nth-child(24),
             .screener-grid th:nth-child(25), .screener-grid td:nth-child(25),
             .screener-grid th:nth-child(26), .screener-grid td:nth-child(26),
-            .screener-grid th:nth-child(27), .screener-grid td:nth-child(27) { width: 70px; min-width: 70px; } /* Averages & Technicals */
-            .screener-grid th:nth-child(28), .screener-grid td:nth-child(28) { width: 90px; min-width: 90px; } /* RS 1M */
-            .screener-grid th:nth-child(29), .screener-grid td:nth-child(29) { width: 150px; min-width: 150px; } /* Patterns */
-            
-            /* Pin Actions column (30th column) to the right */
-            .screener-grid th:nth-child(30),
-            .screener-grid td:nth-child(30) {
+            .screener-grid th:nth-child(27), .screener-grid td:nth-child(27),
+            .screener-grid th:nth-child(28), .screener-grid td:nth-child(28),
+            .screener-grid th:nth-child(29), .screener-grid td:nth-child(29),
+            .screener-grid th:nth-child(30), .screener-grid td:nth-child(30) { width: 70px; min-width: 70px; } /* Averages & Technicals */
+            .screener-grid th:nth-child(31), .screener-grid td:nth-child(31) { width: 90px; min-width: 90px; } /* RS 1M */
+            .screener-grid th:nth-child(32), .screener-grid td:nth-child(32) { width: 150px; min-width: 150px; } /* Patterns */
+
+            /* Pin Actions column (33rd column) to the right */
+            .screener-grid th:nth-child(33),
+            .screener-grid td:nth-child(33) {
               position: sticky;
               right: 0;
               z-index: 5;
               width: 120px;
               min-width: 120px;
               max-width: 120px;
-              border-left: 2px solid rgba(139, 92, 246, 0.4) !important; /* highlight boundary */
+              border-left: 2px solid rgba(139, 92, 246, 0.4) !important;
               border-right: none;
               box-shadow: -4px 0 8px -3px rgba(0, 0, 0, 0.6);
             }
@@ -959,6 +1069,15 @@ export const ScreenerPanel: React.FC = () => {
                 </th>
                 <th className="py-2 px-1.5 text-center cursor-pointer hover:text-white transition" title="Relative Strength Index (14)" onClick={() => handleSort('rsi_14')}>
                   RSI {renderSortIcon('rsi_14')}
+                </th>
+                <th className="py-2 px-1.5 text-center cursor-pointer hover:text-white transition" title="Chaikin Money Flow (20)" onClick={() => handleSort('cmf_20' as any)}>
+                  CMF {renderSortIcon('cmf_20' as any)}
+                </th>
+                <th className="py-2 px-1.5 text-center cursor-pointer hover:text-white transition" title="StochRSI %K (14,14,3,3)" onClick={() => handleSort('stochrsi_k' as any)}>
+                  StoK {renderSortIcon('stochrsi_k' as any)}
+                </th>
+                <th className="py-2 px-1.5 text-center cursor-pointer hover:text-white transition" title="StochRSI %D (signal line)" onClick={() => handleSort('stochrsi_d' as any)}>
+                  StoD {renderSortIcon('stochrsi_d' as any)}
                 </th>
                 <th className="py-2 px-1.5 text-center cursor-pointer hover:text-white transition" title="SMA 20 position" onClick={() => handleSort('sma_20_cross_direction')}>
                   S20 {renderSortIcon('sma_20_cross_direction')}
@@ -1201,7 +1320,40 @@ export const ScreenerPanel: React.FC = () => {
                       className="w-full min-w-[45px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-purple-500 focus:text-white text-center transition font-mono"
                     />
                   </td>
-                  
+
+                  {/* CMF */}
+                  <td className="py-1 px-1.5 text-center">
+                    <input
+                      type="text"
+                      placeholder=">0.1"
+                      value={colFilters.cmf_20}
+                      onChange={(e) => setColFilters({ ...colFilters, cmf_20: e.target.value })}
+                      className="w-full min-w-[45px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-purple-500 focus:text-white text-center transition font-mono"
+                    />
+                  </td>
+
+                  {/* StoK */}
+                  <td className="py-1 px-1.5 text-center">
+                    <input
+                      type="text"
+                      placeholder="<20"
+                      value={colFilters.stochrsi_k}
+                      onChange={(e) => setColFilters({ ...colFilters, stochrsi_k: e.target.value })}
+                      className="w-full min-w-[40px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-purple-500 focus:text-white text-center transition font-mono"
+                    />
+                  </td>
+
+                  {/* StoD */}
+                  <td className="py-1 px-1.5 text-center">
+                    <input
+                      type="text"
+                      placeholder="<20"
+                      value={colFilters.stochrsi_d}
+                      onChange={(e) => setColFilters({ ...colFilters, stochrsi_d: e.target.value })}
+                      className="w-full min-w-[40px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-purple-500 focus:text-white text-center transition font-mono"
+                    />
+                  </td>
+
                   {/* S20 */}
                   <td className="py-1 px-1.5 text-center">
                     <select
@@ -1327,7 +1479,7 @@ export const ScreenerPanel: React.FC = () => {
             <tbody className="divide-y divide-slate-850">
               {filteredResults.length === 0 ? (
                 <tr>
-                  <td colSpan={30} className="py-10 text-center text-slate-500 text-xs">
+                  <td colSpan={33} className="py-10 text-center text-slate-500 text-xs">
                     {isLoading 
                       ? 'Executing database snapshot sweep...' 
                       : 'No stock matches found for the current criteria.'}
@@ -1481,8 +1633,8 @@ export const ScreenerPanel: React.FC = () => {
                       {/* RSI */}
                       <td className="py-2 px-1.5 text-center">
                         <span className={`font-mono inline-block px-1 py-0.2 rounded text-xs border ${
-                          (row.rsi_14 || 0) >= 70 
-                            ? 'text-rose-400 bg-rose-950/20 border-rose-900/30 font-bold' 
+                          (row.rsi_14 || 0) >= 70
+                            ? 'text-rose-400 bg-rose-950/20 border-rose-900/30 font-bold'
                             : (row.rsi_14 || 0) <= 30 && row.rsi_14 !== null
                             ? 'text-emerald-400 bg-emerald-950/20 border-emerald-900/30 font-bold'
                             : 'text-slate-300 bg-slate-900/50 border-slate-800'
@@ -1490,7 +1642,44 @@ export const ScreenerPanel: React.FC = () => {
                           {formatNumber(row.rsi_14, 1)}
                         </span>
                       </td>
-                      
+
+                      {/* CMF */}
+                      <td className="py-2 px-1.5 text-center">
+                        {row.cmf_20 != null ? (
+                          <span className={`font-mono inline-block px-1 py-0.2 rounded text-xs border ${
+                            row.cmf_20 >= 0.1
+                              ? 'text-emerald-400 bg-emerald-950/20 border-emerald-900/30 font-bold'
+                              : row.cmf_20 <= -0.1
+                              ? 'text-rose-400 bg-rose-950/20 border-rose-900/30 font-bold'
+                              : 'text-slate-300 bg-slate-900/50 border-slate-800'
+                          }`} title={`CMF: ${row.cmf_20.toFixed(3)}${row.cmf_crossed_above_zero ? ' · Crossed Zero' : ''}`}>
+                            {row.cmf_20.toFixed(2)}
+                          </span>
+                        ) : <span className="text-slate-600">—</span>}
+                      </td>
+
+                      {/* StochRSI K */}
+                      <td className="py-2 px-1.5 text-center">
+                        {row.stochrsi_k != null ? (
+                          <span className={`font-mono inline-block px-1 py-0.2 rounded text-xs border ${
+                            row.stochrsi_k >= 80
+                              ? 'text-rose-400 bg-rose-950/20 border-rose-900/30 font-bold'
+                              : row.stochrsi_k <= 20
+                              ? 'text-emerald-400 bg-emerald-950/20 border-emerald-900/30 font-bold'
+                              : 'text-slate-300 bg-slate-900/50 border-slate-800'
+                          }`} title={`StochRSI K: ${row.stochrsi_k.toFixed(1)} · Zone: ${row.stochrsi_zone ?? '—'}`}>
+                            {row.stochrsi_k.toFixed(0)}
+                          </span>
+                        ) : <span className="text-slate-600">—</span>}
+                      </td>
+
+                      {/* StochRSI D */}
+                      <td className="py-2 px-1.5 text-center">
+                        {row.stochrsi_d != null ? (
+                          <span className="font-mono text-slate-300 text-xs">{row.stochrsi_d.toFixed(0)}</span>
+                        ) : <span className="text-slate-600">—</span>}
+                      </td>
+
                       {/* SMA 20 */}
                       <td className="py-2 px-1.5 text-center font-mono">
                         {row.sma_20_cross_direction === 'ABOVE' ? (

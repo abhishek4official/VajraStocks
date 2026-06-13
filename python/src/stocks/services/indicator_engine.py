@@ -105,6 +105,33 @@ class IndicatorEngine:
                 df_sorted["stoch_k"] = None
                 df_sorted["stoch_d"] = None
 
+            # 11. Chaikin Money Flow (20) — requires High, Low, Close, Volume
+            cmf_s = ta.cmf(df_sorted["high"], df_sorted["low"], df_sorted["close"], df_sorted["volume"], length=20)
+            df_sorted["cmf_20"] = cmf_s if cmf_s is not None else None
+
+            # 12. Stochastic RSI (14, 14, 3, 3)
+            srsi_df = ta.stochrsi(df_sorted["close"], length=14, rsi_length=14, k=3, d=3)
+            if srsi_df is not None and not srsi_df.empty:
+                k_col = next((c for c in srsi_df.columns if "STOCHRSIk" in c), None)
+                d_col = next((c for c in srsi_df.columns if "STOCHRSId" in c), None)
+                df_sorted["stochrsi_k"] = srsi_df[k_col] if k_col else None
+                df_sorted["stochrsi_d"] = srsi_df[d_col] if d_col else None
+            else:
+                df_sorted["stochrsi_k"] = None
+                df_sorted["stochrsi_d"] = None
+
+            # 13. StochRSI crossover flags — vectorized shift comparison
+            if "stochrsi_k" in df_sorted.columns and "stochrsi_d" in df_sorted.columns:
+                k = df_sorted["stochrsi_k"]
+                d = df_sorted["stochrsi_d"]
+                k_prev = k.shift(1)
+                d_prev = d.shift(1)
+                df_sorted["stochrsi_bullish_xover"] = (k > d) & (k_prev <= d_prev)
+                df_sorted["stochrsi_bearish_xover"] = (k < d) & (k_prev >= d_prev)
+            else:
+                df_sorted["stochrsi_bullish_xover"] = None
+                df_sorted["stochrsi_bearish_xover"] = None
+
         except Exception as e:
             logger.error(f"Error calculating technical indicators via pandas-ta: {e}")
             raise e

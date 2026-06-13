@@ -1,21 +1,22 @@
-"""Composite scoring engine — replaces the binary compute_bias approach.
+"""Composite scoring engine — 6-component weighted model.
 
-Scores each symbol across 4 weighted components (0–100 each) and derives a
-5-tier bias from the weighted composite. No hard SMA200 band — every partial
-signal contributes proportionally.
+Scores each symbol across 6 components (0–100 each) and derives a
+5-tier bias from the weighted composite.
 
 Weights:
-  Trend Score     40%   (EMA20/50/200 cross, alignment, ADX)
-  Volume Score    25%   (Relative Volume, OBV, Delivery % placeholder)
-  RS Score        20%   (RS vs Nifty, rolling momentum)
-  Momentum Score  15%   (RSI, MACD histogram, Stochastic)
+  Trend Score     30%   (EMA alignment, ADX, Supertrend)
+  CMF Score       20%   (Chaikin Money Flow — institutional accumulation/distribution)
+  RS Score        15%   (Relative Strength vs Nifty, rolling returns)
+  Momentum Score  15%   (MACD histogram, Stochastic RSI crossover)
+  Volume Score    10%   (Relative Volume, OBV, Delivery %)
+  Breakout Score  10%   (ADX, Supertrend, NR7/Inside Bar, Renko, Line Break)
 
 Bias thresholds (composite 0–100):
-  VERY_BULLISH  ≥ 72
-  BULLISH       ≥ 52
-  NEUTRAL       ≥ 35
-  BEARISH       ≥ 18
-  VERY_BEARISH  < 18
+  VERY_BULLISH  ≥ 75
+  BULLISH       ≥ 58
+  NEUTRAL       ≥ 40
+  BEARISH       ≥ 22
+  VERY_BEARISH  < 22
 """
 
 from __future__ import annotations
@@ -31,6 +32,8 @@ class CompositeResult:
     volume_score: float          # 0–100
     rs_score: float              # 0–100
     momentum_score: float        # 0–100
+    cmf_score: float             # 0–100
+    breakout_score: float        # 0–100
     reasons: list[str]
 
 
@@ -43,7 +46,7 @@ def score_trend(
     ema_20: float | None,
     sma_50: float | None,
     sma_200: float | None,
-    ema_21: float | None,      # fallback when ema_20 absent
+    ema_21: float | None,
     adx_14: float | None,
     plus_di: float | None,
     minus_di: float | None,
@@ -55,16 +58,17 @@ def score_trend(
       Price > EMA50           25 pts
       Price > EMA20           20 pts
       EMA20 > EMA50 > EMA200  15 pts  (full bull alignment)
-      EMA20 > EMA50 only       8 pts  (partial)
+      EMA20 > EMA50 only       8 pts
+      EMA50 > EMA200 only      4 pts
       ADX ≥ 40               10 pts
       ADX ≥ 25                5 pts
-      DI+ > DI-               5 pts  (directional confirmation when ADX strong)
-      Supertrend UP            5 pts  (ATR trailing stop not breached)
+      DI+ > DI-               5 pts  (when ADX strong)
+      Supertrend UP            5 pts
       Supertrend DOWN         -5 pts
     """
     pts = 0.0
     reasons: list[str] = []
-    ema20 = ema_20 if ema_20 is not None else ema_21   # use EMA21 as proxy when EMA20 missing
+    ema20 = ema_20 if ema_20 is not None else ema_21
 
     if sma_200 is not None and sma_200 > 0:
         if close > sma_200:
@@ -88,7 +92,6 @@ def score_trend(
         else:
             reasons.append(f"Price < EMA20 {ema20:.2f} (0)")
 
-    # EMA alignment bonus
     if ema20 is not None and sma_50 is not None and sma_200 is not None:
         if ema20 > sma_50 > sma_200:
             pts += 15
@@ -100,7 +103,6 @@ def score_trend(
             pts += 4
             reasons.append("EMA50>EMA200 partial alignment (+4)")
 
-    # ADX strength
     if adx_14 is not None:
         if adx_14 >= 40:
             pts += 10
@@ -111,13 +113,11 @@ def score_trend(
         else:
             reasons.append(f"ADX {adx_14:.0f} < 25 weak trend (0)")
 
-        # DI directional confirmation (only meaningful when ADX is strong)
         if adx_14 >= 25 and plus_di is not None and minus_di is not None:
             if plus_di > minus_di:
                 pts += 5
                 reasons.append(f"DI+ {plus_di:.0f} > DI- {minus_di:.0f} (+5)")
 
-    # Supertrend direction — price above/below ATR trailing stop
     if supertrend_dir == "UP":
         pts += 5
         reasons.append("Supertrend UP — above ATR stop (+5)")
@@ -128,36 +128,89 @@ def score_trend(
     return _cap(pts), reasons
 
 
+def score_cmf(
+    cmf_20: float | None,
+    cmf_20_prev: float | None = None,
+) -> tuple[float, list[str]]:
+    """
+    Points (base):
+      CMF > +0.20   100 pts  (Strong Accumulation)
+      CMF +0.10–0.20  80 pts
+      CMF 0–+0.10     60 pts
+      CMF -0.05–0     40 pts  (Neutral)
+      CMF -0.20–-0.05 20 pts  (Distribution)
+      CMF < -0.20      0 pts  (Strong Distribution)
+
+    Bonuses / penalties (applied on top, capped at 0–100):
+      CMF crossed above zero today        +15
+      CMF rising session-on-session        +8
+      CMF falling while positive           -8
+    """
+    if cmf_20 is None:
+        return 40.0, ["CMF: data unavailable — neutral (+40)"]
+
+    cmf = float(cmf_20)
+    reasons: list[str] = []
+
+    if cmf > 0.20:
+        pts = 100.0
+        reasons.append(f"CMF {cmf:.3f} > +0.20 — Strong Accumulation (100)")
+    elif cmf > 0.10:
+        pts = 80.0
+        reasons.append(f"CMF {cmf:.3f} +0.10 to +0.20 — Accumulation (80)")
+    elif cmf > 0.0:
+        pts = 60.0
+        reasons.append(f"CMF {cmf:.3f} 0 to +0.10 — Mild Accumulation (60)")
+    elif cmf > -0.05:
+        pts = 40.0
+        reasons.append(f"CMF {cmf:.3f} near zero — Neutral (40)")
+    elif cmf > -0.20:
+        pts = 20.0
+        reasons.append(f"CMF {cmf:.3f} -0.20 to 0 — Distribution (20)")
+    else:
+        pts = 0.0
+        reasons.append(f"CMF {cmf:.3f} < -0.20 — Strong Distribution (0)")
+
+    if cmf_20_prev is not None:
+        prev = float(cmf_20_prev)
+        if cmf > 0 and prev <= 0:
+            pts = min(100.0, pts + 15.0)
+            reasons.append(f"CMF crossed above zero from {prev:.3f} (+15 bonus)")
+        elif cmf > prev:
+            pts = min(100.0, pts + 8.0)
+            reasons.append(f"CMF rising {prev:.3f} → {cmf:.3f} (+8 bonus)")
+        elif cmf < prev and cmf > 0:
+            pts = max(0.0, pts - 8.0)
+            reasons.append(f"CMF falling {prev:.3f} → {cmf:.3f} while positive (-8)")
+
+    return _cap(pts), reasons
+
+
 def score_volume(
     volume_breakout_ratio: float | None,
     obv_trend: str | None,
-    delivery_pct: float | None = None,   # NSE delivery %, None = not available
+    delivery_pct: float | None = None,
 ) -> tuple[float, list[str]]:
     """
     Points:
-      OBV trend UP            35 pts  (neutral=17 when data absent)
-      Vol breakout ≥ 2x       35 pts  (neutral=17 when data absent)
-      Delivery % ≥ 60%        30 pts  (placeholder=15 when absent)
+      OBV trend UP            35 pts  (neutral=17 when absent)
+      Vol breakout ≥ 2x       35 pts  (neutral=17 when absent)
+      Delivery % ≥ 60%        30 pts  (neutral=15 when absent)
       Delivery % ≥ 40%        15 pts
-
-    When both OBV and VBR are unavailable, the score falls back to 40 (neutral)
-    so missing data does not punish the composite.
     """
     pts = 0.0
     reasons: list[str] = []
-    obv_missing = obv_trend is None or obv_trend == "FLAT"
-    vbr_missing = volume_breakout_ratio is None
 
     if obv_trend == "UP":
         pts += 35
         reasons.append("OBV trend UP (+35)")
     elif obv_trend == "DOWN":
         reasons.append("OBV trend DOWN (0)")
-    elif obv_missing:
-        pts += 17  # neutral when data not yet available
+    else:
+        pts += 17
         reasons.append("OBV trend: insufficient data — neutral (+17)")
 
-    if not vbr_missing:
+    if volume_breakout_ratio is not None:
         vbr = float(volume_breakout_ratio)
         if vbr >= 2.0:
             pts += 35
@@ -171,10 +224,9 @@ def score_volume(
         else:
             reasons.append(f"Volume {vbr:.1f}x average — in-line (0)")
     else:
-        pts += 17  # neutral when data not yet available
+        pts += 17
         reasons.append("Volume breakout ratio: insufficient data — neutral (+17)")
 
-    # Delivery % — placeholder = 15 (neutral) when data not available
     if delivery_pct is not None:
         if delivery_pct >= 60:
             pts += 30
@@ -198,14 +250,14 @@ def score_rs(
 ) -> tuple[float, list[str]]:
     """
     Points:
-      RS vs Nifty > 1.5       40 pts  (strongly outperforming)
+      RS vs Nifty > 1.5       40 pts
       RS vs Nifty > 1.2       30 pts
-      RS vs Nifty > 1.0       20 pts  (outperforming)
-      RS vs Nifty 0.8–1.0     10 pts  (near par)
+      RS vs Nifty > 1.0       20 pts
+      RS vs Nifty 0.8–1.0     10 pts
       ret_4w > 8%             30 pts
       ret_4w > 3%             20 pts
       ret_4w > 0%             10 pts
-      ret_1w > 0%             10 pts  (recent positive momentum)
+      ret_1w > 0%             10 pts
     """
     pts = 0.0
     reasons: list[str] = []
@@ -249,73 +301,188 @@ def score_rs(
 
 
 def score_momentum(
-    rsi_14: float | None,
     macd_histogram: float | None,
-    macd_histogram_prev: float | None = None,  # for growing/shrinking detection
+    macd_histogram_prev: float | None = None,
+    stochrsi_k: float | None = None,
+    stochrsi_d: float | None = None,
+    stochrsi_bullish_xover_days_ago: int | None = None,
+    stochrsi_bearish_xover_days_ago: int | None = None,
+    # Deprecated params kept for backward compatibility — not used
+    rsi_14: float | None = None,
     stoch_k: float | None = None,
 ) -> tuple[float, list[str]]:
     """
-    Points:
-      RSI 55–70 (bullish sweet spot)  40 pts
-      RSI 70–80 (strong momentum)     30 pts
-      RSI 40–55 (mid range)           20 pts
-      RSI 80–90 (overbought caution)  15 pts
-      RSI < 40 or > 90                 0 pts
+    MACD histogram (50 pts max) + StochRSI (50 pts max) = 100 pts.
 
-      MACD hist > 0 AND growing       35 pts
-      MACD hist > 0 flat/unknown      20 pts
-      MACD hist < 0                    0 pts
+    MACD:
+      hist > 0 and growing    50 pts
+      hist > 0 flat           35 pts
+      hist < 0 but improving  15 pts
+      hist < 0                 0 pts
+      missing data            20 pts (neutral)
 
-      Stochastic K 40–80 (healthy)    15 pts
-      Stochastic K 20–40 (recovering)  8 pts
-      Stochastic K < 20 (oversold)     5 pts  (bounce potential)
+    StochRSI:
+      Bullish xover from oversold (<25) within 3 days   50 pts
+      Bullish xover any level within 3 days             40 pts
+      %K > %D, %K between 50–80                        35 pts
+      %K 30–50 (mid range)                             25 pts
+      %K > 80 (overbought — strong momentum)            20 pts
+      %K 20–30 (near oversold)                         15 pts
+      %K < 20 (oversold — reversal potential)          20 pts
+      Bearish xover from overbought within 3 days        5 pts
+      Bearish xover any level within 3 days             10 pts
+      missing data                                      20 pts (neutral)
     """
     pts = 0.0
     reasons: list[str] = []
 
-    if rsi_14 is not None:
-        rsi = float(rsi_14)
-        if 55 <= rsi <= 70:
-            pts += 40
-            reasons.append(f"RSI {rsi:.1f} in sweet spot 55–70 (+40)")
-        elif 70 < rsi <= 80:
-            pts += 30
-            reasons.append(f"RSI {rsi:.1f} strong momentum 70–80 (+30)")
-        elif 40 <= rsi < 55:
-            pts += 20
-            reasons.append(f"RSI {rsi:.1f} mid range 40–55 (+20)")
-        elif 80 < rsi <= 90:
-            pts += 15
-            reasons.append(f"RSI {rsi:.1f} overbought zone 80–90 (+15)")
-        else:
-            reasons.append(f"RSI {rsi:.1f} extreme zone (0)")
-
+    # MACD component (50 pts max)
     if macd_histogram is not None:
         h = float(macd_histogram)
         if h > 0:
-            growing = (
-                macd_histogram_prev is not None and h > float(macd_histogram_prev)
-            )
+            growing = macd_histogram_prev is not None and h > float(macd_histogram_prev)
             if growing:
-                pts += 35
-                reasons.append(f"MACD hist {h:.4f} positive and growing (+35)")
+                pts += 50
+                reasons.append(f"MACD hist {h:.4f} positive and growing (+50)")
             else:
-                pts += 20
-                reasons.append(f"MACD hist {h:.4f} positive (+20)")
+                pts += 35
+                reasons.append(f"MACD hist {h:.4f} positive (+35)")
         else:
-            reasons.append(f"MACD hist {h:.4f} negative (0)")
+            improving = macd_histogram_prev is not None and h > float(macd_histogram_prev)
+            if improving:
+                pts += 15
+                reasons.append(f"MACD hist {h:.4f} negative but improving (+15)")
+            else:
+                reasons.append(f"MACD hist {h:.4f} negative (0)")
+    else:
+        pts += 20
+        reasons.append("MACD: data unavailable — neutral (+20)")
 
-    if stoch_k is not None:
-        k = float(stoch_k)
-        if 40 <= k <= 80:
-            pts += 15
-            reasons.append(f"Stochastic K {k:.0f} healthy zone 40–80 (+15)")
-        elif 20 <= k < 40:
-            pts += 8
-            reasons.append(f"Stochastic K {k:.0f} recovering 20–40 (+8)")
-        elif k < 20:
+    # StochRSI component (50 pts max)
+    if stochrsi_k is None:
+        pts += 20
+        reasons.append("StochRSI: data unavailable — neutral (+20)")
+    else:
+        k = float(stochrsi_k)
+        bullish_recent = stochrsi_bullish_xover_days_ago is not None and stochrsi_bullish_xover_days_ago <= 3
+        bearish_recent = stochrsi_bearish_xover_days_ago is not None and stochrsi_bearish_xover_days_ago <= 3
+        was_oversold = stochrsi_d is not None and float(stochrsi_d) <= 25
+
+        if bullish_recent and (k <= 30 or was_oversold):
+            pts += 50
+            reasons.append(f"StochRSI bullish xover from oversold (day {stochrsi_bullish_xover_days_ago}) (+50)")
+        elif bullish_recent:
+            pts += 40
+            reasons.append(f"StochRSI bullish xover (day {stochrsi_bullish_xover_days_ago}) (+40)")
+        elif bearish_recent and k >= 75:
             pts += 5
-            reasons.append(f"Stochastic K {k:.0f} oversold — bounce potential (+5)")
+            reasons.append(f"StochRSI bearish xover from overbought (day {stochrsi_bearish_xover_days_ago}) (+5)")
+        elif bearish_recent:
+            pts += 10
+            reasons.append(f"StochRSI bearish xover (day {stochrsi_bearish_xover_days_ago}) (+10)")
+        elif k >= 80:
+            pts += 20
+            reasons.append(f"StochRSI {k:.0f} overbought — strong momentum (+20)")
+        elif k >= 50 and stochrsi_d is not None and k > float(stochrsi_d):
+            pts += 35
+            reasons.append(f"StochRSI {k:.0f} bullish territory K > D (+35)")
+        elif k >= 30:
+            pts += 25
+            reasons.append(f"StochRSI {k:.0f} mid range (+25)")
+        elif k >= 20:
+            pts += 15
+            reasons.append(f"StochRSI {k:.0f} near oversold (+15)")
+        else:
+            pts += 20
+            reasons.append(f"StochRSI {k:.0f} oversold — reversal potential (+20)")
+
+    return _cap(pts), reasons
+
+
+def score_breakout(
+    supertrend_dir: str | None = None,
+    adx_14: float | None = None,
+    plus_di: float | None = None,
+    minus_di: float | None = None,
+    is_nr7: bool | None = None,
+    is_inside_bar: bool | None = None,
+    is_gap_up: bool | None = None,
+    renko_dir: str | None = None,
+    line_break_dir: str | None = None,
+) -> tuple[float, list[str]]:
+    """
+    Points (starting from 0; neutral=40 when no data at all):
+      Supertrend UP      +30
+      ADX >= 30          +25  (strong trend)
+      ADX >= 20          +15  (developing)
+      NR7 pattern        +20  (range compression)
+      Inside Bar         +15  (compression)
+      Gap Up             +10
+      Renko UP           +15
+      Line Break UP      +10
+      Supertrend DOWN    -20
+      Strong bearish ADX -15  (ADX>=30 with DI- > DI+)
+      Renko DOWN         -10
+    """
+    pts = 0.0
+    reasons: list[str] = []
+    has_data = False
+
+    if supertrend_dir == "UP":
+        pts += 30
+        has_data = True
+        reasons.append("Supertrend UP (+30)")
+    elif supertrend_dir == "DOWN":
+        pts -= 20
+        has_data = True
+        reasons.append("Supertrend DOWN (-20)")
+
+    if adx_14 is not None:
+        has_data = True
+        adx = float(adx_14)
+        if adx >= 30:
+            pts += 25
+            reasons.append(f"ADX {adx:.0f} >= 30 strong trend (+25)")
+            if plus_di is not None and minus_di is not None and float(minus_di) > float(plus_di):
+                pts -= 15
+                reasons.append(f"DI- {float(minus_di):.0f} > DI+ {float(plus_di):.0f} bearish direction (-15)")
+        elif adx >= 20:
+            pts += 15
+            reasons.append(f"ADX {adx:.0f} >= 20 developing trend (+15)")
+        else:
+            reasons.append(f"ADX {adx:.0f} < 20 weak (0)")
+
+    if is_nr7:
+        pts += 20
+        has_data = True
+        reasons.append("NR7 — range compression (+20)")
+
+    if is_inside_bar:
+        pts += 15
+        has_data = True
+        reasons.append("Inside Bar — compression (+15)")
+
+    if is_gap_up:
+        pts += 10
+        has_data = True
+        reasons.append("Gap Up (+10)")
+
+    if renko_dir == "UP":
+        pts += 15
+        has_data = True
+        reasons.append("Renko UP (+15)")
+    elif renko_dir == "DOWN":
+        pts -= 10
+        has_data = True
+        reasons.append("Renko DOWN (-10)")
+
+    if line_break_dir == "UP":
+        pts += 10
+        has_data = True
+        reasons.append("Line Break UP (+10)")
+
+    if not has_data:
+        return 40.0, ["Breakout: no pattern data — neutral (+40)"]
 
     return _cap(pts), reasons
 
@@ -329,42 +496,76 @@ def compute_composite(
     adx_14: float | None,
     plus_di: float | None,
     minus_di: float | None,
-    volume_breakout_ratio: float | None,
-    obv_trend: str | None,
-    delivery_pct: float | None,
-    rs_score_1m: float | None,
-    ret_1w: float | None,
-    ret_4w: float | None,
-    rsi_14: float | None,
-    macd_histogram: float | None,
+    volume_breakout_ratio: float | None = None,
+    obv_trend: str | None = None,
+    delivery_pct: float | None = None,
+    rs_score_1m: float | None = None,
+    ret_1w: float | None = None,
+    ret_4w: float | None = None,
+    macd_histogram: float | None = None,
     macd_histogram_prev: float | None = None,
-    stoch_k: float | None = None,
+    stochrsi_k: float | None = None,
+    stochrsi_d: float | None = None,
+    stochrsi_bullish_xover_days_ago: int | None = None,
+    stochrsi_bearish_xover_days_ago: int | None = None,
+    cmf_20: float | None = None,
+    cmf_20_prev: float | None = None,
     supertrend_dir: str | None = None,
+    is_nr7: bool | None = None,
+    is_inside_bar: bool | None = None,
+    is_gap_up: bool | None = None,
+    renko_dir: str | None = None,
+    line_break_dir: str | None = None,
+    # Deprecated — ignored, kept for backward compatibility
+    rsi_14: float | None = None,
+    stoch_k: float | None = None,
 ) -> CompositeResult:
-    """Compute the full 4-component composite score and derive 5-tier bias."""
+    """Compute the full 6-component composite score and derive 5-tier bias.
+
+    Weights: Trend 30% | CMF 20% | RS 15% | Momentum 15% | Volume 10% | Breakout 10%
+    """
     trend, t_reasons = score_trend(close, ema_20, sma_50, sma_200, ema_21, adx_14, plus_di, minus_di, supertrend_dir)
-    volume, v_reasons = score_volume(volume_breakout_ratio, obv_trend, delivery_pct)
+    cmf, c_reasons = score_cmf(cmf_20, cmf_20_prev)
     rs, r_reasons = score_rs(rs_score_1m, ret_1w, ret_4w)
-    momentum, m_reasons = score_momentum(rsi_14, macd_histogram, macd_histogram_prev, stoch_k)
+    momentum, m_reasons = score_momentum(
+        macd_histogram, macd_histogram_prev,
+        stochrsi_k, stochrsi_d,
+        stochrsi_bullish_xover_days_ago, stochrsi_bearish_xover_days_ago,
+    )
+    volume, v_reasons = score_volume(volume_breakout_ratio, obv_trend, delivery_pct)
+    breakout, b_reasons = score_breakout(
+        supertrend_dir, adx_14, plus_di, minus_di,
+        is_nr7, is_inside_bar, is_gap_up, renko_dir, line_break_dir,
+    )
 
-    composite = round(0.40 * trend + 0.25 * volume + 0.20 * rs + 0.15 * momentum, 1)
+    composite = round(
+        0.30 * trend +
+        0.20 * cmf +
+        0.15 * rs +
+        0.15 * momentum +
+        0.10 * volume +
+        0.10 * breakout,
+        1,
+    )
 
-    if composite >= 72:
+    if composite >= 75:
         bias = "VERY_BULLISH"
-    elif composite >= 52:
+    elif composite >= 58:
         bias = "BULLISH"
-    elif composite >= 35:
+    elif composite >= 40:
         bias = "NEUTRAL"
-    elif composite >= 18:
+    elif composite >= 22:
         bias = "BEARISH"
     else:
         bias = "VERY_BEARISH"
 
     all_reasons = (
         [f"[TREND {trend:.0f}]"] + t_reasons +
-        [f"[VOLUME {volume:.0f}]"] + v_reasons +
+        [f"[CMF {cmf:.0f}]"] + c_reasons +
         [f"[RS {rs:.0f}]"] + r_reasons +
         [f"[MOMENTUM {momentum:.0f}]"] + m_reasons +
+        [f"[VOLUME {volume:.0f}]"] + v_reasons +
+        [f"[BREAKOUT {breakout:.0f}]"] + b_reasons +
         [f"COMPOSITE={composite:.1f} → {bias}"]
     )
 
@@ -375,5 +576,7 @@ def compute_composite(
         volume_score=round(volume, 1),
         rs_score=round(rs, 1),
         momentum_score=round(momentum, 1),
+        cmf_score=round(cmf, 1),
+        breakout_score=round(breakout, 1),
         reasons=all_reasons,
     )

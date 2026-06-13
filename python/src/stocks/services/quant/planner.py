@@ -18,12 +18,11 @@ class TradePlannerService:
         sma_200: float | None,
         ema_21: float | None,
         macd_histogram: float | None,
-        rsi_14: float | None,
-        neutral_band_pct: float = 2.0,   # kept for API compat, unused
+        rsi_14: float | None = None,      # kept for API compat, ignored in scorer
+        neutral_band_pct: float = 2.0,    # kept for API compat, unused
         adx_14: float | None = None,
         plus_di: float | None = None,
         minus_di: float | None = None,
-        # Extended inputs used by composite scorer
         ema_20: float | None = None,
         volume_breakout_ratio: float | None = None,
         obv_trend: str | None = None,
@@ -31,15 +30,22 @@ class TradePlannerService:
         ret_1w: float | None = None,
         ret_4w: float | None = None,
         macd_histogram_prev: float | None = None,
-        stoch_k: float | None = None,
+        stoch_k: float | None = None,     # kept for API compat, ignored in scorer
+        stochrsi_k: float | None = None,
+        stochrsi_d: float | None = None,
+        stochrsi_bullish_xover_days_ago: int | None = None,
+        stochrsi_bearish_xover_days_ago: int | None = None,
+        cmf_20: float | None = None,
+        cmf_20_prev: float | None = None,
+        supertrend_dir: str | None = None,
     ) -> tuple[str, list[str]]:
-        """Composite 4-component bias scorer.
+        """6-component bias scorer.
 
         Returns (bias, reasons) where bias in
         {VERY_BULLISH, BULLISH, NEUTRAL, BEARISH, VERY_BEARISH}.
 
-        Delegates to CompositeScorer which scores Trend (40%), Volume (25%),
-        RS (20%), Momentum (15%) and derives bias from the weighted total.
+        Delegates to CompositeScorer (Trend 30%, CMF 20%, RS 15%,
+        Momentum 15%, Volume 10%, Breakout 10%).
         """
         from stocks.services.quant.composite_scorer import compute_composite
 
@@ -61,10 +67,15 @@ class TradePlannerService:
             rs_score_1m=rs_score_1m,
             ret_1w=ret_1w,
             ret_4w=ret_4w,
-            rsi_14=rsi_14,
             macd_histogram=macd_histogram,
             macd_histogram_prev=macd_histogram_prev,
-            stoch_k=stoch_k,
+            stochrsi_k=stochrsi_k,
+            stochrsi_d=stochrsi_d,
+            stochrsi_bullish_xover_days_ago=stochrsi_bullish_xover_days_ago,
+            stochrsi_bearish_xover_days_ago=stochrsi_bearish_xover_days_ago,
+            cmf_20=cmf_20,
+            cmf_20_prev=cmf_20_prev,
+            supertrend_dir=supertrend_dir,
         )
         return result.bias, result.reasons
 

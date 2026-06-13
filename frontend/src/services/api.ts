@@ -178,6 +178,9 @@ export interface IndicatorData {
   bb_middle?: number | null;
   bb_lower?: number | null;
   atr_14?: number | null;
+  cmf_20?: number | null;
+  stochrsi_k?: number | null;
+  stochrsi_d?: number | null;
 }
 
 export interface ScreenerRow {
@@ -229,6 +232,16 @@ export interface ScreenerRow {
   volume_score_val?: number | null;
   rs_score_val?: number | null;
   momentum_score_val?: number | null;
+  cmf_score_val?: number | null;
+  breakout_score_val?: number | null;
+  cmf_20?: number | null;
+  cmf_20_prev?: number | null;
+  cmf_crossed_above_zero?: boolean | null;
+  stochrsi_k?: number | null;
+  stochrsi_d?: number | null;
+  stochrsi_zone?: string | null;
+  stochrsi_bullish_xover_days_ago?: number | null;
+  stochrsi_bearish_xover_days_ago?: number | null;
   strategy_signals?: Record<string, { signal: string; score: number | null }>;
 }
 
@@ -452,6 +465,13 @@ export const apiService = {
     only_gap_up?: boolean;
     only_gap_down?: boolean;
     min_rs_1m?: number;
+    min_cmf?: number;
+    max_cmf?: number;
+    cmf_rising?: boolean;
+    cmf_crossed_zero?: boolean;
+    min_stochrsi_k?: number;
+    max_stochrsi_k?: number;
+    stochrsi_bullish_xover_max_days?: number;
     limit?: number;
   }): Promise<ScreenerRow[]> {
     const response = await fetch(`${BASE_URL}/screeners/run`, {
@@ -474,6 +494,13 @@ export const apiService = {
         only_gap_up: filters.only_gap_up ?? false,
         only_gap_down: filters.only_gap_down ?? false,
         min_rs_1m: filters.min_rs_1m ?? null,
+        min_cmf: filters.min_cmf ?? null,
+        max_cmf: filters.max_cmf ?? null,
+        cmf_rising: filters.cmf_rising ?? null,
+        cmf_crossed_zero: filters.cmf_crossed_zero ?? null,
+        min_stochrsi_k: filters.min_stochrsi_k ?? null,
+        max_stochrsi_k: filters.max_stochrsi_k ?? null,
+        stochrsi_bullish_xover_max_days: filters.stochrsi_bullish_xover_max_days ?? null,
         limit: filters.limit ?? 100
       })
     });
@@ -583,6 +610,12 @@ export const apiService = {
     const query = symbol ? `?symbol=${symbol}` : '';
     const response = await fetch(`${BASE_URL}/sync/recalculate${query}`, { method: 'POST' });
     if (!response.ok) throw new Error('Failed to trigger derived calculations recalculation');
+    return response.json();
+  },
+
+  async getRecalcProgress(): Promise<{ status: string; total: number; processed: number; failed: number }> {
+    const response = await fetch(`${BASE_URL}/sync/recalculate/progress`);
+    if (!response.ok) throw new Error('Failed to fetch recalculation progress');
     return response.json();
   },
 

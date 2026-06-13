@@ -161,12 +161,13 @@ class ScreeningService:
                 ha_close = float(ha.close)
                 ha_direction = "UP" if float(ha.close) >= float(ha.open) else "DOWN"
 
-            # 4. Fetch latest 2 Technical Indicator rows (2nd needed for OBV trend direction)
+            # 4. Fetch latest 6 Technical Indicator rows
+            #    2nd needed for OBV trend; up to 6th needed for StochRSI crossover days-ago
             ind_rows = self.db.scalars(
                 select(DailyIndicator)
                 .filter_by(symbol_id=symbol_id)
                 .order_by(DailyIndicator.trading_date.desc())
-                .limit(2)
+                .limit(6)
             ).all()
             ind = ind_rows[0] if ind_rows else None
             ind_prev = ind_rows[1] if len(ind_rows) > 1 else None
@@ -189,6 +190,38 @@ class ScreeningService:
 
                 if ind.macd_line is not None and ind.macd_signal is not None:
                     macd_trend = "BULLISH" if float(ind.macd_line) >= float(ind.macd_signal) else "BEARISH"
+
+            # CMF snapshot fields
+            cmf_20_snap = float(ind.cmf_20) if ind and getattr(ind, "cmf_20", None) is not None else None
+            cmf_20_prev_snap = float(ind_prev.cmf_20) if ind_prev and getattr(ind_prev, "cmf_20", None) is not None else None
+            cmf_crossed_above_zero = (
+                cmf_20_snap is not None and cmf_20_snap > 0 and
+                cmf_20_prev_snap is not None and cmf_20_prev_snap <= 0
+            )
+
+            # StochRSI snapshot fields
+            stochrsi_k_snap = float(ind.stochrsi_k) if ind and getattr(ind, "stochrsi_k", None) is not None else None
+            stochrsi_d_snap = float(ind.stochrsi_d) if ind and getattr(ind, "stochrsi_d", None) is not None else None
+
+            stochrsi_zone = None
+            if stochrsi_k_snap is not None:
+                if stochrsi_k_snap >= 80:
+                    stochrsi_zone = "OVERBOUGHT"
+                elif stochrsi_k_snap >= 50:
+                    stochrsi_zone = "BULLISH"
+                elif stochrsi_k_snap >= 20:
+                    stochrsi_zone = "BEARISH"
+                else:
+                    stochrsi_zone = "OVERSOLD"
+
+            # Crossover days-ago: scan up to 6 indicator rows (newest → oldest)
+            stochrsi_bullish_xover_days_ago = None
+            stochrsi_bearish_xover_days_ago = None
+            for i, row in enumerate(ind_rows):
+                if stochrsi_bullish_xover_days_ago is None and getattr(row, "stochrsi_bullish_xover", None):
+                    stochrsi_bullish_xover_days_ago = i
+                if stochrsi_bearish_xover_days_ago is None and getattr(row, "stochrsi_bearish_xover", None):
+                    stochrsi_bearish_xover_days_ago = i
 
             # 5. Fetch latest Renko Brick
             brick = self.db.scalar(
@@ -293,16 +326,10 @@ class ScreeningService:
                         volume_breakout_ratio = round(volume / avg_vol, 2)
 
             # 6d. Composite scorer — now has all inputs
+            cmf_score_val = None
+            breakout_score_val = None
             if ind:
                 from stocks.services.quant.composite_scorer import compute_composite
-                from stocks.db.models import ScreeningSnapshot as _SS  # avoid local shadow
-                # volume_breakout_ratio from snapshot if it exists, else None
-                vbr = None
-                try:
-                    existing_snap = self.db.scalar(select(ScreeningSnapshot).filter_by(symbol_id=symbol_id))
-                    vbr = float(existing_snap.volume_breakout_ratio) if existing_snap and getattr(existing_snap, "volume_breakout_ratio", None) else None
-                except Exception:
-                    pass
                 cs = compute_composite(
                     close=close_price,
                     ema_20=float(ind.ema_20) if getattr(ind, "ema_20", None) is not None else None,
@@ -318,11 +345,20 @@ class ScreeningService:
                     rs_score_1m=rs_score_1m,
                     ret_1w=ret_1w,
                     ret_4w=ret_4w,
-                    rsi_14=float(ind.rsi_14) if ind.rsi_14 is not None else None,
                     macd_histogram=float(ind.macd_histogram) if ind.macd_histogram is not None else None,
                     macd_histogram_prev=macd_hist_prev,
-                    stoch_k=float(ind.stoch_k) if getattr(ind, "stoch_k", None) is not None else None,
+                    stochrsi_k=stochrsi_k_snap,
+                    stochrsi_d=stochrsi_d_snap,
+                    stochrsi_bullish_xover_days_ago=stochrsi_bullish_xover_days_ago,
+                    stochrsi_bearish_xover_days_ago=stochrsi_bearish_xover_days_ago,
+                    cmf_20=cmf_20_snap,
+                    cmf_20_prev=cmf_20_prev_snap,
                     supertrend_dir=supertrend_dir_snap,
+                    is_nr7=is_nr7,
+                    is_inside_bar=is_inside_bar,
+                    is_gap_up=is_gap_up,
+                    renko_dir=renko_direction,
+                    line_break_dir=line_break_direction,
                 )
                 regime_bias = cs.bias
                 composite_score = cs.composite_score
@@ -330,6 +366,8 @@ class ScreeningService:
                 volume_score_val = cs.volume_score
                 rs_score_val = cs.rs_score
                 momentum_score_val = cs.momentum_score
+                cmf_score_val = cs.cmf_score
+                breakout_score_val = cs.breakout_score
 
             if regime_bias is not None and weekly_trend is not None:
                 mtf_confirmed = (regime_bias in ("BULLISH", "VERY_BULLISH") and weekly_trend == "UP")
@@ -380,6 +418,16 @@ class ScreeningService:
                     volume_score_val=volume_score_val,
                     rs_score_val=rs_score_val,
                     momentum_score_val=momentum_score_val,
+                    cmf_score_val=cmf_score_val,
+                    breakout_score_val=breakout_score_val,
+                    cmf_20=cmf_20_snap,
+                    cmf_20_prev=cmf_20_prev_snap,
+                    cmf_crossed_above_zero=cmf_crossed_above_zero,
+                    stochrsi_k=stochrsi_k_snap,
+                    stochrsi_d=stochrsi_d_snap,
+                    stochrsi_zone=stochrsi_zone,
+                    stochrsi_bullish_xover_days_ago=stochrsi_bullish_xover_days_ago,
+                    stochrsi_bearish_xover_days_ago=stochrsi_bearish_xover_days_ago,
                 )
                 self.db.add(snapshot)
             else:
@@ -422,6 +470,16 @@ class ScreeningService:
                 snapshot.volume_score_val = volume_score_val
                 snapshot.rs_score_val = rs_score_val
                 snapshot.momentum_score_val = momentum_score_val
+                snapshot.cmf_score_val = cmf_score_val
+                snapshot.breakout_score_val = breakout_score_val
+                snapshot.cmf_20 = cmf_20_snap
+                snapshot.cmf_20_prev = cmf_20_prev_snap
+                snapshot.cmf_crossed_above_zero = cmf_crossed_above_zero
+                snapshot.stochrsi_k = stochrsi_k_snap
+                snapshot.stochrsi_d = stochrsi_d_snap
+                snapshot.stochrsi_zone = stochrsi_zone
+                snapshot.stochrsi_bullish_xover_days_ago = stochrsi_bullish_xover_days_ago
+                snapshot.stochrsi_bearish_xover_days_ago = stochrsi_bearish_xover_days_ago
             if commit:
                 self.db.commit()
         except Exception as e:
@@ -471,7 +529,10 @@ class ScreeningService:
             refreshed_count = 0
             for sym in active_symbols:
                 try:
-                    self.refresh_snapshot_for_symbol(sym.id, nifty_21d_return=nifty_21d_return, commit=False)
+                    # Savepoint per symbol — a failed snapshot rolls back only that symbol,
+                    # leaving the outer transaction clean for all remaining symbols.
+                    with self.db.begin_nested():
+                        self.refresh_snapshot_for_symbol(sym.id, nifty_21d_return=nifty_21d_return, commit=False)
                     refreshed_count += 1
                 except Exception as sym_err:
                     logger.error(f"Error refreshing snapshot for symbol {sym.symbol}: {sym_err}")
@@ -501,6 +562,15 @@ class ScreeningService:
         only_gap_up: bool = False,
         only_gap_down: bool = False,
         min_rs_1m: float | None = None,
+        # CMF filters
+        min_cmf: float | None = None,
+        max_cmf: float | None = None,
+        cmf_rising: bool | None = None,
+        cmf_crossed_zero: bool | None = None,
+        # StochRSI filters
+        max_stochrsi_k: float | None = None,
+        min_stochrsi_k: float | None = None,
+        stochrsi_bullish_xover_max_days: int | None = None,
         limit: int = 2500,
     ) -> list[ScreeningSnapshot]:
         """Runs high-speed query sweeps directly against the narrow screening_snapshots table."""
@@ -534,6 +604,29 @@ class ScreeningService:
             stmt = stmt.where(ScreeningSnapshot.is_gap_down == True)  # noqa: E712
         if min_rs_1m is not None:
             stmt = stmt.where(ScreeningSnapshot.rs_score_1m >= min_rs_1m)
+        # CMF filters
+        if min_cmf is not None:
+            stmt = stmt.where(ScreeningSnapshot.cmf_20 >= min_cmf)
+        if max_cmf is not None:
+            stmt = stmt.where(ScreeningSnapshot.cmf_20 <= max_cmf)
+        if cmf_rising:
+            stmt = stmt.where(
+                ScreeningSnapshot.cmf_20 > ScreeningSnapshot.cmf_20_prev,
+                ScreeningSnapshot.cmf_20.is_not(None),
+                ScreeningSnapshot.cmf_20_prev.is_not(None),
+            )
+        if cmf_crossed_zero:
+            stmt = stmt.where(ScreeningSnapshot.cmf_crossed_above_zero == True)  # noqa: E712
+        # StochRSI filters
+        if max_stochrsi_k is not None:
+            stmt = stmt.where(ScreeningSnapshot.stochrsi_k <= max_stochrsi_k)
+        if min_stochrsi_k is not None:
+            stmt = stmt.where(ScreeningSnapshot.stochrsi_k >= min_stochrsi_k)
+        if stochrsi_bullish_xover_max_days is not None:
+            stmt = stmt.where(
+                ScreeningSnapshot.stochrsi_bullish_xover_days_ago <= stochrsi_bullish_xover_max_days,
+                ScreeningSnapshot.stochrsi_bullish_xover_days_ago.is_not(None),
+            )
 
         stmt = stmt.order_by(ScreeningSnapshot.symbol.asc())
 
