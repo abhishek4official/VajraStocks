@@ -77,10 +77,32 @@ Filename: "{app}\{#AppExeName}"; \
 
 [UninstallDelete]
 ; Remove the runtime data folder created by the app
-Type: filesandordirs; Name: "{app}\data"
+; Disabled to prevent silent uninstaller upgrade data wipe:
+; Type: filesandordirs; Name: "{app}\data"
 
 [Code]
 var ResultCode: Integer;
+
+// InitializeSetup: runs before install. Aborts if a newer version is already installed.
+function InitializeSetup(): Boolean;
+var
+  InstalledVer: string;
+  UninstPath: string;
+begin
+  Result := True;
+  UninstPath := 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}_is1';
+  
+  if RegQueryStringValue(HKLM, UninstPath, 'DisplayVersion', InstalledVer) or
+     RegQueryStringValue(HKCU, UninstPath, 'DisplayVersion', InstalledVer) then
+  begin
+    if InstalledVer > '{#AppVersion}' then
+    begin
+      MsgBox('A newer version of VajraStocks (' + InstalledVer + ') is already installed. ' +
+             'Downgrading is blocked to prevent database schema mismatch.', mbError, MB_OK);
+      Result := False;
+    end;
+  end;
+end;
 
 // On upgrade: silently uninstall the previous version first so no stale files remain
 procedure CurStepChanged(CurStep: TSetupStep);

@@ -7,6 +7,7 @@ from stocks.api.v1.endpoints import (
     alerts,
     charts,
     indicators,
+    ml_training,
     portfolio,
     screening,
     settings,
@@ -31,3 +32,4 @@ api_router.include_router(settings.router)
 api_router.include_router(setup.router)
 api_router.include_router(portfolio.router)
 api_router.include_router(alerts.router)
+api_router.include_router(ml_training.router)

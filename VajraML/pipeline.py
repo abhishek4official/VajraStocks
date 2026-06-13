@@ -75,10 +75,10 @@ def build_dataset(engine: Engine) -> tuple[pd.DataFrame, list[str]]:
                 p.symbol_id,
                 s.symbol,
                 p.trading_date,
-                CAST(p.[open]    AS FLOAT) AS [open],
-                CAST(p.[high]    AS FLOAT) AS high,
-                CAST(p.[low]     AS FLOAT) AS low,
-                CAST(p.[close]   AS FLOAT) AS [close],
+                CAST(p."open"    AS FLOAT) AS open,
+                CAST(p."high"    AS FLOAT) AS high,
+                CAST(p."low"     AS FLOAT) AS low,
+                CAST(p."close"   AS FLOAT) AS close,
                 CAST(p.adj_close AS FLOAT) AS adj_close,
                 CAST(p.volume    AS BIGINT) AS volume
             FROM daily_prices p

@@ -74,6 +74,18 @@ update-desktop-database /usr/share/applications 2>/dev/null || true
 EOF
 chmod 755 "${STAGE}/DEBIAN/postinst"
 
+# ── DEBIAN/prerm ──────────────────────────────────────────────────────────────
+cat > "${STAGE}/DEBIAN/prerm" << 'EOF'
+#!/bin/bash
+set -e
+if pgrep -x "VajraStocks" >/dev/null; then
+    echo "Stopping active VajraStocks processes before package modification..."
+    pkill -x "VajraStocks" || true
+    sleep 1
+fi
+EOF
+chmod 755 "${STAGE}/DEBIAN/prerm"
+
 # ── Build .deb ─────────────────────────────────────────────────────────────────
 mkdir -p "${RELEASE_DIR}"
 dpkg-deb --build --root-owner-group "${STAGE}" "${RELEASE_DIR}/VajraStocks.deb"

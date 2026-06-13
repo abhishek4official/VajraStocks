@@ -173,6 +173,7 @@ class PortfolioService:
         # Batch-load snapshots and confluence levels for the held symbols
         snap_by_instr: dict[str, ScreeningSnapshot] = {}
         confl_by_symbol_id: dict[int, list[SymbolConfluenceLevel]] = defaultdict(list)
+        rs_threshold_bottom25: float | None = None
         if rows:
             instruments = {r.instrument for r in rows}
             ns_symbols = {f"{i}.NS" for i in instruments} | instruments
@@ -189,6 +190,14 @@ class PortfolioService:
                 ).all()
                 for lvl in confl_levels:
                     confl_by_symbol_id[lvl.symbol_id].append(lvl)
+
+            # Pre-compute universe RS bottom-quartile threshold for rotation detection
+            all_rs = self.db.scalars(
+                select(ScreeningSnapshot.rs_score_1m).where(ScreeningSnapshot.rs_score_1m.is_not(None))
+            ).all()
+            if all_rs:
+                sorted_rs = sorted(float(v) for v in all_rs)
+                rs_threshold_bottom25 = sorted_rs[int(len(sorted_rs) * 0.25)]
 
         holdings: list[dict] = []
         total_invested = total_current = total_open_risk = 0.0
@@ -208,7 +217,8 @@ class PortfolioService:
             pos_supports = [lvl for lvl in symbol_levels if lvl.level_type == "SUPPORT"]
             pos_resistances = [lvl for lvl in symbol_levels if lvl.level_type == "RESISTANCE"]
 
-            pos_supports_sorted = sorted(pos_supports, key=lambda x: float(x.price), reverse=True)
+            valid_pos_supports = [lvl for lvl in pos_supports if float(lvl.price) < ltp]
+            pos_supports_sorted = sorted(valid_pos_supports, key=lambda x: float(x.price), reverse=True)
             support_val = float(pos_supports_sorted[0].price) if pos_supports_sorted else None
 
             # Per-position open risk via confluence support, plus structural resistance targets
@@ -251,7 +261,8 @@ class PortfolioService:
                 reward_per_share = target_1 - ltp
                 rr_ratio = round(reward_per_share / risk_per_share, 2) if risk_per_share > 0 else None
                 if risk_per_share > 0 and risk_per_trade > 0:
-                    position_size_shares = int(risk_per_trade / risk_per_share) or None
+                    vol_mult = 1.20 if atr_pct < 2.0 else (0.75 if atr_pct > 5.0 else 1.0)
+                    position_size_shares = int(risk_per_trade * vol_mult / risk_per_share) or None
 
             if snap and snap.sma_200_cross_direction == "ABOVE":
                 above_sma200 += 1
@@ -268,6 +279,14 @@ class PortfolioService:
                 weak, weak_reason = True, "Bearish bias"
             elif bias is not None and mtf_ok is False and bias not in ("VERY_BULLISH",):
                 weak, weak_reason = True, "Weekly trend not confirmed"
+            elif (
+                rs_threshold_bottom25 is not None
+                and snap is not None
+                and snap.rs_score_1m is not None
+                and float(snap.rs_score_1m) < rs_threshold_bottom25
+                and bias not in ("VERY_BULLISH",)
+            ):
+                weak, weak_reason = True, "RS bottom quartile"
 
             holdings.append(
                 {
@@ -425,9 +444,13 @@ class PortfolioService:
             adx = float(getattr(sn, "adx_14", None) or 0)
             score += adx / 50.0  # ADX strength (0–1 range)
             if getattr(sn, "obv_trend", None) == "UP":
-                score += 1.0  # accumulation confirmation
+                score += 0.25  # reduced: confirms price action without dominating
             if sn.regime_bias == "VERY_BULLISH":
-                score += 0.5  # extra weight for highest conviction
+                score += 0.5  # highest conviction bonus
+            if sn.composite_score is not None:
+                score += float(sn.composite_score) * 0.5  # pre-computed multi-factor blend
+            if sn.ml_prediction is not None:
+                score += float(sn.ml_prediction) * 1.0  # VajraML signal
             return score
 
         ranked = sorted(rows, key=_momentum_score, reverse=True)[:limit]
@@ -456,7 +479,8 @@ class PortfolioService:
             cand_supports = [lvl for lvl in cand_levels if lvl.level_type == "SUPPORT"]
             cand_resistances = [lvl for lvl in cand_levels if lvl.level_type == "RESISTANCE"]
 
-            cand_supports_sorted = sorted(cand_supports, key=lambda x: float(x.price), reverse=True)
+            valid_cand_supports = [lvl for lvl in cand_supports if float(lvl.price) < close]
+            cand_supports_sorted = sorted(valid_cand_supports, key=lambda x: float(x.price), reverse=True)
             support_val = float(cand_supports_sorted[0].price) if cand_supports_sorted else None
 
             stop = target_1 = target_2 = target_3 = gain = rr_ratio = position_size_shares = None
@@ -492,7 +516,11 @@ class PortfolioService:
                 reward_per_share = target_1 - close
                 rr_ratio = round(reward_per_share / risk_per_share, 2) if risk_per_share > 0 else None
                 if risk_per_share > 0 and cand_risk_per_trade > 0:
-                    raw_size = int(cand_risk_per_trade / risk_per_share) or None
+                    atr_pct_raw = float(sn.atr_pct) if sn.atr_pct is not None else None
+                    vol_mult = 1.0
+                    if atr_pct_raw is not None:
+                        vol_mult = 1.20 if atr_pct_raw < 2.0 else (0.75 if atr_pct_raw > 5.0 else 1.0)
+                    raw_size = int(cand_risk_per_trade * vol_mult / risk_per_share) or None
                     # Heat-aware cap: don't exceed remaining heat budget
                     if raw_size and remaining_heat_inr is not None and risk_per_share > 0:
                         max_by_heat = int(remaining_heat_inr / risk_per_share)
@@ -525,6 +553,8 @@ class PortfolioService:
                     "trend_strength_class": getattr(sn, "trend_strength_class", None),
                     "obv_trend": getattr(sn, "obv_trend", None),
                     "supertrend_dir": getattr(sn, "supertrend_dir", None),
+                    "composite_score": round(float(sn.composite_score), 3) if sn.composite_score is not None else None,
+                    "ml_prediction": round(float(sn.ml_prediction), 3) if sn.ml_prediction is not None else None,
                 }
             )
         return out

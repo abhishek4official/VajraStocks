@@ -26,6 +26,9 @@ async def chat_stream(
     async def event_generator():
         try:
             async for event in orchestrator.execute_workflow(prompt):
+                if await request.is_disconnected():
+                    logger.warning("Client disconnected — aborting AI workflow stream.")
+                    break
                 yield event
         except Exception as e:
             logger.critical(f"Critical error in AI Agent execution pipeline: {e}")

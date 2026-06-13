@@ -9,10 +9,20 @@ the active named pipe from the Windows pipe namespace.
 """
 
 import subprocess
+from typing import TYPE_CHECKING
 
-import pyodbc
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
+
+if TYPE_CHECKING:
+    import pyodbc
+
+try:
+    import pyodbc as _pyodbc  # type: ignore[import]
+    _PYODBC_AVAILABLE = True
+except ImportError:
+    _pyodbc = None  # type: ignore[assignment]
+    _PYODBC_AVAILABLE = False
 
 
 def _discover_localdb_pipe() -> str | None:
@@ -63,8 +73,14 @@ def get_engine(conn_str: str | None = None) -> Engine:
             "Ensure the VajraStocks app has been opened at least once to start the instance."
         )
 
-    def _creator() -> pyodbc.Connection:
-        return pyodbc.connect(
+    if not _PYODBC_AVAILABLE:
+        raise ImportError(
+            "pyodbc is required for the named-pipe LocalDB fallback but is not installed. "
+            "Install it with: pip install pyodbc"
+        )
+
+    def _creator():
+        return _pyodbc.connect(
             f"DRIVER={{ODBC Driver 17 for SQL Server}};"
             f"SERVER={pipe};"
             "DATABASE=vajra_stocks;"

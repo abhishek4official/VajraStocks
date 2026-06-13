@@ -381,6 +381,26 @@ class ScreeningSnapshot(Base):
     )
 
 
+class MLTrainingRun(Base):
+    """Persists each ML model training run — status, metrics, version, timestamps."""
+
+    __tablename__ = "ml_training_runs"
+
+    id:               Mapped[int]                  = mapped_column(Integer, primary_key=True, autoincrement=True)
+    version:          Mapped[str]                  = mapped_column(String(30), nullable=False)
+    status:           Mapped[str]                  = mapped_column(String(20), nullable=False, default="RUNNING")
+    device:           Mapped[str | None]           = mapped_column(String(10), nullable=True)
+    num_folds:        Mapped[int | None]           = mapped_column(Integer, nullable=True)
+    dataset_rows:     Mapped[int | None]           = mapped_column(Integer, nullable=True)
+    date_range_start: Mapped[datetime.date | None] = mapped_column(Date, nullable=True)
+    date_range_end:   Mapped[datetime.date | None] = mapped_column(Date, nullable=True)
+    mean_ic:          Mapped[float | None]         = mapped_column(Float, nullable=True)
+    fold_metrics:     Mapped[str | None]           = mapped_column(Text, nullable=True)   # JSON array
+    error_message:    Mapped[str | None]           = mapped_column(Text, nullable=True)
+    started_at:       Mapped[datetime.datetime]    = mapped_column(DateTime, default=func.now())
+    completed_at:     Mapped[datetime.datetime | None] = mapped_column(DateTime, nullable=True)
+
+
 class AppSetting(Base):
     """Application settings stored in the database — replaces config.yaml for runtime configuration."""
 
