@@ -553,6 +553,19 @@ function Dashboard() {
         {activeTab === 'watchlist' && <WatchlistPanel />}
 
       </main>
+
+      {/* Sticky footer */}
+      <footer className="h-7 shrink-0 border-t border-slate-800/60 bg-[#0d0f14]/80 backdrop-blur-md flex items-center justify-between px-5 z-40">
+        <span className="text-[10px] font-bold text-slate-300">VajraStocks v1.2.0 — Data © Yahoo Finance, for personal use only</span>
+        <a
+          href="https://abhishek4official.github.io/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-[10px] font-bold text-slate-300 hover:text-purple-400 transition flex items-center gap-1"
+        >
+          Developed by <span className="text-white hover:text-purple-300 transition ml-0.5">Abhishek Kumar</span>
+        </a>
+      </footer>
     </div>
   );
 }
