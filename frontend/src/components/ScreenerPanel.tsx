@@ -25,7 +25,7 @@ const DEFAULT_COL_FILTERS = {
   cmf_20: '', stochrsi_k: '', stochrsi_d: '',
   sma_20_cross_direction: '', sma_50_cross_direction: '', sma_200_cross_direction: '',
   macd_trend: '', ha_direction: '', renko_direction: '', line_break_direction: '',
-  rs_score_1m: '', patterns: '',
+  rs_score_1m: '', patterns: '', ml_label: '',
 };
 type ColFilters = typeof DEFAULT_COL_FILTERS;
 
@@ -326,6 +326,8 @@ export const ScreenerPanel: React.FC = () => {
           if (colFilters.patterns === 'Gap+' && !row.is_gap_up) return false;
           if (colFilters.patterns === 'Gap-' && !row.is_gap_down) return false;
         }
+
+        if (colFilters.ml_label && row.ml_label !== colFilters.ml_label) return false;
 
         return true;
       });
@@ -919,10 +921,10 @@ export const ScreenerPanel: React.FC = () => {
             /* Sticky overrides for headers of pinned columns */
             .screener-grid thead th:nth-child(1) { z-index: 25; background-color: #0c0f17 !important; }
             .screener-grid thead th:nth-child(2) { z-index: 25; background-color: #0c0f17 !important; }
-            .screener-grid thead th:nth-child(33) { z-index: 25; background-color: #0c0f17 !important; }
+            .screener-grid thead th:nth-child(34) { z-index: 25; background-color: #0c0f17 !important; }
             .screener-grid thead tr:nth-child(2) td:nth-child(1) { z-index: 25; background-color: #0c0f17 !important; }
             .screener-grid thead tr:nth-child(2) td:nth-child(2) { z-index: 25; background-color: #0c0f17 !important; }
-            .screener-grid thead tr:nth-child(2) td:nth-child(33) { z-index: 25; background-color: #0c0f17 !important; }
+            .screener-grid thead tr:nth-child(2) td:nth-child(34) { z-index: 25; background-color: #0c0f17 !important; }
 
             /* Zebra striping backgrounds for scrollable cells */
             .screener-grid tbody tr:nth-child(odd) td {
@@ -943,10 +945,10 @@ export const ScreenerPanel: React.FC = () => {
             }
 
             /* Pinned cell backgrounds (right Actions column) */
-            .screener-grid tbody tr:nth-child(odd) td:nth-child(33) {
+            .screener-grid tbody tr:nth-child(odd) td:nth-child(34) {
               background-color: #090b10 !important;
             }
-            .screener-grid tbody tr:nth-child(even) td:nth-child(33) {
+            .screener-grid tbody tr:nth-child(even) td:nth-child(34) {
               background-color: #0f121a !important;
             }
 
@@ -986,10 +988,11 @@ export const ScreenerPanel: React.FC = () => {
             .screener-grid th:nth-child(30), .screener-grid td:nth-child(30) { width: 70px; min-width: 70px; } /* Averages & Technicals */
             .screener-grid th:nth-child(31), .screener-grid td:nth-child(31) { width: 90px; min-width: 90px; } /* RS 1M */
             .screener-grid th:nth-child(32), .screener-grid td:nth-child(32) { width: 150px; min-width: 150px; } /* Patterns */
+            .screener-grid th:nth-child(33), .screener-grid td:nth-child(33) { width: 120px; min-width: 120px; } /* ML Signal */
 
-            /* Pin Actions column (33rd column) to the right */
-            .screener-grid th:nth-child(33),
-            .screener-grid td:nth-child(33) {
+            /* Pin Actions column (34th column) to the right */
+            .screener-grid th:nth-child(34),
+            .screener-grid td:nth-child(34) {
               position: sticky;
               right: 0;
               z-index: 5;
@@ -1104,6 +1107,9 @@ export const ScreenerPanel: React.FC = () => {
                   RS 1M {renderSortIcon('rs_score_1m' as any)}
                 </th>
                 <th className="py-2 px-1.5 text-center" title="Pattern triggers">Patterns</th>
+                <th className="py-2 px-1.5 text-center cursor-pointer hover:text-white transition" title="VajraML 5-day return prediction rank" onClick={() => handleSort('ml_rank')}>
+                  ML Signal {renderSortIcon('ml_rank')}
+                </th>
                 <th className="py-2 px-1.5 text-right">Actions</th>
               </tr>
               {showColFilters && (
@@ -1468,7 +1474,23 @@ export const ScreenerPanel: React.FC = () => {
                       <option value="Gap-">Gap-</option>
                     </select>
                   </td>
-                  
+
+                  {/* ML Signal */}
+                  <td className="py-1 px-1.5 text-center">
+                    <select
+                      value={colFilters.ml_label}
+                      onChange={(e) => setColFilters({ ...colFilters, ml_label: e.target.value })}
+                      className="w-full min-w-[80px] px-0.5 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 focus:outline-none focus:border-purple-500 cursor-pointer"
+                    >
+                      <option value="">All</option>
+                      <option value="Very Bullish">Very Bullish</option>
+                      <option value="Bullish">Bullish</option>
+                      <option value="Neutral">Neutral</option>
+                      <option value="Bearish">Bearish</option>
+                      <option value="Very Bearish">Very Bearish</option>
+                    </select>
+                  </td>
+
                   {/* Actions */}
                   <td className="py-1 px-1.5 text-right">
                     {/* Empty space matching actions column */}
@@ -1479,7 +1501,7 @@ export const ScreenerPanel: React.FC = () => {
             <tbody className="divide-y divide-slate-850">
               {filteredResults.length === 0 ? (
                 <tr>
-                  <td colSpan={33} className="py-10 text-center text-slate-500 text-xs">
+                  <td colSpan={34} className="py-10 text-center text-slate-500 text-xs">
                     {isLoading 
                       ? 'Executing database snapshot sweep...' 
                       : 'No stock matches found for the current criteria.'}
@@ -1818,6 +1840,36 @@ export const ScreenerPanel: React.FC = () => {
                           </div>
                         )}
                       </td>
+
+                      {/* ML Signal */}
+                      <td className="py-2 px-1.5 text-center">
+                        {(() => {
+                          const label = row.ml_label;
+                          const rank  = row.ml_rank;
+                          const pred  = row.ml_prediction;
+                          if (!label) return <span className="text-slate-600 text-xs">—</span>;
+                          const cfg: Record<string, { bg: string; text: string }> = {
+                            'Very Bullish': { bg: 'bg-emerald-500/20 border-emerald-400/50', text: 'text-emerald-200' },
+                            'Bullish':      { bg: 'bg-teal-500/15 border-teal-400/40',        text: 'text-teal-300'   },
+                            'Neutral':      { bg: 'bg-slate-700/40 border-slate-600/40',      text: 'text-slate-400'  },
+                            'Bearish':      { bg: 'bg-orange-500/15 border-orange-500/40',    text: 'text-orange-300' },
+                            'Very Bearish': { bg: 'bg-rose-500/20 border-rose-400/50',        text: 'text-rose-200'   },
+                          };
+                          const c = cfg[label] ?? cfg['Neutral'];
+                          return (
+                            <span
+                              title={`ML Rank: ${rank ?? '—'} | Score: ${pred != null ? pred.toFixed(4) : '—'}`}
+                              className={`inline-flex flex-col items-center gap-0 px-1.5 py-0.5 rounded border text-[10px] font-bold whitespace-nowrap ${c.bg} ${c.text}`}
+                            >
+                              {label}
+                              {rank != null && (
+                                <span className="opacity-60 font-mono text-[9px] font-normal">#{rank}</span>
+                              )}
+                            </span>
+                          );
+                        })()}
+                      </td>
+
                       {/* Actions */}
                       <td className="py-2 px-1.5 text-right">
                         <div className="flex items-center gap-1 justify-end">

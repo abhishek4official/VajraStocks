@@ -242,6 +242,9 @@ export interface ScreenerRow {
   stochrsi_zone?: string | null;
   stochrsi_bullish_xover_days_ago?: number | null;
   stochrsi_bearish_xover_days_ago?: number | null;
+  ml_prediction?: number | null;
+  ml_rank?: number | null;
+  ml_label?: string | null;
   strategy_signals?: Record<string, { signal: string; score: number | null }>;
 }
 

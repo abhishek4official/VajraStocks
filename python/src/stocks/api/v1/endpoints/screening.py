@@ -266,6 +266,9 @@ class ScreenerRowResponse(BaseModel):
     stochrsi_zone: str | None = None
     stochrsi_bullish_xover_days_ago: int | None = None
     stochrsi_bearish_xover_days_ago: int | None = None
+    ml_prediction: float | None = None
+    ml_rank: int | None = None
+    ml_label: str | None = None
     strategy_signals: dict = {}   # {strategy_id: {"signal": str, "score": float|None}}
 
     class Config:
@@ -364,6 +367,9 @@ def _build_row(r, confl_by_symbol_id: dict, risk_per_trade: float, strat_by_symb
         "stochrsi_zone": getattr(r, "stochrsi_zone", None),
         "stochrsi_bullish_xover_days_ago": getattr(r, "stochrsi_bullish_xover_days_ago", None),
         "stochrsi_bearish_xover_days_ago": getattr(r, "stochrsi_bearish_xover_days_ago", None),
+        "ml_prediction": getattr(r, "ml_prediction", None),
+        "ml_rank": getattr(r, "ml_rank", None),
+        "ml_label": getattr(r, "ml_label", None),
         "strategy_signals": (strat_by_symbol_id or {}).get(r.symbol_id, {}),
     }
 

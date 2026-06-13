@@ -1,0 +1,15 @@
+# VajraML dependencies
+# Install into the existing project venv:
+#   cd C:\Users\abhis\Documents\VajraStocks\python
+#   .venv\Scripts\pip install -r ..\VajraML\requirements.txt
+
+# Already in the project venv (no reinstall needed)
+pandas>=2.0.0
+numpy>=1.24.0
+pyodbc>=4.0.0
+SQLAlchemy>=2.0.0
+
+# New — installed via: cd python && uv add lightgbm scikit-learn scipy
+lightgbm==4.6.0
+scikit-learn==1.9.0
+scipy==1.17.1
