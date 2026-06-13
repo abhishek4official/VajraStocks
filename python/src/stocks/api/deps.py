@@ -16,11 +16,14 @@ def get_db(request: Request) -> Generator[Session, None, None]:
         session.close()
 
 
-def get_settings(request: Request):
-    """Returns a SettingsService bound to a fresh DB session."""
+def get_settings(request: Request) -> Generator:
+    """Yields a SettingsService bound to a fresh DB session, closed after the request."""
     from stocks.services.settings_service import SettingsService
     session = request.app.state.db_manager.get_session()
-    return SettingsService(session)
+    try:
+        yield SettingsService(session)
+    finally:
+        session.close()
 
 
 def get_config(request: Request):

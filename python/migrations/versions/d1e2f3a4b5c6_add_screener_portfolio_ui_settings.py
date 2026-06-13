@@ -44,9 +44,12 @@ def upgrade() -> None:
     for category, key, value, value_type, description, is_secret in NEW_SETTINGS:
         bind.execute(
             sa.text(
-                "INSERT OR IGNORE INTO app_settings "
+                "INSERT INTO app_settings "
                 "(category, key, value, value_type, description, is_secret, created_at, updated_at) "
-                "VALUES (:cat, :key, :val, :vtype, :desc, :secret, :now, :now)"
+                "SELECT :cat, :key, :val, :vtype, :desc, :secret, :now, :now "
+                "WHERE NOT EXISTS ("
+                "  SELECT 1 FROM app_settings WHERE category = :cat AND key = :key"
+                ")"
             ),
             {
                 "cat": category, "key": key, "val": value,

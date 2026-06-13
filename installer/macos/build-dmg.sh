@@ -57,6 +57,14 @@ if ! command -v create-dmg &>/dev/null; then
   brew install create-dmg
 fi
 
+# ── Codesign .app Bundle ──────────────────────────────────────────────────────
+if [[ -n "${MACOS_SIGNING_IDENTITY:-}" ]]; then
+  echo "Signing macOS .app bundle using identity: ${MACOS_SIGNING_IDENTITY}"
+  codesign --force --options runtime --deep --sign "${MACOS_SIGNING_IDENTITY}" "${STAGING}/${APP_BUNDLE}"
+else
+  echo "No codesigning identity provided (MACOS_SIGNING_IDENTITY is empty). Skipping signing."
+fi
+
 # ── Build DMG ─────────────────────────────────────────────────────────────────
 mkdir -p "${RELEASE_DIR}"
 
@@ -73,3 +81,18 @@ create-dmg \
 
 rm -rf "${STAGING}"
 echo "Built: ${RELEASE_DIR}/VajraStocks.dmg"
+
+# ── Notarize DMG ──────────────────────────────────────────────────────────────
+if [[ -n "${APPLE_ID:-}" && -n "${APPLE_PASSWORD:-}" && -n "${APPLE_TEAM_ID:-}" ]]; then
+  echo "Submitting DMG for Apple notarization..."
+  xcrun notarytool submit "${RELEASE_DIR}/VajraStocks.dmg" \
+    --apple-id "${APPLE_ID}" \
+    --password "${APPLE_PASSWORD}" \
+    --team-id "${APPLE_TEAM_ID}" \
+    --wait
+  
+  echo "Stapling notarization ticket to DMG..."
+  xcrun stapler staple "${RELEASE_DIR}/VajraStocks.dmg"
+else
+  echo "Apple notarization credentials not provided (APPLE_ID/APPLE_PASSWORD/APPLE_TEAM_ID is empty). Skipping notarization."
+fi

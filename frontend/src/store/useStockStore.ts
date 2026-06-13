@@ -71,7 +71,7 @@ export interface WatchlistAlert {
   createdAt: string;
 }
 
-type TabId = 'explorer' | 'screener' | 'strategy' | 'sync' | 'ai-research' | 'portfolio' | 'watchlist' | 'compare' | 'settings' | 'about';
+type TabId = 'explorer' | 'screener' | 'strategy' | 'sync' | 'ai-research' | 'portfolio' | 'watchlist' | 'compare' | 'settings' | 'about' | 'ml-training';
 type ChartTimeframe = '1W' | '1M' | '3M' | '6M' | '1Y' | 'MAX';
 
 // ─── Store shape ──────────────────────────────────────────────────────────────
@@ -109,6 +109,7 @@ interface StockState {
   aiReport: string | null;
   aiRecommendation: string | null;
   aiConfidence: string | null;
+  _activeEventSource: EventSource | null;
 
   fetchNiftyCandles: () => Promise<void>;
   addCustomLine: (symbol: string, price: number) => void;
@@ -211,7 +212,7 @@ function saveAlerts(a: WatchlistAlert[]) {
 
 function getInitialTab(): TabId {
   const path = window.location.pathname.replace(/^\/+/, '').split('/')[0];
-  const valid: TabId[] = ['explorer', 'screener', 'strategy', 'sync', 'ai-research', 'portfolio', 'watchlist', 'compare', 'settings', 'about'];
+  const valid: TabId[] = ['explorer', 'screener', 'strategy', 'sync', 'ai-research', 'portfolio', 'watchlist', 'compare', 'settings', 'about', 'ml-training'];
   return valid.includes(path as TabId) ? (path as TabId) : 'explorer';
 }
 
@@ -304,6 +305,7 @@ export const useStockStore = create<StockState>((set, get) => ({
   aiReport: null,
   aiRecommendation: null,
   aiConfidence: null,
+  _activeEventSource: null,
 
   portfolio: null,
   portfolioLoading: false,
@@ -668,6 +670,9 @@ export const useStockStore = create<StockState>((set, get) => ({
   },
 
   runAiWorkflow: async (prompt: string) => {
+    // Close any previous connection before starting a new one
+    get()._activeEventSource?.close();
+
     set({
       aiIsLoading: true,
       aiQuery: prompt,
@@ -675,11 +680,13 @@ export const useStockStore = create<StockState>((set, get) => ({
       aiReport: null,
       aiRecommendation: null,
       aiConfidence: null,
+      _activeEventSource: null,
     });
 
     try {
       const url = `${API_BASE}/agents/chat-stream?prompt=${encodeURIComponent(prompt)}`;
       const eventSource = new EventSource(url);
+      set({ _activeEventSource: eventSource });
 
       eventSource.onmessage = (event) => {
         try {

@@ -242,6 +242,9 @@ export interface ScreenerRow {
   stochrsi_zone?: string | null;
   stochrsi_bullish_xover_days_ago?: number | null;
   stochrsi_bearish_xover_days_ago?: number | null;
+  ml_prediction?: number | null;
+  ml_rank?: number | null;
+  ml_label?: string | null;
   strategy_signals?: Record<string, { signal: string; score: number | null }>;
 }
 
@@ -331,6 +334,55 @@ export interface SymbolSyncStatus {
   last_successful_sync_date: string;
   last_attempt_status: string;
   last_error_message?: string | null;
+}
+
+// ── ML Training ───────────────────────────────────────────────────────────────
+export interface MLFoldMetric {
+  fold: number;
+  lgbm_ic: number;
+  ridge_ic: number;
+  hit_rate: number;
+  ls_pnl: number;
+}
+
+export interface MLTrainingRun {
+  id: number;
+  version: string;
+  status: 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
+  device: 'cpu' | 'gpu' | null;
+  num_folds: number | null;
+  dataset_rows: number | null;
+  date_range_start: string | null;
+  date_range_end: string | null;
+  mean_ic: number | null;
+  fold_metrics: MLFoldMetric[] | null;
+  error_message: string | null;
+  started_at: string;
+  completed_at: string | null;
+}
+
+export interface MLProgressEvent {
+  type: 'stage' | 'device' | 'dataset' | 'fold_start' | 'tree' | 'fold_done'
+      | 'complete' | 'cancelled' | 'error' | 'heartbeat' | 'stream_end';
+  pct?: number;
+  message?: string;
+  device?: string;
+  rows?: number;
+  features?: number;
+  date_start?: string;
+  date_end?: string;
+  fold?: number;
+  total?: number;
+  train_rows?: number;
+  test_rows?: number;
+  tree?: number;
+  lgbm_ic?: number;
+  ridge_ic?: number;
+  hit_rate?: number;
+  ls_pnl?: number;
+  mean_ic?: number;
+  folds?: number;
+  error?: string;
 }
 
 export const apiService = {

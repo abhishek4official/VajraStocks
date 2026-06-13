@@ -343,6 +343,16 @@ async def lifespan(app: FastAPI):
 
     # ⑦ — expose to request handlers
     app.state.db_manager = db_manager
+
+    # ⑦b — ML training job manager (one background thread at a time)
+    import sys as _sys
+    from pathlib import Path as _Path
+    _vajra_root = str(_Path(__file__).parents[4])
+    if _vajra_root not in _sys.path:
+        _sys.path.insert(0, _vajra_root)
+    from VajraML.train_service import TrainingJobManager
+    app.state.training_manager = TrainingJobManager()
+
     logger.info("Application startup complete.")
 
     # ⑧ — start background daily scheduler (00:00 UTC / 5:30 AM IST sync & missed runs check)
@@ -377,7 +387,12 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:5173",   # Vite dev server
+        "http://localhost:3000",   # alternate dev port
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:3000",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

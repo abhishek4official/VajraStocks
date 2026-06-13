@@ -93,9 +93,16 @@ vajrastocks
 chmod +x VajraStocks.AppImage
 ./VajraStocks.AppImage
 ```
+> [!NOTE]
+> Modern distributions (like Ubuntu 22.04+ or Debian 12+) do not include `libfuse2` by default. If the AppImage fails to launch, install the FUSE compatibility library using:
+> `sudo apt install -y libfuse2`
+> Alternatively, you can run the AppImage without FUSE by extracting it first:
+> `./VajraStocks.AppImage --appimage-extract`
+> `cd squashfs-root && ./AppRun`
 
 ### macOS
-Open `VajraStocks.dmg`, drag to Applications. On first launch right-click → Open to bypass Gatekeeper.
+Open `VajraStocks.dmg`, drag to Applications, and launch. 
+*(If the release build is run from a fork or local machine without Apple Developer ID signing certificates, you may need to right-click the app icon and select "Open" on first launch to bypass macOS Gatekeeper).*
 
 The app opens at `http://localhost:8000` in your default browser.
 

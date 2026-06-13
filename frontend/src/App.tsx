@@ -18,6 +18,7 @@ import { ComparePanel } from './components/ComparePanel';
 import { SettingsPanel } from './components/SettingsPanel';
 import { SetupWizard } from './components/SetupWizard';
 import { AboutPanel } from './components/AboutPanel';
+import { MLTrainingPanel } from './components/MLTrainingPanel';
 import {
   LineChart,
   Search,
@@ -31,6 +32,7 @@ import {
   Bell,
   X,
   BookOpen,
+  Brain,
 } from 'lucide-react';
 import './App.css';
 
@@ -142,7 +144,7 @@ function Dashboard() {
 
     const handlePopState = () => {
       const path = window.location.pathname.replace(/^\/+/, '').split('/')[0];
-      const valid = ['explorer', 'screener', 'strategy', 'sync', 'ai-research', 'portfolio', 'watchlist', 'about'];
+      const valid = ['explorer', 'screener', 'strategy', 'sync', 'ai-research', 'portfolio', 'watchlist', 'about', 'ml-training'];
       const tab = valid.includes(path) ? path : 'explorer';
       useStockStore.setState({ activeTab: tab as any });
     };
@@ -202,6 +204,7 @@ function Dashboard() {
             { id: 'watchlist',   label: 'Watchlist',   Icon: Bookmark    },
             { id: 'compare',     label: 'Compare',     Icon: TrendingUp  },
             { id: 'ai-research', label: 'AI Research', Icon: Cpu         },
+            { id: 'ml-training', label: 'ML Model',    Icon: Brain       },
             { id: 'about',       label: 'About',       Icon: BookOpen    },
             { id: 'settings',    label: 'Settings',    Icon: Settings    },
           ] as const).map(({ id, label, Icon }) => (
@@ -548,6 +551,9 @@ function Dashboard() {
 
         {/* About */}
         {activeTab === 'about' && <AboutPanel />}
+
+        {/* ML Training */}
+        {activeTab === 'ml-training' && <MLTrainingPanel />}
 
         {/* TAB 6: Watchlist */}
         {activeTab === 'watchlist' && <WatchlistPanel />}

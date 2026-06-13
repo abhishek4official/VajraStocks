@@ -271,6 +271,10 @@ class DatabaseManager:
             ("screening_snapshots", "volume_score_val",     "FLOAT",        "FLOAT"),
             ("screening_snapshots", "rs_score_val",         "FLOAT",        "FLOAT"),
             ("screening_snapshots", "momentum_score_val",   "FLOAT",        "FLOAT"),
+            # ML Prediction columns (written by VajraML post-sync hook)
+            ("screening_snapshots", "ml_prediction",        "FLOAT",        "FLOAT"),
+            ("screening_snapshots", "ml_rank",              "INTEGER",      "INT"),
+            ("screening_snapshots", "ml_label",             "VARCHAR(20)",  "VARCHAR(20)"),
             # New DailyIndicator columns
             ("daily_indicators",    "ema_20",               "FLOAT",        "FLOAT"),
             ("daily_indicators",    "adx_14",               "FLOAT",        "FLOAT"),

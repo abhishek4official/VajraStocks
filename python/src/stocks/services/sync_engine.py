@@ -406,6 +406,22 @@ class SyncEngine:
             except Exception as strat_err:
                 logger.error(f"Failed to materialize strategy signals post-sync: {strat_err}")
 
+            # Post-Sync Hook: Run VajraML predictions and write ml_prediction / ml_rank / ml_label
+            # into screening_snapshots for every universe stock.
+            try:
+                import sys
+                from pathlib import Path as _Path
+
+                _vajra_root = str(_Path(__file__).parents[4])
+                if _vajra_root not in sys.path:
+                    sys.path.insert(0, _vajra_root)
+
+                from VajraML.predict import run_ml_snapshot_update
+
+                run_ml_snapshot_update(self.db_manager.engine)
+            except Exception as ml_err:
+                logger.error(f"Failed to run VajraML ML snapshot update post-sync: {ml_err}")
+
             # 6. Finalize Sync Job status
             final_status = "SUCCESS"
             if failed_symbols > 0:
