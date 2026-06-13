@@ -46,6 +46,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Update version in source files
+        run: python python/scripts/update_version.py ${{ needs.version.outputs.version }}
+
       # ── Frontend ────────────────────────────────────────────────────────────
       - uses: actions/setup-node@v4
         with:
@@ -58,10 +65,6 @@ jobs:
           npm run build
 
       # ── Backend ─────────────────────────────────────────────────────────────
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-
       - uses: astral-sh/setup-uv@v5
         with:
           version: latest
@@ -113,6 +116,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Update version in source files
+        run: python python/scripts/update_version.py ${{ needs.version.outputs.version }}
+
       # ── Frontend ────────────────────────────────────────────────────────────
       - uses: actions/setup-node@v4
         with:
@@ -125,10 +135,6 @@ jobs:
           npm run build
 
       # ── Backend ─────────────────────────────────────────────────────────────
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-
       - uses: astral-sh/setup-uv@v5
         with:
           version: latest
@@ -181,6 +187,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Update version in source files
+        run: python python/scripts/update_version.py ${{ needs.version.outputs.version }}
+
       # ── Frontend ────────────────────────────────────────────────────────────
       - uses: actions/setup-node@v4
         with:
@@ -193,10 +206,6 @@ jobs:
           npm run build
 
       # ── Backend ─────────────────────────────────────────────────────────────
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-
       - uses: astral-sh/setup-uv@v5
         with:
           version: latest
