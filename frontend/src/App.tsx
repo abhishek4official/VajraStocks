@@ -17,6 +17,7 @@ import { TradePlanCard } from './components/TradePlanCard';
 import { ComparePanel } from './components/ComparePanel';
 import { SettingsPanel } from './components/SettingsPanel';
 import { SetupWizard } from './components/SetupWizard';
+import { AboutPanel } from './components/AboutPanel';
 import {
   LineChart,
   Search,
@@ -29,6 +30,7 @@ import {
   Target,
   Bell,
   X,
+  BookOpen,
 } from 'lucide-react';
 import './App.css';
 
@@ -140,7 +142,7 @@ function Dashboard() {
 
     const handlePopState = () => {
       const path = window.location.pathname.replace(/^\/+/, '').split('/')[0];
-      const valid = ['explorer', 'screener', 'strategy', 'sync', 'ai-research', 'portfolio', 'watchlist'];
+      const valid = ['explorer', 'screener', 'strategy', 'sync', 'ai-research', 'portfolio', 'watchlist', 'about'];
       const tab = valid.includes(path) ? path : 'explorer';
       useStockStore.setState({ activeTab: tab as any });
     };
@@ -200,6 +202,7 @@ function Dashboard() {
             { id: 'watchlist',   label: 'Watchlist',   Icon: Bookmark    },
             { id: 'compare',     label: 'Compare',     Icon: TrendingUp  },
             { id: 'ai-research', label: 'AI Research', Icon: Cpu         },
+            { id: 'about',       label: 'About',       Icon: BookOpen    },
             { id: 'settings',    label: 'Settings',    Icon: Settings    },
           ] as const).map(({ id, label, Icon }) => (
             <button
@@ -542,6 +545,9 @@ function Dashboard() {
 
         {/* Settings */}
         {activeTab === 'settings' && <SettingsPanel />}
+
+        {/* About */}
+        {activeTab === 'about' && <AboutPanel />}
 
         {/* TAB 6: Watchlist */}
         {activeTab === 'watchlist' && <WatchlistPanel />}
