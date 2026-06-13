@@ -216,11 +216,15 @@ jobs:
         run: brew install unixodbc create-dmg
 
       - name: Set up macOS codesigning certificate
-        if: ${{ secrets.MACOS_CERTIFICATE_BASE64 != '' }}
         env:
           MACOS_CERTIFICATE_BASE64: ${{ secrets.MACOS_CERTIFICATE_BASE64 }}
           MACOS_CERTIFICATE_PWD: ${{ secrets.MACOS_CERTIFICATE_PWD }}
         run: |
+          if [[ -z "$MACOS_CERTIFICATE_BASE64" ]]; then
+            echo "MACOS_CERTIFICATE_BASE64 is empty. Skipping codesign certificate setup."
+            exit 0
+          fi
+
           CERTIFICATE_PATH=$RUNNER_TEMP/build_certificate.p12
           KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
           KEYCHAIN_PASSWORD=$(openssl rand -base64 12)
