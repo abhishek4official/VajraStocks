@@ -23,14 +23,23 @@ if config.config_file_name is not None:
 # target_metadata is set to our declarative model base
 target_metadata = Base.metadata
 
-# Load application config dynamically
-app_config = Config.load()
+# Load application config — prefer AppData/Roaming/VajraStocks, fall back to local config/config.yaml
+import os as _os
+_appdata = _os.environ.get("APPDATA", "")
+_appdata_config = Path(_appdata) / "VajraStocks" / "config.yaml" if _appdata else None
+
+if _appdata_config and _appdata_config.exists():
+    app_config = Config.load(_appdata_config)
+else:
+    app_config = Config.load()
+
 db_url = app_config.database.connection_string
 
 # Bootstrap database and localdb instance before any connection attempt
-from stocks.db.connection import ensure_localdb_started, create_database_if_not_exists
-ensure_localdb_started()
-create_database_if_not_exists(db_url)
+if db_url.lower().startswith("mssql"):
+    from stocks.db.connection import ensure_localdb_started, create_mssql_database_if_not_exists
+    ensure_localdb_started()
+    create_mssql_database_if_not_exists(db_url)
 
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode.

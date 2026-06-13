@@ -15,7 +15,7 @@ type ChartTimeframe = '1W' | '1M' | '3M' | '6M' | '1Y' | 'MAX';
 type ChartOverlay = 'sma20' | 'sma50' | 'sma200' | 'ema9' | 'ema21' | 'bb' | 'sr' | 'nifty';
 
 interface PriceChartProps {
-  indicatorToShow: 'RSI' | 'MACD' | 'NONE';
+  indicatorToShow: 'RSI' | 'MACD' | 'CMF' | 'STOCHRSI' | 'NONE';
   timeframe?: ChartTimeframe;
   overlays?: Set<ChartOverlay>;
   niftyCandles?: import('../services/api').CandleData[];
@@ -38,10 +38,7 @@ export const PriceChart: React.FC<PriceChartProps> = ({
   niftyCandles = [], customLines = [], drawMode = false, onChartClick,
 }) => {
   const chartContainerRef = useRef<HTMLDivElement>(null);
-  const indicatorContainerRef = useRef<HTMLDivElement>(null);
-  
   const mainChartRef = useRef<any>(null);
-  const indChartRef = useRef<any>(null);
 
   const { 
     chartType, 
@@ -156,7 +153,7 @@ export const PriceChart: React.FC<PriceChartProps> = ({
 
     // 3. Define responsive chart options
     const width = chartContainerRef.current.clientWidth;
-    const height = indicatorToShow !== 'NONE' ? 380 : 500;
+    const height = indicatorToShow !== 'NONE' ? 540 : 500;
 
     const commonChartOptions: any = {
       layout: {
@@ -385,127 +382,104 @@ export const PriceChart: React.FC<PriceChartProps> = ({
       volumeSeries.setData(volumeData);
       
       mainChart.priceScale('').applyOptions({
-        scaleMargins: {
-          top: 0.75, // volume at bottom
-          bottom: 0,
-        },
+        scaleMargins: { top: 0.75, bottom: 0 },
       });
     }
 
-    // 8. Handle dynamic indicator lower pane synchronizer
-    let indChart: any = null;
+    // 8. Indicator lower pane — uses Lightweight Charts v5 native multi-pane API.
+    // addPane() creates a second pane below the main chart within the SAME chart instance,
+    // so there is no DOM gap. setStretchFactor controls the height split.
+    if (indicatorToShow !== 'NONE' && indicators.length > 0) {
+      const indicatorPane = mainChart.addPane();
+      // 70% main / 30% indicator
+      mainChart.panes()[0].setStretchFactor(70);
+      indicatorPane.setStretchFactor(30);
 
-    if (indicatorToShow !== 'NONE' && indicatorContainerRef.current && indicators.length > 0) {
-      indChart = createChart(indicatorContainerRef.current, {
-        ...commonChartOptions,
-        width: width,
-        height: 180,
-        rightPriceScale: {
-          borderColor: '#252a34',
-        },
-      } as any);
-      indChartRef.current = indChart;
+      // All indicator series go into paneIndex=1 (the newly created pane)
+      const addInd = (type: any, opts: any) =>
+        mainChart.addSeries(type, { priceLineVisible: false, ...opts }, 1);
 
       if (indicatorToShow === 'RSI') {
         const rsiData: LineData[] = indicators
           .filter(ind => ind.rsi_14 !== null && ind.rsi_14 !== undefined && timeMap.has(ind.time))
-          .map(ind => ({
-            time: timeMap.get(ind.time) as any,
-            value: Number(ind.rsi_14)
-          }));
+          .map(ind => ({ time: timeMap.get(ind.time) as any, value: Number(ind.rsi_14) }));
 
         if (rsiData.length > 0) {
-          const rsiSeries = indChart.addSeries(LineSeries, {
-            color: '#a855f7', // purple glow
-            lineWidth: 1.5,
-            title: 'RSI 14'
-          });
+          const rsiSeries = addInd(LineSeries, { color: '#a855f7', lineWidth: 1.5, title: 'RSI 14' });
           rsiSeries.setData(rsiData);
 
-          // Add overbought / oversold lines at 70 / 30
-          const rsiUpper = indChart.addSeries(LineSeries, {
-            color: 'rgba(239, 68, 68, 0.3)',
-            lineWidth: 1,
-            lineStyle: 3,
-            priceLineVisible: false
-          });
-          rsiUpper.setData(rsiData.map(d => ({ time: d.time, value: 70 })));
+          const rsiUpper = addInd(LineSeries, { color: 'rgba(239, 68, 68, 0.3)', lineWidth: 1, lineStyle: 3 });
+          rsiUpper.setData(rsiData.map((d: any) => ({ time: d.time, value: 70 })));
 
-          const rsiLower = indChart.addSeries(LineSeries, {
-            color: 'rgba(16, 185, 129, 0.3)',
-            lineWidth: 1,
-            lineStyle: 3,
-            priceLineVisible: false
-          });
-          rsiLower.setData(rsiData.map(d => ({ time: d.time, value: 30 })));
+          const rsiLower = addInd(LineSeries, { color: 'rgba(16, 185, 129, 0.3)', lineWidth: 1, lineStyle: 3 });
+          rsiLower.setData(rsiData.map((d: any) => ({ time: d.time, value: 30 })));
         }
       } else if (indicatorToShow === 'MACD') {
         const macdLineData: LineData[] = indicators
           .filter(ind => ind.macd_line !== null && ind.macd_line !== undefined && timeMap.has(ind.time))
-          .map(ind => ({
-            time: timeMap.get(ind.time) as any,
-            value: Number(ind.macd_line)
-          }));
+          .map(ind => ({ time: timeMap.get(ind.time) as any, value: Number(ind.macd_line) }));
 
         const macdSignalData: LineData[] = indicators
           .filter(ind => ind.macd_signal !== null && ind.macd_signal !== undefined && timeMap.has(ind.time))
-          .map(ind => ({
-            time: timeMap.get(ind.time) as any,
-            value: Number(ind.macd_signal)
-          }));
+          .map(ind => ({ time: timeMap.get(ind.time) as any, value: Number(ind.macd_signal) }));
 
         const macdHistData: HistogramData[] = indicators
           .filter(ind => ind.macd_histogram !== null && ind.macd_histogram !== undefined && timeMap.has(ind.time))
           .map(ind => {
             const val = Number(ind.macd_histogram);
-            return {
-              time: timeMap.get(ind.time) as any,
-              value: val,
-              color: val >= 0 ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'
-            };
+            return { time: timeMap.get(ind.time) as any, value: val, color: val >= 0 ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)' };
           });
 
         if (macdLineData.length > 0) {
-          const macdLineSeries = indChart.addSeries(LineSeries, {
-            color: '#2563eb', // blue
-            lineWidth: 1.5,
-            title: 'MACD'
-          });
+          const macdLineSeries = addInd(LineSeries, { color: '#2563eb', lineWidth: 1.5, title: 'MACD' });
           macdLineSeries.setData(macdLineData);
 
-          const signalSeries = indChart.addSeries(LineSeries, {
-            color: '#f59e0b', // amber
-            lineWidth: 1.5,
-            title: 'Signal'
-          });
+          const signalSeries = addInd(LineSeries, { color: '#f59e0b', lineWidth: 1.5, title: 'Signal' });
           signalSeries.setData(macdSignalData);
 
-          const histSeries = indChart.addSeries(HistogramSeries, {
-            title: 'Histogram'
-          });
+          const histSeries = addInd(HistogramSeries, { title: 'Histogram' });
           histSeries.setData(macdHistData);
         }
+      } else if (indicatorToShow === 'CMF') {
+        const cmfData: HistogramData[] = indicators
+          .filter(ind => ind.cmf_20 !== null && ind.cmf_20 !== undefined && timeMap.has(ind.time))
+          .map(ind => {
+            const val = Number(ind.cmf_20);
+            return { time: timeMap.get(ind.time) as any, value: val, color: val >= 0 ? 'rgba(16, 185, 129, 0.55)' : 'rgba(239, 68, 68, 0.55)' };
+          });
+
+        if (cmfData.length > 0) {
+          const cmfSeries = addInd(HistogramSeries, { title: 'CMF 20' });
+          cmfSeries.setData(cmfData);
+
+          const zeroLine = addInd(LineSeries, { color: 'rgba(148, 163, 184, 0.35)', lineWidth: 1, lineStyle: 2, lastValueVisible: false });
+          zeroLine.setData(cmfData.map((d: any) => ({ time: d.time, value: 0 })));
+        }
+      } else if (indicatorToShow === 'STOCHRSI') {
+        const kData: LineData[] = indicators
+          .filter(ind => ind.stochrsi_k !== null && ind.stochrsi_k !== undefined && timeMap.has(ind.time))
+          .map(ind => ({ time: timeMap.get(ind.time) as any, value: Number(ind.stochrsi_k) }));
+
+        const dData: LineData[] = indicators
+          .filter(ind => ind.stochrsi_d !== null && ind.stochrsi_d !== undefined && timeMap.has(ind.time))
+          .map(ind => ({ time: timeMap.get(ind.time) as any, value: Number(ind.stochrsi_d) }));
+
+        if (kData.length > 0) {
+          const kSeries = addInd(LineSeries, { color: '#22d3ee', lineWidth: 1.5, title: 'StochRSI %K' });
+          kSeries.setData(kData);
+
+          if (dData.length > 0) {
+            const dSeries = addInd(LineSeries, { color: '#f59e0b', lineWidth: 1, lineStyle: 1, title: '%D' });
+            dSeries.setData(dData);
+          }
+
+          const obSeries = addInd(LineSeries, { color: 'rgba(239, 68, 68, 0.3)', lineWidth: 1, lineStyle: 3, lastValueVisible: false });
+          obSeries.setData(kData.map((d: any) => ({ time: d.time, value: 80 })));
+
+          const osSeries = addInd(LineSeries, { color: 'rgba(16, 185, 129, 0.3)', lineWidth: 1, lineStyle: 3, lastValueVisible: false });
+          osSeries.setData(kData.map((d: any) => ({ time: d.time, value: 20 })));
+        }
       }
-
-      // 9. Synchronize horizontal scrolling time scales
-      let isSyncing = false;
-      
-      const mainTimeScale = mainChart.timeScale();
-      const indTimeScale = indChart.timeScale();
-
-      mainTimeScale.subscribeVisibleLogicalRangeChange((range: any) => {
-        if (isSyncing) return;
-        isSyncing = true;
-        if (range) indTimeScale.setVisibleLogicalRange(range);
-        isSyncing = false;
-      });
-
-      indTimeScale.subscribeVisibleLogicalRangeChange((range: any) => {
-        if (isSyncing) return;
-        isSyncing = true;
-        if (range) mainTimeScale.setVisibleLogicalRange(range);
-        isSyncing = false;
-      });
     }
 
     // 10. Handle container resizing smoothly
@@ -513,7 +487,6 @@ export const PriceChart: React.FC<PriceChartProps> = ({
       if (!chartContainerRef.current) return;
       const w = chartContainerRef.current.clientWidth;
       mainChart.resize(w, height);
-      if (indChart) indChart.resize(w, 180);
     };
 
     window.addEventListener('resize', handleResize);
@@ -523,10 +496,6 @@ export const PriceChart: React.FC<PriceChartProps> = ({
       if (mainChartRef.current) {
         mainChartRef.current.remove();
         mainChartRef.current = null;
-      }
-      if (indChartRef.current) {
-        indChartRef.current.remove();
-        indChartRef.current = null;
       }
     };
 
@@ -553,33 +522,24 @@ export const PriceChart: React.FC<PriceChartProps> = ({
   // Show shimmer skeleton while chart data is loading
   if (isLoading && candles.length === 0) {
     return (
-      <div className="flex flex-col gap-2 w-full">
+      <div className="w-full">
         <div className="w-full rounded-xl border border-slate-800/80 bg-[#101217] overflow-hidden"
-          style={{ height: indicatorToShow !== 'NONE' ? 380 : 500 }}>
+          style={{ height: indicatorToShow !== 'NONE' ? 540 : 500 }}>
           <div className="h-full w-full animate-pulse">
             <div className="h-full bg-gradient-to-r from-slate-900/0 via-slate-800/30 to-slate-900/0 bg-[length:400%_100%]"
               style={{ animation: 'shimmer 1.8s ease-in-out infinite', backgroundPosition: '200% 0' }} />
           </div>
         </div>
-        {indicatorToShow !== 'NONE' && (
-          <div className="w-full rounded-xl border border-slate-800/80 bg-[#101217] overflow-hidden animate-pulse" style={{ height: 180 }} />
-        )}
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col gap-2 w-full">
+    <div className="w-full">
       <div
         ref={chartContainerRef}
         className="w-full rounded-xl overflow-hidden border border-slate-800/80 bg-[#101217]"
       />
-      {indicatorToShow !== 'NONE' && (
-        <div
-          ref={indicatorContainerRef}
-          className="w-full rounded-xl overflow-hidden border border-slate-800/80 bg-[#101217]"
-        />
-      )}
     </div>
   );
 };

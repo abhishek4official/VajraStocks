@@ -16,7 +16,7 @@ class ConfluenceService:
     def __init__(self, db_session: Session):
         self.db = db_session
 
-    def calculate_and_save_levels(self, symbol_id: int) -> list[SymbolConfluenceLevel]:
+    def calculate_and_save_levels(self, symbol_id: int, commit: bool = True) -> list[SymbolConfluenceLevel]:
         """Calculates confluence S/R levels for a symbol and stores them in the database."""
         # 1. Fetch historical price data (last 200 daily bars to cover swing lookbacks and volume profile)
         prices = self.db.scalars(
@@ -273,7 +273,8 @@ class ConfluenceService:
             self.db.add(entity)
             saved_entities.append(entity)
 
-        self.db.commit()
+        if commit:
+            self.db.commit()
         logger.info(f"Calculated and saved {len(saved_entities)} confluence levels for symbol_id {symbol_id}.")
         return saved_entities
 

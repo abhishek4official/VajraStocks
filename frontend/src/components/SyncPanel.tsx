@@ -1,16 +1,19 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useStockStore } from '../store/useStockStore';
 import { useSettingsCtx } from '../contexts/SettingsContext';
-import { 
-  RefreshCw, 
-  Settings, 
-  Cpu, 
-  History, 
-  Heart, 
-  CheckCircle, 
+import { apiService } from '../services/api';
+import {
+  RefreshCw,
+  Settings,
+  Cpu,
+  History,
+  Heart,
+  CheckCircle,
   AlertOctagon,
-  AlertTriangle 
+  AlertTriangle
 } from 'lucide-react';
+
+interface RecalcProgress { status: string; total: number; processed: number; failed: number; }
 
 export const SyncPanel: React.FC = () => {
   const {
@@ -29,16 +32,29 @@ export const SyncPanel: React.FC = () => {
   const pollIntervalMs = get('UI', 'sync_poll_interval_ms', 5000);
 
   const [activeSubTab, setActiveSubTab] = useState<'history' | 'status'>('history');
+  const [recalcProgress, setRecalcProgress] = useState<RecalcProgress | null>(null);
+  const recalcPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     fetchSyncLogs();
-    // Poll interval driven by DB setting UI/sync_poll_interval_ms (default 5000 ms)
-    const interval = setInterval(() => {
-      fetchSyncLogs();
-    }, pollIntervalMs);
-
+    const interval = setInterval(() => { fetchSyncLogs(); }, pollIntervalMs);
     return () => clearInterval(interval);
   }, [pollIntervalMs]);
+
+  const startRecalcProgressPolling = () => {
+    if (recalcPollRef.current) return;
+    recalcPollRef.current = setInterval(async () => {
+      try {
+        const prog = await apiService.getRecalcProgress();
+        setRecalcProgress(prog);
+        if (prog.status === 'DONE' || prog.status === 'ERROR' || prog.status === 'IDLE') {
+          if (recalcPollRef.current) { clearInterval(recalcPollRef.current); recalcPollRef.current = null; }
+        }
+      } catch { /* ignore */ }
+    }, 1500);
+  };
+
+  const isRecalcRunning = recalcProgress?.status === 'RUNNING';
 
   const totalRegistered = syncStatuses.length;
   const successfulCount = syncStatuses.filter(s => s.last_attempt_status === 'SUCCESS').length;
@@ -120,14 +136,14 @@ export const SyncPanel: React.FC = () => {
         </div>
 
         <div className="flex gap-3">
-          {/* Cancel Sync Button */}
-          {isJobRunning && (
+          {/* Cancel Sync / Recalculate Button */}
+          {(isJobRunning || isRecalcRunning) && (
             <button
               onClick={cancelSync}
               className="flex items-center gap-2 px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-xs font-bold transition duration-150 cursor-pointer shadow-lg shadow-rose-900/20 animate-pulse"
             >
               <AlertOctagon className="w-3.5 h-3.5 text-white" />
-              Stop Active Sync
+              {isRecalcRunning ? 'Stop Recalculation' : 'Stop Active Sync'}
             </button>
           )}
 
@@ -147,19 +163,47 @@ export const SyncPanel: React.FC = () => {
 
           {/* Engine Recalculate */}
           <button
-            onClick={() => triggerRecalculate()}
-            disabled={isJobRunning}
+            onClick={() => { triggerRecalculate(); startRecalcProgressPolling(); }}
+            disabled={isJobRunning || isRecalcRunning}
             className={`flex items-center gap-2 px-4 py-2 ${
-              isJobRunning
+              isJobRunning || isRecalcRunning
                 ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
                 : 'bg-purple-600 hover:bg-purple-500 text-white shadow-lg shadow-purple-900/20'
             } rounded-lg text-xs font-bold transition duration-150 cursor-pointer`}
           >
-            <Cpu className="w-3.5 h-3.5" />
-            Recalculate All Indicators
+            <Cpu className={`w-3.5 h-3.5 ${isRecalcRunning ? 'animate-spin' : ''}`} />
+            {isRecalcRunning ? 'Recalculating…' : 'Recalculate All Indicators'}
           </button>
         </div>
       </div>
+
+      {/* Recalculate progress bar */}
+      {recalcProgress && recalcProgress.status !== 'IDLE' && (
+        <div className="p-4 rounded-xl border border-slate-800/80 bg-slate-900/20 shrink-0">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+              <Cpu className={`w-3.5 h-3.5 ${recalcProgress.status === 'RUNNING' ? 'animate-spin text-purple-400' : recalcProgress.status === 'DONE' ? 'text-emerald-400' : 'text-rose-400'}`} />
+              Indicator Recalculation
+            </span>
+            <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${
+              recalcProgress.status === 'RUNNING' ? 'text-amber-400 bg-amber-950/20 border border-amber-900/30 animate-pulse'
+              : recalcProgress.status === 'DONE' ? 'text-emerald-400 bg-emerald-950/20 border border-emerald-900/30'
+              : 'text-rose-400 bg-rose-950/20 border border-rose-900/30'
+            }`}>{recalcProgress.status}</span>
+          </div>
+          <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
+            <div
+              className={`h-2 rounded-full transition-all duration-500 ${recalcProgress.status === 'DONE' ? 'bg-emerald-500' : recalcProgress.status === 'ERROR' ? 'bg-rose-500' : 'bg-purple-500'}`}
+              style={{ width: recalcProgress.total > 0 ? `${Math.round((recalcProgress.processed / recalcProgress.total) * 100)}%` : '0%' }}
+            />
+          </div>
+          <div className="flex justify-between mt-1.5 text-xs font-mono text-slate-500">
+            <span>{recalcProgress.processed} / {recalcProgress.total} symbols</span>
+            {recalcProgress.failed > 0 && <span className="text-rose-400">{recalcProgress.failed} failed</span>}
+            <span>{recalcProgress.total > 0 ? Math.round((recalcProgress.processed / recalcProgress.total) * 100) : 0}%</span>
+          </div>
+        </div>
+      )}
 
       {/* Detail logs sub-tabs */}
       <div className="flex-1 bg-[#121620]/60 rounded-xl border border-slate-800/80 p-4 overflow-hidden flex flex-col min-h-[350px]">

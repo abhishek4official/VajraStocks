@@ -92,7 +92,7 @@ function Dashboard() {
 
   const [showAlerts, setShowAlerts] = useState(false);
 
-  const [indicatorToShow, setIndicatorToShow] = useState<'RSI' | 'MACD' | 'NONE'>('RSI');
+  const [indicatorToShow, setIndicatorToShow] = useState<'RSI' | 'MACD' | 'CMF' | 'STOCHRSI' | 'NONE'>('RSI');
   const [drawMode, setDrawMode] = useState(false);
 
   // Compute 52W High/Low from candles in the store (last 252 trading days ≈ 1 year)
@@ -416,7 +416,7 @@ function Dashboard() {
 
                     {/* Indicator sub-pane */}
                     <div className="flex bg-slate-950/80 p-0.5 rounded-lg border border-slate-850">
-                      {(['RSI', 'MACD', 'NONE'] as const).map(ind => (
+                      {(['RSI', 'MACD', 'CMF', 'STOCHRSI', 'NONE'] as const).map(ind => (
                         <button
                           key={ind}
                           onClick={() => setIndicatorToShow(ind)}

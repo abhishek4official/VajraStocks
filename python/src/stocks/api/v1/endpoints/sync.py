@@ -52,15 +52,28 @@ def _execute_async_sync(request: Request, symbols: list[str] | None = None):
 
 
 def _execute_async_recalculate(request: Request, symbol_ticker: str | None = None):
-    """Recalculates all derived data (indicators, HA, Renko, snapshots) from raw prices."""
+    """Pipelined chunking recalculate.
+
+    For each chunk of CHUNK_SIZE symbols:
+      1. FETCH   — main thread reads raw prices from DB (sequential, no locks held)
+      2. COMPUTE — parallel CPU work via ProcessPoolExecutor (zero DB access)
+      3. WRITE   — main thread writes all results + snapshots in ONE transaction,
+                   then commits once; rolls back the entire chunk on any error.
+    """
+    import multiprocessing
+    from concurrent.futures import ProcessPoolExecutor, as_completed
+    from loguru import logger
     from sqlalchemy import delete
     from stocks.db.models import DailyHeikinAshi, DailyIndicator, LineBreakLine, RenkoBrick
+    from stocks.services.sync_engine import calculate_derived_data_in_memory
+
+    CHUNK_SIZE = 50
+    EPOCH = datetime.strptime("1970-01-01", "%Y-%m-%d").date()
 
     cfg = get_config(request)
     db_manager = request.app.state.db_manager
     session = db_manager.get_session()
     db_service = DatabaseService(cfg, session)
-    sync_engine = SyncEngine(cfg, db_manager)
 
     try:
         request.app.state.cancel_recalculate = False
@@ -71,28 +84,164 @@ def _execute_async_recalculate(request: Request, symbol_ticker: str | None = Non
                 clean_sym = f"{clean_sym}.NS"
             active_symbols = [s for s in active_symbols if s.symbol == clean_sym]
 
-        for symbol_obj in active_symbols:
-            if getattr(request.app.state, "cancel_recalculate", False):
-                from loguru import logger
-                logger.warning("Recalculation cancelled by user request.")
-                break
-            session.execute(delete(DailyIndicator).where(DailyIndicator.symbol_id == symbol_obj.id))
-            session.execute(delete(DailyHeikinAshi).where(DailyHeikinAshi.symbol_id == symbol_obj.id))
-            session.execute(delete(RenkoBrick).where(RenkoBrick.symbol_id == symbol_obj.id))
-            session.execute(delete(LineBreakLine).where(LineBreakLine.symbol_id == symbol_obj.id))
-            session.commit()
-
-            prices = db_service.get_prices_for_window(symbol_obj.id, datetime.strptime("1970-01-01", "%Y-%m-%d").date())
-            if prices:
-                sync_engine.calculate_and_save_derived_data(db_service, symbol_obj, prices)
+        total = len(active_symbols)
+        request.app.state.recalc_progress = {
+            "status": "RUNNING", "total": total, "processed": 0, "failed": 0,
+        }
 
         from stocks.services.screening import ScreeningService
-        ScreeningService(cfg, session).refresh_all_snapshots()
+        screening_svc = ScreeningService(cfg, session)
+        nifty_21d_return = screening_svc._get_nifty_21d_return()
+
+        processed = 0
+        failed = 0
+        max_workers = min(10, multiprocessing.cpu_count())
+
+        with ProcessPoolExecutor(max_workers=max_workers) as executor:
+            for chunk_start in range(0, total, CHUNK_SIZE):
+                if getattr(request.app.state, "cancel_recalculate", False):
+                    logger.warning("Recalculation cancelled by user request.")
+                    break
+
+                chunk = active_symbols[chunk_start:chunk_start + CHUNK_SIZE]
+                symbol_map = {sym.id: sym.symbol for sym in chunk}
+
+                # ── 1. FETCH (1 query for the whole chunk) ───────────────────
+                prices_batch = db_service.get_prices_for_symbols_batch(
+                    list(symbol_map.keys()), EPOCH
+                )
+                chunk_inputs: list[tuple[int, str, list]] = []
+                for sid, sym_str in symbol_map.items():
+                    prices = prices_batch.get(sid, [])
+                    if prices:
+                        chunk_inputs.append((sid, sym_str, prices))
+                    else:
+                        logger.warning(f"[{sym_str}] No prices found, skipping.")
+                        failed += 1
+
+                if not chunk_inputs:
+                    request.app.state.recalc_progress["failed"] = failed
+                    continue
+
+                # ── 2. COMPUTE (parallel across CPU cores) ───────────────────
+                futures = {
+                    executor.submit(calculate_derived_data_in_memory, sid, sym_str, prices): sym_str
+                    for sid, sym_str, prices in chunk_inputs
+                }
+
+                chunk_results: list[dict] = []
+                for future in as_completed(futures):
+                    sym_str = futures[future]
+                    try:
+                        chunk_results.append(future.result())
+                    except Exception as calc_err:
+                        logger.error(f"[{sym_str}] Calculation failed: {calc_err}")
+                        failed += 1
+
+                if not chunk_results:
+                    request.app.state.recalc_progress["failed"] = failed
+                    continue
+
+                # ── 3. WRITE (4 DELETEs + 4 bulk INSERTs for the whole chunk)
+                # All writes happen inside one transaction; commit once at the end.
+                try:
+                    result_ids = [r["symbol_id"] for r in chunk_results]
+
+                    # 4 batch DELETEs (IN clause) instead of 4 × len(chunk) individual ones
+                    session.execute(delete(DailyIndicator).where(DailyIndicator.symbol_id.in_(result_ids)))
+                    session.execute(delete(DailyHeikinAshi).where(DailyHeikinAshi.symbol_id.in_(result_ids)))
+                    session.execute(delete(RenkoBrick).where(RenkoBrick.symbol_id.in_(result_ids)))
+                    session.execute(delete(LineBreakLine).where(LineBreakLine.symbol_id.in_(result_ids)))
+
+                    # Accumulate all rows across the chunk, then 4 bulk INSERTs
+                    all_indicators:   list[dict] = []
+                    all_ha_candles:   list[dict] = []
+                    all_renko_bricks: list[dict] = []
+                    all_line_breaks:  list[dict] = []
+
+                    for result in chunk_results:
+                        sid = result["symbol_id"]
+                        for ind in result["indicators"]:
+                            ind["symbol_id"] = sid
+                            ind["granularity"] = "1d"
+                        all_indicators.extend(result["indicators"])
+
+                        for ha in result["ha_candles"]:
+                            ha["symbol_id"] = sid
+                            ha["granularity"] = "1d"
+                        all_ha_candles.extend(result["ha_candles"])
+
+                        for brick in result["renko_bricks"]:
+                            brick["symbol_id"] = sid
+                        all_renko_bricks.extend(result["renko_bricks"])
+
+                        for lb in result["line_breaks"]:
+                            lb["symbol_id"] = sid
+                        all_line_breaks.extend(result["line_breaks"])
+
+                    if all_indicators:
+                        session.bulk_insert_mappings(DailyIndicator, all_indicators)
+                    if all_ha_candles:
+                        session.bulk_insert_mappings(DailyHeikinAshi, all_ha_candles)
+                    if all_renko_bricks:
+                        session.bulk_insert_mappings(RenkoBrick, all_renko_bricks)
+                    if all_line_breaks:
+                        session.bulk_insert_mappings(LineBreakLine, all_line_breaks)
+
+                    # Confluence S/R levels — per-symbol with savepoints.
+                    # Runs after bulk inserts so DailyIndicator rows (ATR, SMAs) are
+                    # already visible in the open transaction for the confluence reads.
+                    from stocks.services.quant.confluence_service import ConfluenceService
+                    confluence_svc = ConfluenceService(session)
+                    for result in chunk_results:
+                        try:
+                            with session.begin_nested():
+                                confluence_svc.calculate_and_save_levels(result["symbol_id"], commit=False)
+                        except Exception as conf_err:
+                            logger.error(f"[{result['symbol']}] Confluence calculation failed: {conf_err}")
+
+                    # Snapshot refresh — per-symbol with savepoints so one bad symbol
+                    # cannot abort the chunk's transaction.
+                    for result in chunk_results:
+                        try:
+                            with session.begin_nested():
+                                screening_svc.refresh_snapshot_for_symbol(
+                                    result["symbol_id"],
+                                    nifty_21d_return=nifty_21d_return,
+                                    commit=False,
+                                )
+                        except Exception as snap_err:
+                            logger.error(f"[{result['symbol']}] Snapshot refresh failed: {snap_err}")
+
+                    session.commit()
+                    processed += len(chunk_results)
+
+                except Exception as write_err:
+                    logger.error(
+                        f"Chunk write failed (symbols {chunk_start}–{chunk_start + CHUNK_SIZE}): {write_err}"
+                    )
+                    try:
+                        session.rollback()
+                    except Exception:
+                        pass
+                    failed += len(chunk_results)
+
+                request.app.state.recalc_progress["processed"] = processed
+                request.app.state.recalc_progress["failed"] = failed
 
         from stocks.services.strategy_screener import StrategyScreenerService
         StrategyScreenerService(cfg, session).refresh_all_strategies()
-    except Exception:
-        pass
+
+        request.app.state.recalc_progress["status"] = "DONE"
+
+    except Exception as err:
+        logger.error(f"Recalculate job failed: {err}")
+        try:
+            session.rollback()
+        except Exception:
+            pass
+        if hasattr(request.app.state, "recalc_progress"):
+            request.app.state.recalc_progress["status"] = "ERROR"
     finally:
         session.close()
 
@@ -125,6 +274,15 @@ def run_derived_recalculations(request: Request, background_tasks: BackgroundTas
     """Triggers a background rebuild of technical indicators and market structures."""
     background_tasks.add_task(_execute_async_recalculate, request, symbol)
     return {"message": "Derived data recalculation job triggered successfully in the background."}
+
+
+@router.get("/recalculate/progress")
+def get_recalculate_progress(request: Request):
+    """Returns live progress of the currently running (or last completed) recalculation job."""
+    prog = getattr(request.app.state, "recalc_progress", None)
+    if prog is None:
+        return {"status": "IDLE", "total": 0, "processed": 0, "failed": 0}
+    return prog
 
 
 @router.get("/jobs", response_model=list[SyncJobResponse])

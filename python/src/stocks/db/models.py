@@ -190,6 +190,13 @@ class DailyIndicator(Base):
     stoch_k: Mapped[float | None] = mapped_column(Float, nullable=True)
     stoch_d: Mapped[float | None] = mapped_column(Float, nullable=True)
 
+    # Chaikin Money Flow (20) and Stochastic RSI (14, 14, 3, 3)
+    cmf_20: Mapped[float | None] = mapped_column(Float, nullable=True)
+    stochrsi_k: Mapped[float | None] = mapped_column(Float, nullable=True)
+    stochrsi_d: Mapped[float | None] = mapped_column(Float, nullable=True)
+    stochrsi_bullish_xover: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    stochrsi_bearish_xover: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+
     # Relationships
     symbol_obj: Mapped["Symbol"] = relationship("Symbol", back_populates="indicators")
 
@@ -340,6 +347,20 @@ class ScreeningSnapshot(Base):
     volume_score_val: Mapped[float | None] = mapped_column(Float, nullable=True)
     rs_score_val: Mapped[float | None] = mapped_column(Float, nullable=True)
     momentum_score_val: Mapped[float | None] = mapped_column(Float, nullable=True)
+    cmf_score_val: Mapped[float | None] = mapped_column(Float, nullable=True)
+    breakout_score_val: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    # CMF snapshot
+    cmf_20: Mapped[float | None] = mapped_column(Float, nullable=True)
+    cmf_20_prev: Mapped[float | None] = mapped_column(Float, nullable=True)
+    cmf_crossed_above_zero: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+
+    # StochRSI snapshot
+    stochrsi_k: Mapped[float | None] = mapped_column(Float, nullable=True)
+    stochrsi_d: Mapped[float | None] = mapped_column(Float, nullable=True)
+    stochrsi_zone: Mapped[str | None] = mapped_column(String(15), nullable=True)
+    stochrsi_bullish_xover_days_ago: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    stochrsi_bearish_xover_days_ago: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     updated_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now())
 
@@ -350,6 +371,8 @@ class ScreeningSnapshot(Base):
         Index("ix_snapshot_rsi", "rsi_14"),
         Index("ix_snapshot_sma_200", "sma_200_cross_direction"),
         Index("ix_snapshot_bias", "regime_bias"),
+        Index("ix_snapshot_cmf", "cmf_20"),
+        Index("ix_snapshot_stochrsi_k", "stochrsi_k"),
     )
 
 

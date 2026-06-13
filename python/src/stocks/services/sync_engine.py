@@ -11,6 +11,122 @@ from stocks.services.symbol import SymbolService
 from stocks.services.validation import ValidationService
 
 
+# ── Pure worker function ───────────────────────────────────────────────────────
+# Module-level so it is picklable for ProcessPoolExecutor.
+# All heavy imports are lazy (inside the body) so spawned worker processes do
+# not trigger DB-connection imports during module initialisation.
+
+def calculate_derived_data_in_memory(
+    symbol_id: int,
+    symbol: str,
+    prices: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """CPU-bound indicator calculation with zero DB access.
+
+    Inputs and outputs are standard Python types (dict, list, float, str,
+    datetime.date) so they are fully picklable across process boundaries.
+
+    Returns:
+        {
+            "symbol_id": int,
+            "symbol": str,
+            "indicators": [...],    # list of indicator row dicts
+            "ha_candles": [...],    # list of Heikin-Ashi row dicts
+            "renko_bricks": [...],
+            "line_breaks":  [...],
+        }
+    """
+    import pandas as pd
+    from stocks.config import Config as _Config
+    from stocks.services.indicator_engine import IndicatorEngine
+    from stocks.services.market_structure import MarketStructureEngine
+
+    empty: dict[str, Any] = {
+        "symbol_id": symbol_id, "symbol": symbol,
+        "indicators": [], "ha_candles": [], "renko_bricks": [], "line_breaks": [],
+    }
+    if not prices:
+        return empty
+
+    # Engines store config but do not read any config values in their methods
+    _cfg = _Config()
+    indicator_engine = IndicatorEngine(_cfg)
+    market_structure_engine = MarketStructureEngine(_cfg)
+
+    df = pd.DataFrame(prices)
+    df.set_index(pd.to_datetime(df["trading_date"]), inplace=True)
+    df.sort_index(inplace=True)
+
+    try:
+        df_ind = indicator_engine.calculate_indicators(df)
+    except Exception as exc:
+        raise RuntimeError(f"[{symbol}] Indicator calculation failed: {exc}") from exc
+
+    def _f(val: Any) -> float | None:
+        return None if pd.isna(val) else float(val)
+
+    def _b(val: Any) -> bool | None:
+        try:
+            return None if pd.isna(val) else bool(val)
+        except (TypeError, ValueError):
+            return None
+
+    def _s(val: Any) -> str | None:
+        if val is None:
+            return None
+        try:
+            return None if pd.isna(val) else str(val)
+        except (TypeError, ValueError):
+            return str(val)
+
+    indicators: list[dict[str, Any]] = []
+    for idx, row in df_ind.iterrows():
+        indicators.append({
+            "trading_date":           idx.date(),
+            "rsi_14":                 _f(row.get("rsi_14")),
+            "atr_14":                 _f(row.get("atr_14")),
+            "sma_20":                 _f(row.get("sma_20")),
+            "sma_50":                 _f(row.get("sma_50")),
+            "sma_200":                _f(row.get("sma_200")),
+            "ema_9":                  _f(row.get("ema_9")),
+            "ema_20":                 _f(row.get("ema_20")),
+            "ema_21":                 _f(row.get("ema_21")),
+            "macd_line":              _f(row.get("macd_line")),
+            "macd_signal":            _f(row.get("macd_signal")),
+            "macd_histogram":         _f(row.get("macd_histogram")),
+            "bb_upper":               _f(row.get("bb_upper")),
+            "bb_middle":              _f(row.get("bb_middle")),
+            "bb_lower":               _f(row.get("bb_lower")),
+            "adx_14":                 _f(row.get("adx_14")),
+            "plus_di":                _f(row.get("plus_di")),
+            "minus_di":               _f(row.get("minus_di")),
+            "obv":                    _f(row.get("obv")),
+            "supertrend":             _f(row.get("supertrend")),
+            "supertrend_dir":         _s(row.get("supertrend_dir")),
+            "stoch_k":                _f(row.get("stoch_k")),
+            "stoch_d":                _f(row.get("stoch_d")),
+            "cmf_20":                 _f(row.get("cmf_20")),
+            "stochrsi_k":             _f(row.get("stochrsi_k")),
+            "stochrsi_d":             _f(row.get("stochrsi_d")),
+            "stochrsi_bullish_xover": _b(row.get("stochrsi_bullish_xover")),
+            "stochrsi_bearish_xover": _b(row.get("stochrsi_bearish_xover")),
+        })
+
+    # Cold-start: full historical price series is always passed for recalculate
+    ha_candles:   list[dict[str, Any]] = market_structure_engine.generate_heikin_ashi(df)
+    renko_bricks: list[dict[str, Any]] = market_structure_engine.generate_renko_bricks(df)
+    line_breaks:  list[dict[str, Any]] = market_structure_engine.generate_line_breaks(df)
+
+    return {
+        "symbol_id":    symbol_id,
+        "symbol":       symbol,
+        "indicators":   indicators,
+        "ha_candles":   ha_candles,
+        "renko_bricks": renko_bricks,
+        "line_breaks":  line_breaks,
+    }
+
+
 class SyncEngine:
     """Orchestrator to run, monitor, and resume stock data sync jobs using distinct sub-services."""
 
@@ -328,7 +444,8 @@ class SyncEngine:
             session.close()
 
     def calculate_and_save_derived_data(
-        self, db_service: DatabaseService, symbol_obj: Any, clean_prices: list[dict[str, Any]]
+        self, db_service: DatabaseService, symbol_obj: Any, clean_prices: list[dict[str, Any]],
+        commit: bool = True,
     ) -> None:
         """Calculates indicators and market structures incrementally and saves them in isolated transactions."""
         if not clean_prices:
@@ -392,6 +509,11 @@ class SyncEngine:
                 "supertrend_dir": None if (row.get("supertrend_dir") is None or (isinstance(row.get("supertrend_dir"), float) and pd.isna(row.get("supertrend_dir")))) else str(row["supertrend_dir"]),
                 "stoch_k":  None if pd.isna(row.get("stoch_k"))   else float(row["stoch_k"]),
                 "stoch_d":  None if pd.isna(row.get("stoch_d"))   else float(row["stoch_d"]),
+                "cmf_20":   None if pd.isna(row.get("cmf_20"))    else float(row["cmf_20"]),
+                "stochrsi_k": None if pd.isna(row.get("stochrsi_k")) else float(row["stochrsi_k"]),
+                "stochrsi_d": None if pd.isna(row.get("stochrsi_d")) else float(row["stochrsi_d"]),
+                "stochrsi_bullish_xover": None if pd.isna(row.get("stochrsi_bullish_xover")) else bool(row["stochrsi_bullish_xover"]),
+                "stochrsi_bearish_xover": None if pd.isna(row.get("stochrsi_bearish_xover")) else bool(row["stochrsi_bearish_xover"]),
             }
             indicators_to_save.append(ind_dict)
 
@@ -432,6 +554,7 @@ class SyncEngine:
             ha_candles=ha_candles_to_save,
             renko_bricks=renko_bricks_to_save,
             line_breaks=line_breaks_to_save,
+            commit=commit,
         )
         logger.info(
             f"[{symbol_obj.symbol}] Calculated and saved derived data: "

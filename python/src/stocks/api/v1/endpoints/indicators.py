@@ -25,6 +25,9 @@ class IndicatorRow(BaseModel):
     bb_upper: float | None = None
     bb_middle: float | None = None
     bb_lower: float | None = None
+    cmf_20: float | None = None
+    stochrsi_k: float | None = None
+    stochrsi_d: float | None = None
 
 
 def _get_symbol_id_or_404(symbol: str, db: Session) -> int:
@@ -65,6 +68,9 @@ def get_indicators_history(symbol: str, db: Session = Depends(get_db)):
             "bb_upper": r.bb_upper,
             "bb_middle": r.bb_middle,
             "bb_lower": r.bb_lower,
+            "cmf_20": r.cmf_20,
+            "stochrsi_k": r.stochrsi_k,
+            "stochrsi_d": r.stochrsi_d,
         }
         for r in rows
     ]
