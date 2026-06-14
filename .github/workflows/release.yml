@@ -329,6 +329,14 @@ jobs:
           body_path: release/ReleaseNotes.md
           draft: false
           prerelease: false
+          # Always move the /releases/latest pointer to this release so that the
+          # stable download URLs never change:
+          #   https://github.com/abhishek4official/VajraStocks/releases/latest/download/VajraStocks-Setup.exe
+          #   https://github.com/abhishek4official/VajraStocks/releases/latest/download/VajraStocks.dmg
+          #   https://github.com/abhishek4official/VajraStocks/releases/latest/download/VajraStocks.deb
+          #   https://github.com/abhishek4official/VajraStocks/releases/latest/download/VajraStocks.AppImage
+          #   https://github.com/abhishek4official/VajraStocks/releases/latest/download/VajraStocks.rpm
+          make_latest: true
           files: |
             release/VajraStocks-Setup.exe
             release/VajraStocks.deb
