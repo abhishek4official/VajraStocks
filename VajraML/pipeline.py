@@ -15,8 +15,10 @@ Phase sequence
 """
 
 import pandas as pd
-from sqlalchemy import text
+from sqlalchemy import BigInteger, Float, Integer, cast, select
 from sqlalchemy.engine import Engine
+
+from stocks.db.models import DailyIndicator, DailyPrice, Symbol
 
 from VajraML.config import FORWARD_DAYS, LAG_DAYS, LAG_FEATURES
 from VajraML.features.cross_sectional import compute_cross_sectional_ranks
@@ -65,58 +67,69 @@ def build_dataset(engine: Engine) -> tuple[pd.DataFrame, list[str]]:
     # ── Universe ──────────────────────────────────────────────────────────────
     print("Selecting top-700 universe...")
     symbol_ids = get_universe_symbol_ids(engine)
-    ids_str = ",".join(str(i) for i in symbol_ids)   # safe: all are DB integer PKs
 
     # ── Load prices ───────────────────────────────────────────────────────────
     print("Loading prices...")
-    prices = pd.read_sql(
-        text(f"""
-            SELECT
-                p.symbol_id,
-                s.symbol,
-                p.trading_date,
-                CAST(p."open"    AS FLOAT) AS open,
-                CAST(p."high"    AS FLOAT) AS high,
-                CAST(p."low"     AS FLOAT) AS low,
-                CAST(p."close"   AS FLOAT) AS close,
-                CAST(p.adj_close AS FLOAT) AS adj_close,
-                CAST(p.volume    AS BIGINT) AS volume
-            FROM daily_prices p
-            JOIN symbols s ON s.id = p.symbol_id
-            WHERE p.symbol_id IN ({ids_str})
-              AND p.granularity = '1d'
-            ORDER BY p.symbol_id, p.trading_date
-        """),
-        engine,
-        parse_dates=["trading_date"],
+    prices_stmt = (
+        select(
+            DailyPrice.symbol_id,
+            Symbol.symbol,
+            DailyPrice.trading_date,
+            cast(DailyPrice.open,      Float).label("open"),
+            cast(DailyPrice.high,      Float).label("high"),
+            cast(DailyPrice.low,       Float).label("low"),
+            cast(DailyPrice.close,     Float).label("close"),
+            cast(DailyPrice.adj_close, Float).label("adj_close"),
+            cast(DailyPrice.volume,    BigInteger).label("volume"),
+        )
+        .join(Symbol, Symbol.id == DailyPrice.symbol_id)
+        .where(
+            DailyPrice.symbol_id.in_(symbol_ids),
+            DailyPrice.granularity == "1d",
+        )
+        .order_by(DailyPrice.symbol_id, DailyPrice.trading_date)
     )
+    prices = pd.read_sql(prices_stmt, engine, parse_dates=["trading_date"])
 
     # ── Load indicators ───────────────────────────────────────────────────────
     print("Loading indicators...")
-    indicators = pd.read_sql(
-        text(f"""
-            SELECT
-                symbol_id, trading_date,
-                rsi_14, atr_14,
-                sma_20, sma_50,
-                ema_9, ema_20, ema_21,
-                macd_line, macd_signal, macd_histogram,
-                bb_upper, bb_middle, bb_lower,
-                adx_14, plus_di, minus_di,
-                obv,
-                supertrend, supertrend_dir,
-                stoch_k, stoch_d,
-                cmf_20,
-                stochrsi_k, stochrsi_d,
-                CAST(stochrsi_bullish_xover AS INT) AS stochrsi_bullish_xover,
-                CAST(stochrsi_bearish_xover AS INT) AS stochrsi_bearish_xover
-            FROM daily_indicators
-            WHERE symbol_id IN ({ids_str})
-              AND granularity = '1d'
-        """),
-        engine,
-        parse_dates=["trading_date"],
+    indicators_stmt = (
+        select(
+            DailyIndicator.symbol_id,
+            DailyIndicator.trading_date,
+            DailyIndicator.rsi_14,
+            DailyIndicator.atr_14,
+            DailyIndicator.sma_20,
+            DailyIndicator.sma_50,
+            DailyIndicator.ema_9,
+            DailyIndicator.ema_20,
+            DailyIndicator.ema_21,
+            DailyIndicator.macd_line,
+            DailyIndicator.macd_signal,
+            DailyIndicator.macd_histogram,
+            DailyIndicator.bb_upper,
+            DailyIndicator.bb_middle,
+            DailyIndicator.bb_lower,
+            DailyIndicator.adx_14,
+            DailyIndicator.plus_di,
+            DailyIndicator.minus_di,
+            DailyIndicator.obv,
+            DailyIndicator.supertrend,
+            DailyIndicator.supertrend_dir,
+            DailyIndicator.stoch_k,
+            DailyIndicator.stoch_d,
+            DailyIndicator.cmf_20,
+            DailyIndicator.stochrsi_k,
+            DailyIndicator.stochrsi_d,
+            cast(DailyIndicator.stochrsi_bullish_xover, Integer).label("stochrsi_bullish_xover"),
+            cast(DailyIndicator.stochrsi_bearish_xover, Integer).label("stochrsi_bearish_xover"),
+        )
+        .where(
+            DailyIndicator.symbol_id.in_(symbol_ids),
+            DailyIndicator.granularity == "1d",
+        )
     )
+    indicators = pd.read_sql(indicators_stmt, engine, parse_dates=["trading_date"])
 
     # ── Compute target (ISOLATED) ─────────────────────────────────────────────
     # Target is computed from prices alone and stored separately.
