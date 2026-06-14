@@ -77,7 +77,7 @@ export const AboutPanel: React.FC = () => {
                   Vajra Stock
                 </h1>
                 <p className="text-xs text-purple-400 font-bold uppercase tracking-widest mt-0.5">
-                  NSE Quantitative Research &amp; Decision-Support — v1.2.0
+                  NSE Quantitative Research &amp; Decision-Support — v1.4.0
                 </p>
               </div>
             </div>
@@ -480,7 +480,7 @@ export const AboutPanel: React.FC = () => {
 
       {/* ── Footer ──────────────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between text-[11px] text-slate-600 px-1 pb-2 flex-wrap gap-2 shrink-0">
-        <span>Vajra Stock v1.2.0 — local-first database, privacy-focused.</span>
+        <span>Vajra Stock v1.4.0 — local-first database, privacy-focused.</span>
         <div className="flex items-center gap-4">
           <a href="https://abhishek4official.github.io/" target="_blank" rel="noopener noreferrer"
             className="flex items-center gap-1 hover:text-purple-400 transition">
