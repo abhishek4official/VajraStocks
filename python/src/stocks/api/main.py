@@ -381,7 +381,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="VajraStocks — NSE Quantitative Analysis Platform",
     description="Local-first stock analysis, screening, portfolio tracking, and AI-powered research.",
-    version="1.2.0",
+    version="1.4.0",
     lifespan=lifespan,
 )
 
@@ -404,7 +404,7 @@ app.add_middleware(GZipMiddleware, minimum_size=1000)
 @app.get("/health")
 def health_check():
     """API liveness probe."""
-    return {"status": "HEALTHY", "version": "1.2.0"}
+    return {"status": "HEALTHY", "version": "1.4.0"}
 
 
 # ── Routes ─────────────────────────────────────────────────────────────────────
