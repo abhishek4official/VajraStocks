@@ -15,6 +15,7 @@ from stocks.api.v1.endpoints import (
     strategies,
     symbols,
     sync,
+    watchlists,
 )
 
 api_router = APIRouter(prefix="/api/v1")
@@ -33,3 +34,4 @@ api_router.include_router(setup.router)
 api_router.include_router(portfolio.router)
 api_router.include_router(alerts.router)
 api_router.include_router(ml_training.router)
+api_router.include_router(watchlists.router)

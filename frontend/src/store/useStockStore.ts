@@ -122,6 +122,8 @@ interface StockState {
   // Stock alerts (backend-evaluated post-sync)
   stockAlerts: StockAlert[];
   stockAlertsLoading: boolean;
+  _seenAlertIds: Set<number>;
+  _alertsInitialized: boolean;
 
   // Watchlists
   watchlists: Watchlist[];
@@ -152,6 +154,7 @@ interface StockState {
   dismissAllStockAlerts: () => Promise<void>;
 
   // Watchlist actions
+  fetchWatchlists: () => Promise<void>;
   createWatchlist: (name: string) => void;
   deleteWatchlist: (id: string) => void;
   renameWatchlist: (id: string, name: string) => void;
@@ -311,6 +314,8 @@ export const useStockStore = create<StockState>((set, get) => ({
   portfolioLoading: false,
   stockAlerts: [],
   stockAlertsLoading: false,
+  _seenAlertIds: new Set<number>(),
+  _alertsInitialized: false,
   watchlists: loadWatchlists(),
   activeWatchlistId: null,
   alerts: loadAlerts(),
@@ -381,7 +386,36 @@ export const useStockStore = create<StockState>((set, get) => ({
     set({ stockAlertsLoading: true });
     try {
       const stockAlerts = await apiService.getAlerts('TRIGGERED');
-      set({ stockAlerts, stockAlertsLoading: false });
+      const { _seenAlertIds, _alertsInitialized } = get();
+
+      if (!_alertsInitialized) {
+        // First load: seed seen IDs without firing notifications (user already knows)
+        set({
+          stockAlerts,
+          stockAlertsLoading: false,
+          _seenAlertIds: new Set(stockAlerts.map(a => a.id)),
+          _alertsInitialized: true,
+        });
+      } else {
+        // Subsequent polls: fire browser notification for any genuinely new alerts
+        const newAlerts = stockAlerts.filter(a => !_seenAlertIds.has(a.id));
+        if (newAlerts.length > 0 && 'Notification' in window && Notification.permission === 'granted') {
+          for (const alert of newAlerts.slice(0, 5)) {
+            new Notification(`VAJRA: ${alert.symbol.replace('.NS', '')}`, {
+              body: alert.message,
+              tag: `vajra-alert-${alert.id}`,
+            });
+          }
+          if (newAlerts.length > 5) {
+            new Notification(`VAJRA: ${newAlerts.length - 5} more alerts fired`, {
+              body: 'Open VajraStocks to review all alerts.',
+              tag: 'vajra-alerts-overflow',
+            });
+          }
+        }
+        const updatedSeen = new Set([..._seenAlertIds, ...stockAlerts.map(a => a.id)]);
+        set({ stockAlerts, stockAlertsLoading: false, _seenAlertIds: updatedSeen });
+      }
     } catch {
       set({ stockAlertsLoading: false });
     }
@@ -407,11 +441,50 @@ export const useStockStore = create<StockState>((set, get) => ({
 
   // ── Watchlists ─────────────────────────────────────────────────────────────
 
+  fetchWatchlists: async () => {
+    try {
+      const wls = await apiService.fetchWatchlists();
+      if (wls.length === 0) {
+        // Migration: push any non-empty localStorage lists to DB
+        const local = loadWatchlists();
+        const hasRealData = local.some(w => w.name !== 'My Watchlist' || w.items.length > 0);
+        if (hasRealData) {
+          for (const wl of local) {
+            try {
+              const created = await apiService.createWatchlistApi(wl.name);
+              for (const item of wl.items) {
+                await apiService.addToWatchlistApi(created.id, item.symbol).catch(() => {});
+              }
+            } catch { /* skip failed watchlists */ }
+          }
+          const refreshed = await apiService.fetchWatchlists();
+          saveWatchlists(refreshed);
+          set({ watchlists: refreshed });
+          return;
+        }
+        // Seed a default list
+        try {
+          const def = await apiService.createWatchlistApi('My Watchlist');
+          saveWatchlists([def]);
+          set({ watchlists: [def] });
+        } catch { /* API unavailable */ }
+      } else {
+        saveWatchlists(wls);
+        set({ watchlists: wls });
+      }
+    } catch {
+      // API unavailable — keep current localStorage state
+    }
+  },
+
   createWatchlist: (name) => {
     const currentLists = loadWatchlists();
     const wl = [...currentLists, { id: crypto.randomUUID(), name, items: [] }];
     saveWatchlists(wl);
     set({ watchlists: wl });
+    apiService.createWatchlistApi(name)
+      .then(() => get().fetchWatchlists())
+      .catch(() => {});
   },
 
   deleteWatchlist: (id) => {
@@ -419,6 +492,7 @@ export const useStockStore = create<StockState>((set, get) => ({
     const wl = currentLists.filter(w => w.id !== id);
     saveWatchlists(wl);
     set({ watchlists: wl, activeWatchlistId: get().activeWatchlistId === id ? null : get().activeWatchlistId });
+    apiService.deleteWatchlistApi(id).catch(() => {});
   },
 
   renameWatchlist: (id, name) => {
@@ -426,6 +500,7 @@ export const useStockStore = create<StockState>((set, get) => ({
     const wl = currentLists.map(w => w.id === id ? { ...w, name } : w);
     saveWatchlists(wl);
     set({ watchlists: wl });
+    apiService.renameWatchlistApi(id, name).catch(() => {});
   },
 
   setActiveWatchlist: (id) => set({ activeWatchlistId: id }),
@@ -439,6 +514,7 @@ export const useStockStore = create<StockState>((set, get) => ({
     });
     saveWatchlists(wl);
     set({ watchlists: wl });
+    apiService.addToWatchlistApi(watchlistId, symbol).catch(() => {});
   },
 
   // ── Alerts ─────────────────────────────────────────────────────────────────
@@ -499,6 +575,7 @@ export const useStockStore = create<StockState>((set, get) => ({
     );
     saveWatchlists(wl);
     set({ watchlists: wl });
+    apiService.removeFromWatchlistApi(watchlistId, symbol).catch(() => {});
   },
 
   // ── Async operations ───────────────────────────────────────────────────────
@@ -748,3 +825,13 @@ export const useStockStore = create<StockState>((set, get) => ({
 
 // Load DB-backed screener limit once the store is created (non-blocking)
 loadScreenerLimitFromDB();
+
+// Request notification permission and start polling for new alerts every 5 min
+(function initAlertPolling() {
+  if ('Notification' in window && Notification.permission === 'default') {
+    Notification.requestPermission();
+  }
+  setInterval(() => {
+    useStockStore.getState().fetchStockAlerts();
+  }, 5 * 60 * 1000);
+})();

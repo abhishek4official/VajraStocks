@@ -71,6 +71,10 @@ export interface PortfolioHolding {
   potential_gain_pct: number | null;
   rr_ratio?: number | null;
   position_size_shares?: number | null;
+  stop_type?: 'supertrend' | 'structural';
+  composite_score?: number | null;
+  ml_label?: string | null;
+  supertrend_dir?: string | null;
 }
 
 export interface ReplacementCandidate {
@@ -122,6 +126,9 @@ export interface PortfolioAggregates {
   correlation_clusters: { pair: [string, string]; rho: number }[];
   portfolio_beta: number | null;
   diversification_score: number | null;
+  alpha_1w?: number | null;
+  alpha_4w?: number | null;
+  alpha_3m?: number | null;
 }
 
 export interface PortfolioData {
@@ -709,5 +716,52 @@ export const apiService = {
     const response = await fetch(`${BASE_URL}/alerts/dismiss-all`, { method: 'POST' });
     if (!response.ok) throw new Error('Failed to dismiss all alerts');
     return response.json();
+  },
+
+  // 8. Watchlists (backend-persisted)
+  async fetchWatchlists(): Promise<{ id: string; name: string; items: { symbol: string; addedAt: string }[] }[]> {
+    const r = await fetch(`${BASE_URL}/watchlists`);
+    if (!r.ok) throw new Error('Failed to fetch watchlists');
+    return r.json();
+  },
+
+  async createWatchlistApi(name: string): Promise<{ id: string; name: string; items: { symbol: string; addedAt: string }[] }> {
+    const r = await fetch(`${BASE_URL}/watchlists`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    });
+    if (!r.ok) throw new Error('Failed to create watchlist');
+    return r.json();
+  },
+
+  async renameWatchlistApi(id: string, name: string): Promise<void> {
+    const r = await fetch(`${BASE_URL}/watchlists/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    });
+    if (!r.ok) throw new Error('Failed to rename watchlist');
+  },
+
+  async deleteWatchlistApi(id: string): Promise<void> {
+    const r = await fetch(`${BASE_URL}/watchlists/${id}`, { method: 'DELETE' });
+    if (!r.ok) throw new Error('Failed to delete watchlist');
+  },
+
+  async addToWatchlistApi(watchlistId: string, symbol: string): Promise<void> {
+    const r = await fetch(`${BASE_URL}/watchlists/${watchlistId}/items`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ symbol }),
+    });
+    if (!r.ok) throw new Error('Failed to add symbol to watchlist');
+  },
+
+  async removeFromWatchlistApi(watchlistId: string, symbol: string): Promise<void> {
+    const r = await fetch(`${BASE_URL}/watchlists/${watchlistId}/items/${encodeURIComponent(symbol)}`, {
+      method: 'DELETE',
+    });
+    if (!r.ok) throw new Error('Failed to remove symbol from watchlist');
   },
 };

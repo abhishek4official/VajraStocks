@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useStockStore } from '../store/useStockStore';
 import { Bookmark, Plus, Trash2, Eye, X, Edit2, Check, Bell, BellOff } from 'lucide-react';
 import type { AlertType } from '../store/useStockStore';
@@ -9,6 +9,7 @@ export const WatchlistPanel: React.FC = () => {
     activeWatchlistId,
     screenerResults,
     alerts,
+    fetchWatchlists,
     createWatchlist,
     deleteWatchlist,
     renameWatchlist,
@@ -19,6 +20,8 @@ export const WatchlistPanel: React.FC = () => {
     setSelectedSymbol,
     setActiveTab,
   } = useStockStore();
+
+  useEffect(() => { fetchWatchlists(); }, [fetchWatchlists]);
 
   const [alertSymbol, setAlertSymbol] = useState<string | null>(null);
   const [alertType, setAlertType] = useState<AlertType>('price_above');

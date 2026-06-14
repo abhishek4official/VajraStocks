@@ -537,3 +537,36 @@ class StrategySignal(Base):
         UniqueConstraint("symbol_id", "strategy_id", name="UQ_StrategySignal_Symbol_Strategy"),
         Index("ix_strategy_signals_strategy_signal_score", "strategy_id", "signal", "score"),
     )
+
+
+class Watchlist(Base):
+    """User-named watchlist (persisted to DB so it survives browser cache clears)."""
+
+    __tablename__ = "watchlists"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=func.now())
+
+    items: Mapped[list["WatchlistItem"]] = relationship(
+        "WatchlistItem", back_populates="watchlist_obj", cascade="all, delete-orphan"
+    )
+
+
+class WatchlistItem(Base):
+    """Single symbol entry within a Watchlist."""
+
+    __tablename__ = "watchlist_items"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    watchlist_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("watchlists.id", ondelete="CASCADE"), nullable=False
+    )
+    symbol: Mapped[str] = mapped_column(String(50), nullable=False)
+    added_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=func.now())
+
+    watchlist_obj: Mapped["Watchlist"] = relationship("Watchlist", back_populates="items")
+
+    __table_args__ = (
+        UniqueConstraint("watchlist_id", "symbol", name="UQ_WatchlistItem_WatchlistSymbol"),
+    )
