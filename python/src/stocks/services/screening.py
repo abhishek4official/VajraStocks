@@ -21,10 +21,19 @@ from stocks.services.settings_service import SettingsService
 class ScreeningService:
     """Service to maintain the screening_snapshots table for high-performance stock sweeps."""
 
+    # MSSQL limits total parameters per statement to 2100; keep IN lists comfortably below that.
+    _MSSQL_IN_LIMIT = 2000
+
     def __init__(self, config: Config, db_session: Session):
         self.config = config
         self.db = db_session
         self._mtf: dict | None = None  # memoized MTF/risk thresholds
+
+    @staticmethod
+    def _id_chunks(ids: list[int], size: int = _MSSQL_IN_LIMIT):
+        """Yield successive slices of *ids* of at most *size* each."""
+        for i in range(0, len(ids), size):
+            yield ids[i : i + size]
 
     def _mtf_thresholds(self) -> dict:
         """Loads (once) the MTF/risk thresholds from settings, memoized per service instance."""
@@ -565,15 +574,19 @@ class ScreeningService:
             #    and the 35-day RS window in a single query.
             price_cutoff = dt.date.today() - dt.timedelta(days=45)
             rs_cutoff    = dt.date.today() - dt.timedelta(days=35)
-            raw_prices = self.db.scalars(
-                select(DailyPrice)
-                .where(
-                    DailyPrice.symbol_id.in_(symbol_ids),
-                    DailyPrice.trading_date >= price_cutoff,
-                    DailyPrice.granularity == "1d",
+            raw_prices = []
+            for chunk in self._id_chunks(symbol_ids):
+                raw_prices.extend(
+                    self.db.scalars(
+                        select(DailyPrice)
+                        .where(
+                            DailyPrice.symbol_id.in_(chunk),
+                            DailyPrice.trading_date >= price_cutoff,
+                            DailyPrice.granularity == "1d",
+                        )
+                        .order_by(DailyPrice.symbol_id, DailyPrice.trading_date.desc())
+                    ).all()
                 )
-                .order_by(DailyPrice.symbol_id, DailyPrice.trading_date.desc())
-            ).all()
 
             all_prices_by_symbol: dict[int, list] = defaultdict(list)
             for p in raw_prices:
@@ -588,92 +601,108 @@ class ScreeningService:
 
             # ── Bulk load 2: Indicators — last 30 calendar days covers 6+ trading days
             ind_cutoff = dt.date.today() - dt.timedelta(days=30)
-            raw_indicators = self.db.scalars(
-                select(DailyIndicator)
-                .where(
-                    DailyIndicator.symbol_id.in_(symbol_ids),
-                    DailyIndicator.trading_date >= ind_cutoff,
+            raw_indicators = []
+            for chunk in self._id_chunks(symbol_ids):
+                raw_indicators.extend(
+                    self.db.scalars(
+                        select(DailyIndicator)
+                        .where(
+                            DailyIndicator.symbol_id.in_(chunk),
+                            DailyIndicator.trading_date >= ind_cutoff,
+                        )
+                        .order_by(DailyIndicator.symbol_id, DailyIndicator.trading_date.desc())
+                    ).all()
                 )
-                .order_by(DailyIndicator.symbol_id, DailyIndicator.trading_date.desc())
-            ).all()
             indicators_by_symbol: dict[int, list] = defaultdict(list)
             for ind in raw_indicators:
                 indicators_by_symbol[ind.symbol_id].append(ind)
             indicators_by_symbol = {sid: rows[:6] for sid, rows in indicators_by_symbol.items()}
 
             # ── Bulk load 3: Latest Heikin-Ashi candle per symbol
-            ha_subq = (
-                select(DailyHeikinAshi.symbol_id, func.max(DailyHeikinAshi.trading_date).label("max_date"))
-                .where(DailyHeikinAshi.symbol_id.in_(symbol_ids))
-                .group_by(DailyHeikinAshi.symbol_id)
-                .subquery()
-            )
-            ha_by_symbol = {
-                row.symbol_id: row
-                for row in self.db.scalars(
-                    select(DailyHeikinAshi).join(
-                        ha_subq,
-                        (DailyHeikinAshi.symbol_id == ha_subq.c.symbol_id)
-                        & (DailyHeikinAshi.trading_date == ha_subq.c.max_date),
-                    )
-                ).all()
-            }
+            ha_by_symbol: dict = {}
+            for chunk in self._id_chunks(symbol_ids):
+                ha_subq = (
+                    select(DailyHeikinAshi.symbol_id, func.max(DailyHeikinAshi.trading_date).label("max_date"))
+                    .where(DailyHeikinAshi.symbol_id.in_(chunk))
+                    .group_by(DailyHeikinAshi.symbol_id)
+                    .subquery()
+                )
+                ha_by_symbol.update({
+                    row.symbol_id: row
+                    for row in self.db.scalars(
+                        select(DailyHeikinAshi).join(
+                            ha_subq,
+                            (DailyHeikinAshi.symbol_id == ha_subq.c.symbol_id)
+                            & (DailyHeikinAshi.trading_date == ha_subq.c.max_date),
+                        )
+                    ).all()
+                })
 
             # ── Bulk load 4: Latest Renko brick per symbol
-            renko_subq = (
-                select(RenkoBrick.symbol_id, func.max(RenkoBrick.brick_index).label("max_idx"))
-                .where(RenkoBrick.symbol_id.in_(symbol_ids))
-                .group_by(RenkoBrick.symbol_id)
-                .subquery()
-            )
-            brick_by_symbol = {
-                row.symbol_id: row
-                for row in self.db.scalars(
-                    select(RenkoBrick).join(
-                        renko_subq,
-                        (RenkoBrick.symbol_id == renko_subq.c.symbol_id)
-                        & (RenkoBrick.brick_index == renko_subq.c.max_idx),
-                    )
-                ).all()
-            }
+            brick_by_symbol: dict = {}
+            for chunk in self._id_chunks(symbol_ids):
+                renko_subq = (
+                    select(RenkoBrick.symbol_id, func.max(RenkoBrick.brick_index).label("max_idx"))
+                    .where(RenkoBrick.symbol_id.in_(chunk))
+                    .group_by(RenkoBrick.symbol_id)
+                    .subquery()
+                )
+                brick_by_symbol.update({
+                    row.symbol_id: row
+                    for row in self.db.scalars(
+                        select(RenkoBrick).join(
+                            renko_subq,
+                            (RenkoBrick.symbol_id == renko_subq.c.symbol_id)
+                            & (RenkoBrick.brick_index == renko_subq.c.max_idx),
+                        )
+                    ).all()
+                })
 
             # ── Bulk load 5: Latest Line Break line per symbol
-            lb_subq = (
-                select(LineBreakLine.symbol_id, func.max(LineBreakLine.line_index).label("max_idx"))
-                .where(LineBreakLine.symbol_id.in_(symbol_ids))
-                .group_by(LineBreakLine.symbol_id)
-                .subquery()
-            )
-            lb_by_symbol = {
-                row.symbol_id: row
-                for row in self.db.scalars(
-                    select(LineBreakLine).join(
-                        lb_subq,
-                        (LineBreakLine.symbol_id == lb_subq.c.symbol_id)
-                        & (LineBreakLine.line_index == lb_subq.c.max_idx),
-                    )
-                ).all()
-            }
+            lb_by_symbol: dict = {}
+            for chunk in self._id_chunks(symbol_ids):
+                lb_subq = (
+                    select(LineBreakLine.symbol_id, func.max(LineBreakLine.line_index).label("max_idx"))
+                    .where(LineBreakLine.symbol_id.in_(chunk))
+                    .group_by(LineBreakLine.symbol_id)
+                    .subquery()
+                )
+                lb_by_symbol.update({
+                    row.symbol_id: row
+                    for row in self.db.scalars(
+                        select(LineBreakLine).join(
+                            lb_subq,
+                            (LineBreakLine.symbol_id == lb_subq.c.symbol_id)
+                            & (LineBreakLine.line_index == lb_subq.c.max_idx),
+                        )
+                    ).all()
+                })
 
             # ── Bulk load 6: Existing snapshots for upsert
-            existing_snapshots = {
-                row.symbol_id: row
-                for row in self.db.scalars(
-                    select(ScreeningSnapshot).where(ScreeningSnapshot.symbol_id.in_(symbol_ids))
-                ).all()
-            }
+            existing_snapshots: dict = {}
+            for chunk in self._id_chunks(symbol_ids):
+                existing_snapshots.update({
+                    row.symbol_id: row
+                    for row in self.db.scalars(
+                        select(ScreeningSnapshot).where(ScreeningSnapshot.symbol_id.in_(chunk))
+                    ).all()
+                })
 
             # ── Bulk load 7: Weekly trend prices (~2.5 yrs of daily bars, resampled in Python)
             weekly_cutoff = dt.date.today() - dt.timedelta(weeks=max(weekly_ema_len * 2, 60) + 10)
-            raw_weekly = self.db.execute(
-                select(DailyPrice.symbol_id, DailyPrice.trading_date, DailyPrice.close)
-                .where(
-                    DailyPrice.symbol_id.in_(symbol_ids),
-                    DailyPrice.trading_date >= weekly_cutoff,
-                    DailyPrice.granularity == "1d",
+            raw_weekly = []
+            for chunk in self._id_chunks(symbol_ids):
+                raw_weekly.extend(
+                    self.db.execute(
+                        select(DailyPrice.symbol_id, DailyPrice.trading_date, DailyPrice.close)
+                        .where(
+                            DailyPrice.symbol_id.in_(chunk),
+                            DailyPrice.trading_date >= weekly_cutoff,
+                            DailyPrice.granularity == "1d",
+                        )
+                        .order_by(DailyPrice.symbol_id, DailyPrice.trading_date.asc())
+                    ).all()
                 )
-                .order_by(DailyPrice.symbol_id, DailyPrice.trading_date.asc())
-            ).all()
             weekly_rows_by_symbol: dict[int, list] = defaultdict(list)
             for row in raw_weekly:
                 weekly_rows_by_symbol[row.symbol_id].append((row.trading_date, row.close))
