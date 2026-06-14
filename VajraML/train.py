@@ -124,7 +124,11 @@ def walk_forward_train(
         fold_dir = MODELS_DIR / f"fold_{fold:02d}"
         fold_dir.mkdir(exist_ok=True)
 
-        lgbm_model.booster_.save_model(str(fold_dir / "lgbm.txt"))
+        _lgbm_path = fold_dir / "lgbm.txt"
+        lgbm_model.booster_.save_model(str(_lgbm_path))
+        # LightGBM on Windows saves CRLF which its own C++ parser can't reload —
+        # normalise to LF so models are portable and loadable without retraining.
+        _lgbm_path.write_bytes(_lgbm_path.read_bytes().replace(b"\r\n", b"\n"))
         with open(fold_dir / "ridge.pkl", "wb") as fh:
             pickle.dump({"model": ridge_model, "scaler": scaler}, fh)
 

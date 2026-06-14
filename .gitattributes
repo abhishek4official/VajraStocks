@@ -1,0 +1,2 @@
+# LightGBM text model files must stay LF — the C++ parser rejects CRLF in numeric fields.
+VajraML/models/**/*.txt text eol=lf

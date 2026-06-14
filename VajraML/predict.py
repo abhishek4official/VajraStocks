@@ -52,7 +52,7 @@ def predict_latest(use_ensemble: bool = False) -> pd.DataFrame:
     X = latest[feature_cols]
 
     # ── LightGBM prediction ───────────────────────────────────────────────────
-    booster   = lgb.Booster(model_file=str(latest_fold / "lgbm.txt"))
+    booster   = lgb.Booster(model_str=(latest_fold / "lgbm.txt").read_text(encoding="utf-8"))
     lgbm_pred = booster.predict(X.values)
 
     results = latest[["symbol_id", "symbol", "trading_date"]].copy()
@@ -117,7 +117,9 @@ def run_ml_snapshot_update(engine) -> int:
             f"No trained models found in {MODELS_DIR}. Run VajraML/train.py first."
         )
 
-    booster = lgb.Booster(model_file=str(fold_dirs[-1] / "lgbm.txt"))
+    # Read via text mode so Python normalises CRLF→LF on Windows before passing to
+    # LightGBM's C++ parser, which rejects \r in numeric fields regardless of platform.
+    booster = lgb.Booster(model_str=(fold_dirs[-1] / "lgbm.txt").read_text(encoding="utf-8"))
     X = latest[feature_cols]
     latest = latest.copy()
     latest["ml_prediction"] = booster.predict(X.values)

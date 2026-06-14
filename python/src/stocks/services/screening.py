@@ -1,3 +1,5 @@
+from collections import defaultdict
+
 from loguru import logger
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -19,10 +21,19 @@ from stocks.services.settings_service import SettingsService
 class ScreeningService:
     """Service to maintain the screening_snapshots table for high-performance stock sweeps."""
 
+    # MSSQL limits total parameters per statement to 2100; keep IN lists comfortably below that.
+    _MSSQL_IN_LIMIT = 2000
+
     def __init__(self, config: Config, db_session: Session):
         self.config = config
         self.db = db_session
         self._mtf: dict | None = None  # memoized MTF/risk thresholds
+
+    @staticmethod
+    def _id_chunks(ids: list[int], size: int = _MSSQL_IN_LIMIT):
+        """Yield successive slices of *ids* of at most *size* each."""
+        for i in range(0, len(ids), size):
+            yield ids[i : i + size]
 
     def _mtf_thresholds(self) -> dict:
         """Loads (once) the MTF/risk thresholds from settings, memoized per service instance."""
@@ -36,25 +47,27 @@ class ScreeningService:
             }
         return self._mtf
 
-    def _compute_weekly_trend(self, symbol_id: int, weekly_ema_len: int) -> str | None:
+    def _compute_weekly_trend(self, symbol_id: int, weekly_ema_len: int, *, rows=None) -> str | None:
         """Resamples daily closes to weekly (W-FRI) and returns UP/DOWN vs the N-week EMA.
 
         Uses existing daily price data — no separate weekly indicator table needed.
         Returns None when there is insufficient history.
+        Pass pre-loaded `rows` (list of (trading_date, close) tuples, asc order) to skip
+        the DB query — used by refresh_all_snapshots to avoid N+1 queries.
         """
         try:
-            import datetime as dt
-
             import pandas as pd
             import pandas_ta as ta
 
-            # ~ weekly_ema_len*2 weeks of daily bars for a stable EMA
-            cutoff = dt.date.today() - dt.timedelta(weeks=max(weekly_ema_len * 2, 60) + 10)
-            rows = self.db.execute(
-                select(DailyPrice.trading_date, DailyPrice.close)
-                .where(DailyPrice.symbol_id == symbol_id, DailyPrice.trading_date >= cutoff)
-                .order_by(DailyPrice.trading_date.asc())
-            ).all()
+            if rows is None:
+                import datetime as dt
+                # ~ weekly_ema_len*2 weeks of daily bars for a stable EMA
+                cutoff = dt.date.today() - dt.timedelta(weeks=max(weekly_ema_len * 2, 60) + 10)
+                rows = self.db.execute(
+                    select(DailyPrice.trading_date, DailyPrice.close)
+                    .where(DailyPrice.symbol_id == symbol_id, DailyPrice.trading_date >= cutoff)
+                    .order_by(DailyPrice.trading_date.asc())
+                ).all()
             if len(rows) < weekly_ema_len * 5:  # ~5 trading days/week
                 return None
 
@@ -77,16 +90,27 @@ class ScreeningService:
             logger.debug(f"weekly trend compute failed for symbol_id {symbol_id}: {e}")
             return None
 
-    def refresh_snapshot_for_symbol(self, symbol_id: int, nifty_21d_return: float | None = None, commit: bool = True) -> None:
-        """Compiles the latest EOD prices and derived structures to upsert the screening snapshot for a symbol."""
+    def refresh_snapshot_for_symbol(
+        self,
+        symbol_id: int,
+        nifty_21d_return: float | None = None,
+        commit: bool = True,
+        *,
+        _prefetch: dict | None = None,
+    ) -> None:
+        """Compiles the latest EOD prices and derived structures to upsert the screening snapshot for a symbol.
+
+        Pass `_prefetch` (built by refresh_all_snapshots) to skip all per-symbol DB queries
+        and read from pre-loaded bulk data instead, eliminating the N+1 pattern.
+        """
         try:
-            symbol_obj = self.db.get(Symbol, symbol_id)
+            symbol_obj = _prefetch["symbol"] if _prefetch else self.db.get(Symbol, symbol_id)
             if not symbol_obj or not symbol_obj.is_active:
                 return
 
             # 2. Fetch latest 21 EOD prices — enough for NR7 + Inside Bar + pct change
             #    plus rolling 1W/2W/3W/4W returns (5/10/15/20 trading days back).
-            prices = self.db.scalars(
+            prices = _prefetch["prices"] if _prefetch else self.db.scalars(
                 select(DailyPrice).filter_by(symbol_id=symbol_id).order_by(DailyPrice.trading_date.desc()).limit(21)
             ).all()
 
@@ -136,20 +160,23 @@ class ScreeningService:
             # rs_score_1m > 1.0 means outperforming NIFTY; < 1.0 means underperforming
             rs_score_1m = None
             if nifty_21d_return is not None and nifty_21d_return != 0:
-                import datetime as dt
-                cutoff = dt.date.today() - dt.timedelta(days=35)
-                oldest_price = self.db.scalar(
-                    select(DailyPrice)
-                    .where(DailyPrice.symbol_id == symbol_id, DailyPrice.trading_date >= cutoff)
-                    .order_by(DailyPrice.trading_date.asc())
-                    .limit(1)
-                )
+                if _prefetch:
+                    oldest_price = _prefetch.get("rs_oldest")
+                else:
+                    import datetime as dt
+                    cutoff = dt.date.today() - dt.timedelta(days=35)
+                    oldest_price = self.db.scalar(
+                        select(DailyPrice)
+                        .where(DailyPrice.symbol_id == symbol_id, DailyPrice.trading_date >= cutoff)
+                        .order_by(DailyPrice.trading_date.asc())
+                        .limit(1)
+                    )
                 if oldest_price and float(oldest_price.close) > 0:
                     stock_21d_return = (close_price - float(oldest_price.close)) / float(oldest_price.close)
                     rs_score_1m = stock_21d_return / nifty_21d_return
 
             # 3. Fetch latest Heikin-Ashi candle
-            ha = self.db.scalar(
+            ha = _prefetch["ha"] if _prefetch else self.db.scalar(
                 select(DailyHeikinAshi)
                 .filter_by(symbol_id=symbol_id)
                 .order_by(DailyHeikinAshi.trading_date.desc())
@@ -163,7 +190,7 @@ class ScreeningService:
 
             # 4. Fetch latest 6 Technical Indicator rows
             #    2nd needed for OBV trend; up to 6th needed for StochRSI crossover days-ago
-            ind_rows = self.db.scalars(
+            ind_rows = _prefetch["ind_rows"] if _prefetch else self.db.scalars(
                 select(DailyIndicator)
                 .filter_by(symbol_id=symbol_id)
                 .order_by(DailyIndicator.trading_date.desc())
@@ -224,13 +251,13 @@ class ScreeningService:
                     stochrsi_bearish_xover_days_ago = i
 
             # 5. Fetch latest Renko Brick
-            brick = self.db.scalar(
+            brick = _prefetch["brick"] if _prefetch else self.db.scalar(
                 select(RenkoBrick).filter_by(symbol_id=symbol_id).order_by(RenkoBrick.brick_index.desc()).limit(1)
             )
             renko_direction = brick.direction if brick else None
 
             # 6. Fetch latest Line Break line
-            lb = self.db.scalar(
+            lb = _prefetch["lb"] if _prefetch else self.db.scalar(
                 select(LineBreakLine).filter_by(symbol_id=symbol_id).order_by(LineBreakLine.line_index.desc()).limit(1)
             )
             line_break_direction = lb.direction if lb else None
@@ -290,7 +317,10 @@ class ScreeningService:
             # 6b-ii. Composite score — runs after rolling returns are known
             # (we compute returns first below, then call composite scorer)
 
-            weekly_trend = self._compute_weekly_trend(symbol_id, mtf["weekly_ema"])
+            weekly_trend = (
+                _prefetch.get("weekly_trend") if _prefetch
+                else self._compute_weekly_trend(symbol_id, mtf["weekly_ema"])
+            )
 
             # 6c. Rolling weekly returns (%) — 1W/2W/3W/4W = 5/10/15/20 trading days back.
             def _ret(days_back: int) -> float | None:
@@ -373,7 +403,9 @@ class ScreeningService:
                 mtf_confirmed = (regime_bias in ("BULLISH", "VERY_BULLISH") and weekly_trend == "UP")
 
             # 7. Upsert the ScreeningSnapshot
-            snapshot = self.db.scalar(select(ScreeningSnapshot).filter_by(symbol_id=symbol_id))
+            snapshot = _prefetch.get("snapshot") if _prefetch else self.db.scalar(
+                select(ScreeningSnapshot).filter_by(symbol_id=symbol_id)
+            )
             if snapshot is None:
                 snapshot = ScreeningSnapshot(
                     symbol_id=symbol_id,
@@ -516,28 +548,196 @@ class ScreeningService:
         return None
 
     def refresh_all_snapshots(self) -> int:
-        """Refreshes the screening snapshots for all active symbols in the database."""
+        """Refreshes screening snapshots for all active symbols using bulk pre-fetching.
+
+        Runs 7 bulk queries for the entire universe instead of ~9 queries per symbol,
+        reducing total DB round-trips from ~6,300 to ~10 for a 700-stock universe.
+        """
+        import datetime as dt
+
         try:
             active_symbols = self.db.scalars(select(Symbol).filter_by(is_active=True)).all()
+            if not active_symbols:
+                return 0
+
+            symbol_ids = [s.id for s in active_symbols]
             logger.info(f"Refreshing screening snapshots for {len(active_symbols)} active symbols...")
 
-            # Pre-load NIFTY 21-day return once — used for RS score on every symbol
             nifty_21d_return = self._get_nifty_21d_return()
             if nifty_21d_return is not None:
                 logger.debug(f"NIFTY 21D return for RS scoring: {nifty_21d_return:.4f}")
 
+            mtf = self._mtf_thresholds()
+            weekly_ema_len = mtf["weekly_ema"]
+
+            # ── Bulk load 1: Prices — last 45 calendar days covers 21+ trading days
+            #    and the 35-day RS window in a single query.
+            price_cutoff = dt.date.today() - dt.timedelta(days=45)
+            rs_cutoff    = dt.date.today() - dt.timedelta(days=35)
+            raw_prices = []
+            for chunk in self._id_chunks(symbol_ids):
+                raw_prices.extend(
+                    self.db.scalars(
+                        select(DailyPrice)
+                        .where(
+                            DailyPrice.symbol_id.in_(chunk),
+                            DailyPrice.trading_date >= price_cutoff,
+                            DailyPrice.granularity == "1d",
+                        )
+                        .order_by(DailyPrice.symbol_id, DailyPrice.trading_date.desc())
+                    ).all()
+                )
+
+            all_prices_by_symbol: dict[int, list] = defaultdict(list)
+            for p in raw_prices:
+                all_prices_by_symbol[p.symbol_id].append(p)
+
+            prices_by_symbol   = {sid: rows[:21] for sid, rows in all_prices_by_symbol.items()}
+            rs_oldest_by_symbol: dict[int, object] = {}
+            for sid, price_list in all_prices_by_symbol.items():
+                eligible = [p for p in price_list if p.trading_date >= rs_cutoff]
+                if eligible:
+                    rs_oldest_by_symbol[sid] = eligible[-1]  # oldest = last in desc-ordered list
+
+            # ── Bulk load 2: Indicators — last 30 calendar days covers 6+ trading days
+            ind_cutoff = dt.date.today() - dt.timedelta(days=30)
+            raw_indicators = []
+            for chunk in self._id_chunks(symbol_ids):
+                raw_indicators.extend(
+                    self.db.scalars(
+                        select(DailyIndicator)
+                        .where(
+                            DailyIndicator.symbol_id.in_(chunk),
+                            DailyIndicator.trading_date >= ind_cutoff,
+                        )
+                        .order_by(DailyIndicator.symbol_id, DailyIndicator.trading_date.desc())
+                    ).all()
+                )
+            indicators_by_symbol: dict[int, list] = defaultdict(list)
+            for ind in raw_indicators:
+                indicators_by_symbol[ind.symbol_id].append(ind)
+            indicators_by_symbol = {sid: rows[:6] for sid, rows in indicators_by_symbol.items()}
+
+            # ── Bulk load 3: Latest Heikin-Ashi candle per symbol
+            ha_by_symbol: dict = {}
+            for chunk in self._id_chunks(symbol_ids):
+                ha_subq = (
+                    select(DailyHeikinAshi.symbol_id, func.max(DailyHeikinAshi.trading_date).label("max_date"))
+                    .where(DailyHeikinAshi.symbol_id.in_(chunk))
+                    .group_by(DailyHeikinAshi.symbol_id)
+                    .subquery()
+                )
+                ha_by_symbol.update({
+                    row.symbol_id: row
+                    for row in self.db.scalars(
+                        select(DailyHeikinAshi).join(
+                            ha_subq,
+                            (DailyHeikinAshi.symbol_id == ha_subq.c.symbol_id)
+                            & (DailyHeikinAshi.trading_date == ha_subq.c.max_date),
+                        )
+                    ).all()
+                })
+
+            # ── Bulk load 4: Latest Renko brick per symbol
+            brick_by_symbol: dict = {}
+            for chunk in self._id_chunks(symbol_ids):
+                renko_subq = (
+                    select(RenkoBrick.symbol_id, func.max(RenkoBrick.brick_index).label("max_idx"))
+                    .where(RenkoBrick.symbol_id.in_(chunk))
+                    .group_by(RenkoBrick.symbol_id)
+                    .subquery()
+                )
+                brick_by_symbol.update({
+                    row.symbol_id: row
+                    for row in self.db.scalars(
+                        select(RenkoBrick).join(
+                            renko_subq,
+                            (RenkoBrick.symbol_id == renko_subq.c.symbol_id)
+                            & (RenkoBrick.brick_index == renko_subq.c.max_idx),
+                        )
+                    ).all()
+                })
+
+            # ── Bulk load 5: Latest Line Break line per symbol
+            lb_by_symbol: dict = {}
+            for chunk in self._id_chunks(symbol_ids):
+                lb_subq = (
+                    select(LineBreakLine.symbol_id, func.max(LineBreakLine.line_index).label("max_idx"))
+                    .where(LineBreakLine.symbol_id.in_(chunk))
+                    .group_by(LineBreakLine.symbol_id)
+                    .subquery()
+                )
+                lb_by_symbol.update({
+                    row.symbol_id: row
+                    for row in self.db.scalars(
+                        select(LineBreakLine).join(
+                            lb_subq,
+                            (LineBreakLine.symbol_id == lb_subq.c.symbol_id)
+                            & (LineBreakLine.line_index == lb_subq.c.max_idx),
+                        )
+                    ).all()
+                })
+
+            # ── Bulk load 6: Existing snapshots for upsert
+            existing_snapshots: dict = {}
+            for chunk in self._id_chunks(symbol_ids):
+                existing_snapshots.update({
+                    row.symbol_id: row
+                    for row in self.db.scalars(
+                        select(ScreeningSnapshot).where(ScreeningSnapshot.symbol_id.in_(chunk))
+                    ).all()
+                })
+
+            # ── Bulk load 7: Weekly trend prices (~2.5 yrs of daily bars, resampled in Python)
+            weekly_cutoff = dt.date.today() - dt.timedelta(weeks=max(weekly_ema_len * 2, 60) + 10)
+            raw_weekly = []
+            for chunk in self._id_chunks(symbol_ids):
+                raw_weekly.extend(
+                    self.db.execute(
+                        select(DailyPrice.symbol_id, DailyPrice.trading_date, DailyPrice.close)
+                        .where(
+                            DailyPrice.symbol_id.in_(chunk),
+                            DailyPrice.trading_date >= weekly_cutoff,
+                            DailyPrice.granularity == "1d",
+                        )
+                        .order_by(DailyPrice.symbol_id, DailyPrice.trading_date.asc())
+                    ).all()
+                )
+            weekly_rows_by_symbol: dict[int, list] = defaultdict(list)
+            for row in raw_weekly:
+                weekly_rows_by_symbol[row.symbol_id].append((row.trading_date, row.close))
+
+            weekly_trend_by_symbol: dict[int, str | None] = {
+                sid: self._compute_weekly_trend(sid, weekly_ema_len, rows=rows)
+                for sid, rows in weekly_rows_by_symbol.items()
+            }
+
+            # ── Process each symbol using only pre-fetched data (no per-symbol DB queries)
             refreshed_count = 0
             for sym in active_symbols:
                 try:
-                    # Savepoint per symbol — a failed snapshot rolls back only that symbol,
-                    # leaving the outer transaction clean for all remaining symbols.
                     with self.db.begin_nested():
-                        self.refresh_snapshot_for_symbol(sym.id, nifty_21d_return=nifty_21d_return, commit=False)
+                        self.refresh_snapshot_for_symbol(
+                            sym.id,
+                            nifty_21d_return=nifty_21d_return,
+                            commit=False,
+                            _prefetch={
+                                "symbol":       sym,
+                                "prices":       prices_by_symbol.get(sym.id, []),
+                                "rs_oldest":    rs_oldest_by_symbol.get(sym.id),
+                                "ha":           ha_by_symbol.get(sym.id),
+                                "ind_rows":     indicators_by_symbol.get(sym.id, []),
+                                "brick":        brick_by_symbol.get(sym.id),
+                                "lb":           lb_by_symbol.get(sym.id),
+                                "snapshot":     existing_snapshots.get(sym.id),
+                                "weekly_trend": weekly_trend_by_symbol.get(sym.id),
+                            },
+                        )
                     refreshed_count += 1
                 except Exception as sym_err:
                     logger.error(f"Error refreshing snapshot for symbol {sym.symbol}: {sym_err}")
 
-            self.db.commit()  # Single bulk commit at the end!
+            self.db.commit()
             logger.info(f"Successfully refreshed {refreshed_count} screening snapshots.")
             return refreshed_count
         except Exception as e:
