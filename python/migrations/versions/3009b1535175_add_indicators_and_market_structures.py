@@ -89,8 +89,8 @@ def upgrade() -> None:
     op.create_index('ix_renko_symbol_index', 'renko_bricks', ['symbol_id', 'brick_index'], unique=False)
     op.create_table('screening_snapshots',
     sa.Column('symbol_id', sa.Integer(), nullable=False),
-    sa.Column('symbol', sa.NVARCHAR(length=50), nullable=False),
-    sa.Column('company_name', sa.NVARCHAR(length=255), nullable=False),
+    sa.Column('symbol', sa.String(length=50), nullable=False),
+    sa.Column('company_name', sa.String(length=255), nullable=False),
     sa.Column('last_trading_date', sa.Date(), nullable=False),
     sa.Column('close_price', sa.DECIMAL(precision=12, scale=4), nullable=False),
     sa.Column('price_pct_change', sa.Float(), nullable=True),

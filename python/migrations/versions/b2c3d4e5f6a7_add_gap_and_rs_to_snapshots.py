@@ -23,6 +23,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_column('screening_snapshots', 'rs_score_1m')
-    op.drop_column('screening_snapshots', 'is_gap_down')
-    op.drop_column('screening_snapshots', 'is_gap_up')
+    with op.batch_alter_table('screening_snapshots') as batch_op:
+        batch_op.drop_column('rs_score_1m')
+        batch_op.drop_column('is_gap_down')
+        batch_op.drop_column('is_gap_up')

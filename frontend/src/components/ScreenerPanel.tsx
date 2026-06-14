@@ -153,6 +153,101 @@ const matchNumericFilter = (val: number | null | undefined, filterStr: string): 
   }
 };
 
+interface MultiSelectFilterProps {
+  options: { value: string; label: string; className?: string }[];
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  minWidth?: string;
+}
+
+const MultiSelectFilter: React.FC<MultiSelectFilterProps> = ({
+  options,
+  value,
+  onChange,
+  placeholder = 'All',
+  minWidth = '80px'
+}) => {
+  const [isOpen, setIsOpen] = React.useState(false);
+  const containerRef = React.useRef<HTMLDivElement>(null);
+  const selectedValues = React.useMemo(() => value ? value.split(',') : [], [value]);
+
+  const toggleOption = (val: string) => {
+    let newSelected: string[];
+    if (selectedValues.includes(val)) {
+      newSelected = selectedValues.filter(v => v !== val);
+    } else {
+      newSelected = [...selectedValues, val];
+    }
+    onChange(newSelected.join(','));
+  };
+
+  React.useEffect(() => {
+    if (!isOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isOpen]);
+
+  const displayLabel = React.useMemo(() => {
+    if (selectedValues.length === 0) return placeholder;
+    if (selectedValues.length === options.length) return 'All';
+    return selectedValues
+      .map(val => options.find(o => o.value === val)?.label || val)
+      .join(', ');
+  }, [selectedValues, options, placeholder]);
+
+  return (
+    <div className="relative inline-block w-full text-left" style={{ minWidth }} ref={containerRef}>
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full flex items-center justify-between px-1.5 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-355 hover:text-white hover:border-slate-700 transition cursor-pointer select-none text-left font-mono h-[22px]"
+      >
+        <span className="truncate mr-1">{displayLabel}</span>
+        <span className="text-[8px] text-slate-500">▼</span>
+      </button>
+      
+      {isOpen && (
+        <div className="absolute left-0 mt-1 z-50 min-w-[120px] rounded bg-slate-950 border border-slate-800 shadow-xl py-1 text-[10px] max-h-48 overflow-y-auto">
+          {options.map(opt => {
+            const isChecked = selectedValues.includes(opt.value);
+            return (
+              <label
+                key={opt.value}
+                className="flex items-center gap-2 px-2 py-1.5 hover:bg-slate-900 cursor-pointer select-none text-slate-300 hover:text-white"
+              >
+                <input
+                  type="checkbox"
+                  checked={isChecked}
+                  onChange={() => toggleOption(opt.value)}
+                  className="rounded border-slate-850 bg-slate-900 text-purple-600 focus:ring-0 focus:ring-offset-0 w-3 h-3 cursor-pointer"
+                />
+                <span className={opt.className}>{opt.label}</span>
+              </label>
+            );
+          })}
+          {selectedValues.length > 0 && (
+            <div className="border-t border-slate-850/80 mt-1 pt-1 px-2 flex justify-end">
+              <button
+                type="button"
+                onClick={() => onChange('')}
+                className="text-[9px] text-purple-400 hover:text-purple-300 font-bold transition"
+              >
+                Clear
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
 export const ScreenerPanel: React.FC = () => {
   const {
     screenerFilters,
@@ -292,7 +387,10 @@ export const ScreenerPanel: React.FC = () => {
         if (!matchTextFilter(row.company_name, colFilters.company_name)) return false;
         if (!matchNumericFilter(row.close_price, colFilters.close_price)) return false;
         if (!matchNumericFilter(row.price_pct_change, colFilters.price_pct_change)) return false;
-        if (colFilters.regime_bias && (row as any).regime_bias !== colFilters.regime_bias) return false;
+        if (colFilters.regime_bias) {
+          const selected = colFilters.regime_bias.split(',').filter(Boolean);
+          if (selected.length > 0 && !selected.includes((row as any).regime_bias)) return false;
+        }
         if (!matchNumericFilter(row.ret_1w, colFilters.ret_1w)) return false;
         if (!matchNumericFilter(row.ret_2w, colFilters.ret_2w)) return false;
         if (!matchNumericFilter(row.ret_3w, colFilters.ret_3w)) return false;
@@ -311,23 +409,52 @@ export const ScreenerPanel: React.FC = () => {
         if (!matchNumericFilter(row.cmf_20, colFilters.cmf_20)) return false;
         if (!matchNumericFilter(row.stochrsi_k, colFilters.stochrsi_k)) return false;
         if (!matchNumericFilter(row.stochrsi_d, colFilters.stochrsi_d)) return false;
-        if (colFilters.sma_20_cross_direction && row.sma_20_cross_direction !== colFilters.sma_20_cross_direction) return false;
-        if (colFilters.sma_50_cross_direction && row.sma_50_cross_direction !== colFilters.sma_50_cross_direction) return false;
-        if (colFilters.sma_200_cross_direction && row.sma_200_cross_direction !== colFilters.sma_200_cross_direction) return false;
-        if (colFilters.macd_trend && row.macd_trend !== colFilters.macd_trend) return false;
-        if (colFilters.ha_direction && row.ha_direction !== colFilters.ha_direction) return false;
-        if (colFilters.renko_direction && row.renko_direction !== colFilters.renko_direction) return false;
-        if (colFilters.line_break_direction && row.line_break_direction !== colFilters.line_break_direction) return false;
+        if (colFilters.sma_20_cross_direction) {
+          const selected = colFilters.sma_20_cross_direction.split(',').filter(Boolean);
+          if (selected.length > 0 && !selected.includes(row.sma_20_cross_direction || '')) return false;
+        }
+        if (colFilters.sma_50_cross_direction) {
+          const selected = colFilters.sma_50_cross_direction.split(',').filter(Boolean);
+          if (selected.length > 0 && !selected.includes(row.sma_50_cross_direction || '')) return false;
+        }
+        if (colFilters.sma_200_cross_direction) {
+          const selected = colFilters.sma_200_cross_direction.split(',').filter(Boolean);
+          if (selected.length > 0 && !selected.includes(row.sma_200_cross_direction || '')) return false;
+        }
+        if (colFilters.macd_trend) {
+          const selected = colFilters.macd_trend.split(',').filter(Boolean);
+          if (selected.length > 0 && !selected.includes(row.macd_trend || '')) return false;
+        }
+        if (colFilters.ha_direction) {
+          const selected = colFilters.ha_direction.split(',').filter(Boolean);
+          if (selected.length > 0 && !selected.includes(row.ha_direction || '')) return false;
+        }
+        if (colFilters.renko_direction) {
+          const selected = colFilters.renko_direction.split(',').filter(Boolean);
+          if (selected.length > 0 && !selected.includes(row.renko_direction || '')) return false;
+        }
+        if (colFilters.line_break_direction) {
+          const selected = colFilters.line_break_direction.split(',').filter(Boolean);
+          if (selected.length > 0 && !selected.includes(row.line_break_direction || '')) return false;
+        }
         if (!matchNumericFilter((row as any).rs_score_1m, colFilters.rs_score_1m)) return false;
         
         if (colFilters.patterns) {
-          if (colFilters.patterns === 'NR7' && !row.is_nr7) return false;
-          if (colFilters.patterns === 'Inside' && !row.is_inside_bar) return false;
-          if (colFilters.patterns === 'Gap+' && !row.is_gap_up) return false;
-          if (colFilters.patterns === 'Gap-' && !row.is_gap_down) return false;
+          const selected = colFilters.patterns.split(',').filter(Boolean);
+          if (selected.length > 0) {
+            let matched = false;
+            if (selected.includes('NR7') && row.is_nr7) matched = true;
+            if (selected.includes('Inside') && row.is_inside_bar) matched = true;
+            if (selected.includes('Gap+') && row.is_gap_up) matched = true;
+            if (selected.includes('Gap-') && row.is_gap_down) matched = true;
+            if (!matched) return false;
+          }
         }
 
-        if (colFilters.ml_label && row.ml_label !== colFilters.ml_label) return false;
+        if (colFilters.ml_label) {
+          const selected = colFilters.ml_label.split(',').filter(Boolean);
+          if (selected.length > 0 && !selected.includes(row.ml_label || '')) return false;
+        }
 
         return true;
       });
@@ -1009,6 +1136,14 @@ export const ScreenerPanel: React.FC = () => {
               border-color: rgba(168, 85, 247, 0.8) !important;
               box-shadow: 0 0 0 1px rgba(168, 85, 247, 0.2);
             }
+
+            .screener-grid tr.filter-row td {
+              overflow: visible !important;
+              position: relative;
+            }
+            .screener-grid tr.filter-row td:focus-within {
+              z-index: 40 !important;
+            }
           `}</style>
           <table className="screener-grid min-w-max w-full border-collapse text-left text-xs text-slate-300">
             <thead>
@@ -1113,7 +1248,7 @@ export const ScreenerPanel: React.FC = () => {
                 <th className="py-2 px-1.5 text-right">Actions</th>
               </tr>
               {showColFilters && (
-                <tr className="border-b border-slate-800 bg-[#0c0f17]/40 whitespace-nowrap">
+                <tr className="border-b border-slate-800 bg-[#0c0f17]/40 whitespace-nowrap filter-row">
                   {/* Ticker */}
                   <td className="py-1 px-1.5">
                     <input
@@ -1171,18 +1306,19 @@ export const ScreenerPanel: React.FC = () => {
                   
                   {/* Bias */}
                   <td className="py-1 px-1.5">
-                    <select
+                    <MultiSelectFilter
                       value={colFilters.regime_bias}
-                      onChange={(e) => setColFilters({ ...colFilters, regime_bias: e.target.value })}
-                      className="w-full min-w-[65px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 focus:outline-none focus:border-purple-500 cursor-pointer"
-                    >
-                      <option value="">All</option>
-                      <option value="VERY_BULLISH">VB+</option>
-                      <option value="BULLISH">Bull</option>
-                      <option value="NEUTRAL">Neut</option>
-                      <option value="BEARISH">Bear</option>
-                      <option value="VERY_BEARISH">VB-</option>
-                    </select>
+                      onChange={(val) => setColFilters({ ...colFilters, regime_bias: val })}
+                      placeholder="All"
+                      minWidth="65px"
+                      options={[
+                        { value: 'VERY_BULLISH', label: 'VB+', className: 'text-emerald-400 font-bold' },
+                        { value: 'BULLISH', label: 'Bull', className: 'text-emerald-500' },
+                        { value: 'NEUTRAL', label: 'Neut', className: 'text-slate-400' },
+                        { value: 'BEARISH', label: 'Bear', className: 'text-rose-500' },
+                        { value: 'VERY_BEARISH', label: 'VB-', className: 'text-rose-400 font-bold' },
+                      ]}
+                    />
                   </td>
                   
                   {/* 1W */}
@@ -1362,91 +1498,98 @@ export const ScreenerPanel: React.FC = () => {
 
                   {/* S20 */}
                   <td className="py-1 px-1.5 text-center">
-                    <select
+                    <MultiSelectFilter
                       value={colFilters.sma_20_cross_direction}
-                      onChange={(e) => setColFilters({ ...colFilters, sma_20_cross_direction: e.target.value })}
-                      className="w-full min-w-[50px] px-0.5 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 focus:outline-none focus:border-purple-500 cursor-pointer font-mono"
-                    >
-                      <option value="">All</option>
-                      <option value="ABOVE" className="text-indigo-400 font-bold">▲ Above</option>
-                      <option value="BELOW" className="text-amber-500 font-bold">▼ Below</option>
-                    </select>
+                      onChange={(val) => setColFilters({ ...colFilters, sma_20_cross_direction: val })}
+                      placeholder="All"
+                      minWidth="50px"
+                      options={[
+                        { value: 'ABOVE', label: '▲ Above', className: 'text-indigo-400 font-bold' },
+                        { value: 'BELOW', label: '▼ Below', className: 'text-amber-500 font-bold' },
+                      ]}
+                    />
                   </td>
                   {/* S50 */}
                   <td className="py-1 px-1.5 text-center">
-                    <select
+                    <MultiSelectFilter
                       value={colFilters.sma_50_cross_direction}
-                      onChange={(e) => setColFilters({ ...colFilters, sma_50_cross_direction: e.target.value })}
-                      className="w-full min-w-[50px] px-0.5 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 focus:outline-none focus:border-purple-500 cursor-pointer font-mono"
-                    >
-                      <option value="">All</option>
-                      <option value="ABOVE" className="text-indigo-400 font-bold">▲ Above</option>
-                      <option value="BELOW" className="text-amber-500 font-bold">▼ Below</option>
-                    </select>
+                      onChange={(val) => setColFilters({ ...colFilters, sma_50_cross_direction: val })}
+                      placeholder="All"
+                      minWidth="50px"
+                      options={[
+                        { value: 'ABOVE', label: '▲ Above', className: 'text-indigo-400 font-bold' },
+                        { value: 'BELOW', label: '▼ Below', className: 'text-amber-500 font-bold' },
+                      ]}
+                    />
                   </td>
                   {/* S200 */}
                   <td className="py-1 px-1.5 text-center">
-                    <select
+                    <MultiSelectFilter
                       value={colFilters.sma_200_cross_direction}
-                      onChange={(e) => setColFilters({ ...colFilters, sma_200_cross_direction: e.target.value })}
-                      className="w-full min-w-[50px] px-0.5 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 focus:outline-none focus:border-purple-500 cursor-pointer font-mono"
-                    >
-                      <option value="">All</option>
-                      <option value="ABOVE" className="text-indigo-400 font-bold">▲ Above</option>
-                      <option value="BELOW" className="text-amber-500 font-bold">▼ Below</option>
-                    </select>
+                      onChange={(val) => setColFilters({ ...colFilters, sma_200_cross_direction: val })}
+                      placeholder="All"
+                      minWidth="50px"
+                      options={[
+                        { value: 'ABOVE', label: '▲ Above', className: 'text-indigo-400 font-bold' },
+                        { value: 'BELOW', label: '▼ Below', className: 'text-amber-500 font-bold' },
+                      ]}
+                    />
                   </td>
                   
                   {/* MACD */}
                   <td className="py-1 px-1.5 text-center">
-                    <select
+                    <MultiSelectFilter
                       value={colFilters.macd_trend}
-                      onChange={(e) => setColFilters({ ...colFilters, macd_trend: e.target.value })}
-                      className="w-full min-w-[50px] px-0.5 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 focus:outline-none focus:border-purple-500 cursor-pointer font-mono"
-                    >
-                      <option value="">All</option>
-                      <option value="BULLISH" className="text-emerald-400 font-bold">▲ Bull</option>
-                      <option value="BEARISH" className="text-rose-400 font-bold">▼ Bear</option>
-                    </select>
+                      onChange={(val) => setColFilters({ ...colFilters, macd_trend: val })}
+                      placeholder="All"
+                      minWidth="50px"
+                      options={[
+                        { value: 'BULLISH', label: '▲ Bull', className: 'text-emerald-400 font-bold' },
+                        { value: 'BEARISH', label: '▼ Bear', className: 'text-rose-400 font-bold' },
+                      ]}
+                    />
                   </td>
                   
                   {/* HA */}
                   <td className="py-1 px-1.5 text-center">
-                    <select
+                    <MultiSelectFilter
                       value={colFilters.ha_direction}
-                      onChange={(e) => setColFilters({ ...colFilters, ha_direction: e.target.value })}
-                      className="w-full min-w-[50px] px-0.5 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 focus:outline-none focus:border-purple-500 cursor-pointer font-mono"
-                    >
-                      <option value="">All</option>
-                      <option value="UP" className="text-emerald-400 font-bold">▲ UP</option>
-                      <option value="DOWN" className="text-rose-400 font-bold">▼ DOWN</option>
-                    </select>
+                      onChange={(val) => setColFilters({ ...colFilters, ha_direction: val })}
+                      placeholder="All"
+                      minWidth="50px"
+                      options={[
+                        { value: 'UP', label: '▲ UP', className: 'text-emerald-400 font-bold' },
+                        { value: 'DOWN', label: '▼ DOWN', className: 'text-rose-400 font-bold' },
+                      ]}
+                    />
                   </td>
                   
                   {/* Renko */}
                   <td className="py-1 px-1.5 text-center">
-                    <select
+                    <MultiSelectFilter
                       value={colFilters.renko_direction}
-                      onChange={(e) => setColFilters({ ...colFilters, renko_direction: e.target.value })}
-                      className="w-full min-w-[50px] px-0.5 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 focus:outline-none focus:border-purple-500 cursor-pointer font-mono"
-                    >
-                      <option value="">All</option>
-                      <option value="UP" className="text-emerald-400 font-bold">▲ UP</option>
-                      <option value="DOWN" className="text-rose-400 font-bold">▼ DOWN</option>
-                    </select>
+                      onChange={(val) => setColFilters({ ...colFilters, renko_direction: val })}
+                      placeholder="All"
+                      minWidth="50px"
+                      options={[
+                        { value: 'UP', label: '▲ UP', className: 'text-emerald-400 font-bold' },
+                        { value: 'DOWN', label: '▼ DOWN', className: 'text-rose-400 font-bold' },
+                      ]}
+                    />
                   </td>
                   
                   {/* TLB */}
                   <td className="py-1 px-1.5 text-center">
-                    <select
+                    <MultiSelectFilter
                       value={colFilters.line_break_direction}
-                      onChange={(e) => setColFilters({ ...colFilters, line_break_direction: e.target.value })}
-                      className="w-full min-w-[50px] px-0.5 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 focus:outline-none focus:border-purple-500 cursor-pointer font-mono"
-                    >
-                      <option value="">All</option>
-                      <option value="UP" className="text-emerald-400 font-bold">▲ UP</option>
-                      <option value="DOWN" className="text-rose-400 font-bold">▼ DOWN</option>
-                    </select>
+                      onChange={(val) => setColFilters({ ...colFilters, line_break_direction: val })}
+                      placeholder="All"
+                      minWidth="50px"
+                      options={[
+                        { value: 'UP', label: '▲ UP', className: 'text-emerald-400 font-bold' },
+                        { value: 'DOWN', label: '▼ DOWN', className: 'text-rose-400 font-bold' },
+                      ]}
+                    />
                   </td>
                   
                   {/* RS 1M */}
@@ -1462,33 +1605,35 @@ export const ScreenerPanel: React.FC = () => {
                   
                   {/* Patterns */}
                   <td className="py-1 px-1.5 text-center">
-                    <select
+                    <MultiSelectFilter
                       value={colFilters.patterns}
-                      onChange={(e) => setColFilters({ ...colFilters, patterns: e.target.value })}
-                      className="w-full min-w-[65px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 focus:outline-none focus:border-purple-500 cursor-pointer"
-                    >
-                      <option value="">All</option>
-                      <option value="NR7">NR7</option>
-                      <option value="Inside">Inside</option>
-                      <option value="Gap+">Gap+</option>
-                      <option value="Gap-">Gap-</option>
-                    </select>
+                      onChange={(val) => setColFilters({ ...colFilters, patterns: val })}
+                      placeholder="All"
+                      minWidth="65px"
+                      options={[
+                        { value: 'NR7', label: 'NR7' },
+                        { value: 'Inside', label: 'Inside' },
+                        { value: 'Gap+', label: 'Gap+' },
+                        { value: 'Gap-', label: 'Gap-' },
+                      ]}
+                    />
                   </td>
 
                   {/* ML Signal */}
                   <td className="py-1 px-1.5 text-center">
-                    <select
+                    <MultiSelectFilter
                       value={colFilters.ml_label}
-                      onChange={(e) => setColFilters({ ...colFilters, ml_label: e.target.value })}
-                      className="w-full min-w-[80px] px-0.5 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 focus:outline-none focus:border-purple-500 cursor-pointer"
-                    >
-                      <option value="">All</option>
-                      <option value="Very Bullish">Very Bullish</option>
-                      <option value="Bullish">Bullish</option>
-                      <option value="Neutral">Neutral</option>
-                      <option value="Bearish">Bearish</option>
-                      <option value="Very Bearish">Very Bearish</option>
-                    </select>
+                      onChange={(val) => setColFilters({ ...colFilters, ml_label: val })}
+                      placeholder="All"
+                      minWidth="80px"
+                      options={[
+                        { value: 'Very Bullish', label: 'Very Bullish', className: 'text-emerald-400 font-bold' },
+                        { value: 'Bullish', label: 'Bullish', className: 'text-emerald-500' },
+                        { value: 'Neutral', label: 'Neutral', className: 'text-slate-400' },
+                        { value: 'Bearish', label: 'Bearish', className: 'text-rose-500' },
+                        { value: 'Very Bearish', label: 'Very Bearish', className: 'text-rose-400 font-bold' },
+                      ]}
+                    />
                   </td>
 
                   {/* Actions */}
