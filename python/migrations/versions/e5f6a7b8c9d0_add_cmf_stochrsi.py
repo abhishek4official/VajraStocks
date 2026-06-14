@@ -52,16 +52,18 @@ def downgrade() -> None:
     op.drop_index("ix_snapshot_stochrsi_k", table_name="screening_snapshots")
     op.drop_index("ix_snapshot_cmf", table_name="screening_snapshots")
 
-    for col in (
-        "breakout_score_val", "cmf_score_val",
-        "stochrsi_bearish_xover_days_ago", "stochrsi_bullish_xover_days_ago",
-        "stochrsi_zone", "stochrsi_d", "stochrsi_k",
-        "cmf_crossed_above_zero", "cmf_20_prev", "cmf_20",
-    ):
-        op.drop_column("screening_snapshots", col)
+    with op.batch_alter_table("screening_snapshots") as batch_op:
+        for col in (
+            "breakout_score_val", "cmf_score_val",
+            "stochrsi_bearish_xover_days_ago", "stochrsi_bullish_xover_days_ago",
+            "stochrsi_zone", "stochrsi_d", "stochrsi_k",
+            "cmf_crossed_above_zero", "cmf_20_prev", "cmf_20",
+        ):
+            batch_op.drop_column(col)
 
-    for col in (
-        "stochrsi_bearish_xover", "stochrsi_bullish_xover",
-        "stochrsi_d", "stochrsi_k", "cmf_20",
-    ):
-        op.drop_column("daily_indicators", col)
+    with op.batch_alter_table("daily_indicators") as batch_op:
+        for col in (
+            "stochrsi_bearish_xover", "stochrsi_bullish_xover",
+            "stochrsi_d", "stochrsi_k", "cmf_20",
+        ):
+            batch_op.drop_column(col)

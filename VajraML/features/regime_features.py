@@ -17,8 +17,10 @@ Changes from v1:
 
 import numpy as np
 import pandas as pd
-from sqlalchemy import text
+from sqlalchemy import Float, cast, select
 from sqlalchemy.engine import Engine
+
+from stocks.db.models import DailyPrice, Symbol
 
 
 def compute_regime_features(engine: Engine) -> pd.DataFrame:
@@ -28,17 +30,20 @@ def compute_regime_features(engine: Engine) -> pd.DataFrame:
     Tries both '^NSEI' and 'NSEI' symbol names to handle variations in
     how the index was synced from yfinance.
     """
-    query = text("""
-        SELECT p.trading_date,
-               CAST(p.adj_close AS FLOAT) AS adj_close,
-               CAST(p.[close]   AS FLOAT) AS [close]
-        FROM daily_prices p
-        JOIN symbols s ON s.id = p.symbol_id
-        WHERE s.symbol IN ('^NSEI', 'NSEI', '^NIFTY50')
-          AND p.granularity = '1d'
-        ORDER BY p.trading_date
-    """)
-    nifty = pd.read_sql(query, engine, parse_dates=["trading_date"])
+    stmt = (
+        select(
+            DailyPrice.trading_date,
+            cast(DailyPrice.adj_close, Float).label("adj_close"),
+            cast(DailyPrice.close,     Float).label("close"),
+        )
+        .join(Symbol, Symbol.id == DailyPrice.symbol_id)
+        .where(
+            Symbol.symbol.in_(['^NSEI', 'NSEI', '^NIFTY50']),
+            DailyPrice.granularity == "1d",
+        )
+        .order_by(DailyPrice.trading_date)
+    )
+    nifty = pd.read_sql(stmt, engine, parse_dates=["trading_date"])
 
     if nifty.empty:
         raise ValueError(

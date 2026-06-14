@@ -22,5 +22,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_column('screening_snapshots', 'is_inside_bar')
-    op.drop_column('screening_snapshots', 'is_nr7')
+    with op.batch_alter_table('screening_snapshots') as batch_op:
+        batch_op.drop_column('is_inside_bar')
+        batch_op.drop_column('is_nr7')
