@@ -188,13 +188,13 @@ class ScreeningService:
                 ha_close = float(ha.close)
                 ha_direction = "UP" if float(ha.close) >= float(ha.open) else "DOWN"
 
-            # 4. Fetch latest 6 Technical Indicator rows
-            #    2nd needed for OBV trend; up to 6th needed for StochRSI crossover days-ago
+            # 4. Fetch latest 22 Technical Indicator rows
+            #    2nd needed for OBV trend; up to 22nd needed for 20-day crossover window
             ind_rows = _prefetch["ind_rows"] if _prefetch else self.db.scalars(
                 select(DailyIndicator)
                 .filter_by(symbol_id=symbol_id)
                 .order_by(DailyIndicator.trading_date.desc())
-                .limit(6)
+                .limit(22)
             ).all()
             ind = ind_rows[0] if ind_rows else None
             ind_prev = ind_rows[1] if len(ind_rows) > 1 else None
@@ -241,7 +241,7 @@ class ScreeningService:
                 else:
                     stochrsi_zone = "OVERSOLD"
 
-            # Crossover days-ago: scan up to 6 indicator rows (newest → oldest)
+            # Crossover days-ago: scan indicator rows (newest → oldest)
             stochrsi_bullish_xover_days_ago = None
             stochrsi_bearish_xover_days_ago = None
             for i, row in enumerate(ind_rows):
@@ -249,6 +249,84 @@ class ScreeningService:
                     stochrsi_bullish_xover_days_ago = i
                 if stochrsi_bearish_xover_days_ago is None and getattr(row, "stochrsi_bearish_xover", None):
                     stochrsi_bearish_xover_days_ago = i
+
+            # MA / price crossover recency — build date-keyed price dict for close lookups
+            prices_by_date = {p.trading_date: float(p.close) for p in prices}
+
+            def _xover(above_fn) -> tuple[int | None, int | None]:
+                """Scan ind_rows newest→oldest; return (days_since_bull, days_since_bear)."""
+                bull = bear = None
+                for _i in range(len(ind_rows) - 1):
+                    if _i >= 20:
+                        break
+                    curr = above_fn(ind_rows[_i])
+                    prev = above_fn(ind_rows[_i + 1])
+                    if curr is None or prev is None:
+                        continue
+                    if bull is None and curr and not prev:
+                        bull = _i
+                    if bear is None and not curr and prev:
+                        bear = _i
+                    if bull is not None and bear is not None:
+                        break
+                return bull, bear
+
+            def _above_price_sma20(r):
+                p = prices_by_date.get(r.trading_date)
+                return (p > float(r.sma_20)) if (p and r.sma_20 is not None) else None
+
+            def _above_price_sma50(r):
+                p = prices_by_date.get(r.trading_date)
+                return (p > float(r.sma_50)) if (p and r.sma_50 is not None) else None
+
+            def _above_price_ema20(r):
+                p = prices_by_date.get(r.trading_date)
+                return (p > float(r.ema_20)) if (p and getattr(r, "ema_20", None) is not None) else None
+
+            def _above_ema9_ema20(r):
+                if getattr(r, "ema_9", None) is None or getattr(r, "ema_20", None) is None:
+                    return None
+                return float(r.ema_9) > float(r.ema_20)
+
+            def _above_sma20_sma50(r):
+                if r.sma_20 is None or r.sma_50 is None:
+                    return None
+                return float(r.sma_20) > float(r.sma_50)
+
+            def _above_macd(r):
+                if r.macd_line is None or r.macd_signal is None:
+                    return None
+                return float(r.macd_line) > float(r.macd_signal)
+
+            def _above_cmf_zero(r):
+                if getattr(r, "cmf_20", None) is None:
+                    return None
+                return float(r.cmf_20) > 0.0
+
+            days_since_price_sma20_bull, _ = _xover(_above_price_sma20)
+            days_since_price_sma50_bull, _ = _xover(_above_price_sma50)
+            days_since_price_ema20_bull, _ = _xover(_above_price_ema20)
+            days_since_ema9_ema20_bull, days_since_ema9_ema20_bear = _xover(_above_ema9_ema20)
+            days_since_sma20_sma50_bull, _ = _xover(_above_sma20_sma50)
+            days_since_macd_bull, days_since_macd_bear = _xover(_above_macd)
+            days_since_cmf_bull, days_since_cmf_bear = _xover(_above_cmf_zero)
+
+            # Continuous crossover metrics (current-day values only)
+            ema9_ema20_spread = None
+            macd_histogram_slope = None
+            macd_above_zero = None
+            cmf_slope_5d = None
+            if ind:
+                if getattr(ind, "ema_9", None) is not None and getattr(ind, "ema_20", None) is not None and close_price > 0:
+                    ema9_ema20_spread = round((float(ind.ema_9) - float(ind.ema_20)) / close_price * 100, 4)
+                if ind.macd_line is not None:
+                    macd_above_zero = float(ind.macd_line) > 0
+                # 3-day histogram slope: need row at index 3
+                if ind.macd_histogram is not None and len(ind_rows) > 3 and ind_rows[3].macd_histogram is not None:
+                    macd_histogram_slope = round((float(ind.macd_histogram) - float(ind_rows[3].macd_histogram)) / 3, 6)
+                # 5-day CMF slope: need row at index 5
+                if getattr(ind, "cmf_20", None) is not None and len(ind_rows) > 5 and getattr(ind_rows[5], "cmf_20", None) is not None:
+                    cmf_slope_5d = round(float(ind.cmf_20) - float(ind_rows[5].cmf_20), 4)
 
             # 5. Fetch latest Renko Brick
             brick = _prefetch["brick"] if _prefetch else self.db.scalar(
@@ -344,14 +422,16 @@ class ScreeningService:
             ret_3w = _ret(15)
             ret_4w = _ret(20)
 
-            # 6c-ii. Volume breakout ratio — today's volume vs 20-day average
-            weekly_avg_volume = None
+            # 6c-ii. Avg traded value (price×volume) and volume breakout ratio
+            avg_traded_value = None
             volume_breakout_ratio = None
             if len(prices) >= 2:
-                vols = [float(p.volume) for p in prices[1:21]]  # exclude today
+                past_prices = prices[1:21]  # exclude today
+                vols = [float(p.volume) for p in past_prices]
                 if vols:
+                    traded_vals = [float(p.close) * float(p.volume) for p in past_prices]
+                    avg_traded_value = round(sum(traded_vals) / len(traded_vals), 0)
                     avg_vol = sum(vols) / len(vols)
-                    weekly_avg_volume = round(avg_vol, 0)
                     if avg_vol > 0:
                         volume_breakout_ratio = round(volume / avg_vol, 2)
 
@@ -460,6 +540,20 @@ class ScreeningService:
                     stochrsi_zone=stochrsi_zone,
                     stochrsi_bullish_xover_days_ago=stochrsi_bullish_xover_days_ago,
                     stochrsi_bearish_xover_days_ago=stochrsi_bearish_xover_days_ago,
+                    days_since_price_sma20_bull=days_since_price_sma20_bull,
+                    days_since_price_sma50_bull=days_since_price_sma50_bull,
+                    days_since_price_ema20_bull=days_since_price_ema20_bull,
+                    days_since_ema9_ema20_bull=days_since_ema9_ema20_bull,
+                    days_since_ema9_ema20_bear=days_since_ema9_ema20_bear,
+                    days_since_sma20_sma50_bull=days_since_sma20_sma50_bull,
+                    days_since_macd_bull=days_since_macd_bull,
+                    days_since_macd_bear=days_since_macd_bear,
+                    days_since_cmf_bull=days_since_cmf_bull,
+                    days_since_cmf_bear=days_since_cmf_bear,
+                    ema9_ema20_spread=ema9_ema20_spread,
+                    macd_histogram_slope=macd_histogram_slope,
+                    macd_above_zero=macd_above_zero,
+                    cmf_slope_5d=cmf_slope_5d,
                 )
                 self.db.add(snapshot)
             else:
@@ -512,6 +606,20 @@ class ScreeningService:
                 snapshot.stochrsi_zone = stochrsi_zone
                 snapshot.stochrsi_bullish_xover_days_ago = stochrsi_bullish_xover_days_ago
                 snapshot.stochrsi_bearish_xover_days_ago = stochrsi_bearish_xover_days_ago
+                snapshot.days_since_price_sma20_bull = days_since_price_sma20_bull
+                snapshot.days_since_price_sma50_bull = days_since_price_sma50_bull
+                snapshot.days_since_price_ema20_bull = days_since_price_ema20_bull
+                snapshot.days_since_ema9_ema20_bull  = days_since_ema9_ema20_bull
+                snapshot.days_since_ema9_ema20_bear  = days_since_ema9_ema20_bear
+                snapshot.days_since_sma20_sma50_bull = days_since_sma20_sma50_bull
+                snapshot.days_since_macd_bull        = days_since_macd_bull
+                snapshot.days_since_macd_bear        = days_since_macd_bear
+                snapshot.days_since_cmf_bull         = days_since_cmf_bull
+                snapshot.days_since_cmf_bear         = days_since_cmf_bear
+                snapshot.ema9_ema20_spread           = ema9_ema20_spread
+                snapshot.macd_histogram_slope        = macd_histogram_slope
+                snapshot.macd_above_zero             = macd_above_zero
+                snapshot.cmf_slope_5d                = cmf_slope_5d
             if commit:
                 self.db.commit()
         except Exception as e:
@@ -599,8 +707,8 @@ class ScreeningService:
                 if eligible:
                     rs_oldest_by_symbol[sid] = eligible[-1]  # oldest = last in desc-ordered list
 
-            # ── Bulk load 2: Indicators — last 30 calendar days covers 6+ trading days
-            ind_cutoff = dt.date.today() - dt.timedelta(days=30)
+            # ── Bulk load 2: Indicators — last 35 calendar days covers 22+ trading days
+            ind_cutoff = dt.date.today() - dt.timedelta(days=35)
             raw_indicators = []
             for chunk in self._id_chunks(symbol_ids):
                 raw_indicators.extend(
@@ -616,7 +724,7 @@ class ScreeningService:
             indicators_by_symbol: dict[int, list] = defaultdict(list)
             for ind in raw_indicators:
                 indicators_by_symbol[ind.symbol_id].append(ind)
-            indicators_by_symbol = {sid: rows[:6] for sid, rows in indicators_by_symbol.items()}
+            indicators_by_symbol = {sid: rows[:22] for sid, rows in indicators_by_symbol.items()}
 
             # ── Bulk load 3: Latest Heikin-Ashi candle per symbol
             ha_by_symbol: dict = {}
@@ -771,6 +879,11 @@ class ScreeningService:
         max_stochrsi_k: float | None = None,
         min_stochrsi_k: float | None = None,
         stochrsi_bullish_xover_max_days: int | None = None,
+        # Crossover recency filters
+        ema_ribbon_bull_max_days: int | None = None,
+        golden_cross_max_days: int | None = None,
+        macd_bull_xover_max_days: int | None = None,
+        cmf_bull_xover_max_days: int | None = None,
         limit: int = 2500,
     ) -> list[ScreeningSnapshot]:
         """Runs high-speed query sweeps directly against the narrow screening_snapshots table."""
@@ -826,6 +939,26 @@ class ScreeningService:
             stmt = stmt.where(
                 ScreeningSnapshot.stochrsi_bullish_xover_days_ago <= stochrsi_bullish_xover_max_days,
                 ScreeningSnapshot.stochrsi_bullish_xover_days_ago.is_not(None),
+            )
+        if ema_ribbon_bull_max_days is not None:
+            stmt = stmt.where(
+                ScreeningSnapshot.days_since_ema9_ema20_bull <= ema_ribbon_bull_max_days,
+                ScreeningSnapshot.days_since_ema9_ema20_bull.is_not(None),
+            )
+        if golden_cross_max_days is not None:
+            stmt = stmt.where(
+                ScreeningSnapshot.days_since_sma20_sma50_bull <= golden_cross_max_days,
+                ScreeningSnapshot.days_since_sma20_sma50_bull.is_not(None),
+            )
+        if macd_bull_xover_max_days is not None:
+            stmt = stmt.where(
+                ScreeningSnapshot.days_since_macd_bull <= macd_bull_xover_max_days,
+                ScreeningSnapshot.days_since_macd_bull.is_not(None),
+            )
+        if cmf_bull_xover_max_days is not None:
+            stmt = stmt.where(
+                ScreeningSnapshot.days_since_cmf_bull <= cmf_bull_xover_max_days,
+                ScreeningSnapshot.days_since_cmf_bull.is_not(None),
             )
 
         stmt = stmt.order_by(ScreeningSnapshot.symbol.asc())

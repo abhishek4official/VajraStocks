@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useStockStore } from '../store/useStockStore';
-import { Play, Eye, Filter, RefreshCw, BarChart2, Download, Bookmark, Zap } from 'lucide-react';
+import { Play, Eye, Filter, RefreshCw, BarChart2, Download, Bookmark, Zap, TrendingUp } from 'lucide-react';
 import type { ScreenerRow, StrategyMeta } from '../services/api';
 import { apiService } from '../services/api';
 
@@ -26,6 +26,8 @@ const DEFAULT_COL_FILTERS = {
   sma_20_cross_direction: '', sma_50_cross_direction: '', sma_200_cross_direction: '',
   macd_trend: '', ha_direction: '', renko_direction: '', line_break_direction: '',
   rs_score_1m: '', patterns: '', ml_label: '',
+  days_since_ema9_ema20_bull: '', days_since_sma20_sma50_bull: '',
+  days_since_macd_bull: '', days_since_cmf_bull: '',
 };
 type ColFilters = typeof DEFAULT_COL_FILTERS;
 
@@ -455,6 +457,10 @@ export const ScreenerPanel: React.FC = () => {
           const selected = colFilters.ml_label.split(',').filter(Boolean);
           if (selected.length > 0 && !selected.includes(row.ml_label || '')) return false;
         }
+        if (!matchNumericFilter(row.days_since_ema9_ema20_bull, colFilters.days_since_ema9_ema20_bull)) return false;
+        if (!matchNumericFilter(row.days_since_sma20_sma50_bull, colFilters.days_since_sma20_sma50_bull)) return false;
+        if (!matchNumericFilter(row.days_since_macd_bull, colFilters.days_since_macd_bull)) return false;
+        if (!matchNumericFilter(row.days_since_cmf_bull, colFilters.days_since_cmf_bull)) return false;
 
         return true;
       });
@@ -578,6 +584,8 @@ export const ScreenerPanel: React.FC = () => {
                 min_rs_1m: undefined,
                 min_cmf: undefined, max_cmf: undefined, cmf_rising: undefined, cmf_crossed_zero: undefined,
                 min_stochrsi_k: undefined, max_stochrsi_k: undefined, stochrsi_bullish_xover_max_days: undefined,
+                ema_ribbon_bull_max_days: undefined, golden_cross_max_days: undefined,
+                macd_bull_xover_max_days: undefined, cmf_bull_xover_max_days: undefined,
                 ...p.filters,
               });
               runScreener();
@@ -600,7 +608,7 @@ export const ScreenerPanel: React.FC = () => {
 
       {/* Organized Filter Grid (Toggleable) */}
       {showFilters && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 p-5 rounded-xl border border-slate-800/80 bg-[#121620]/30 shadow-inner">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-6 p-5 rounded-xl border border-slate-800/80 bg-[#121620]/30 shadow-inner">
           
           {/* Column 1: Price & Volume */}
           <div className="flex flex-col gap-4 lg:border-r border-slate-850 lg:pr-4">
@@ -939,6 +947,65 @@ export const ScreenerPanel: React.FC = () => {
               <span className="text-[10px] text-slate-500">StochRSI %K crossed above %D within N days</span>
             </div>
           </div>
+
+          {/* Column 6: Crossovers */}
+          <div className="flex flex-col gap-4">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-purple-400 flex items-center gap-1.5 mb-1 select-none">
+              <TrendingUp className="w-3.5 h-3.5 text-purple-500" /> Crossovers
+            </h4>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] font-semibold text-slate-400">EMA Ribbon Bull ≤ N days</label>
+              <input
+                type="number"
+                step="1"
+                placeholder="e.g. 5"
+                value={screenerFilters.ema_ribbon_bull_max_days !== undefined ? screenerFilters.ema_ribbon_bull_max_days : ''}
+                onChange={(e) => setScreenerFilters({ ema_ribbon_bull_max_days: e.target.value === '' ? undefined : Number(e.target.value) })}
+                className="w-full px-3 py-1.5 text-xs rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
+              />
+              <span className="text-[10px] text-slate-500">EMA9 crossed above EMA20 within N days</span>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] font-semibold text-slate-400">Golden Cross ≤ N days</label>
+              <input
+                type="number"
+                step="1"
+                placeholder="e.g. 10"
+                value={screenerFilters.golden_cross_max_days !== undefined ? screenerFilters.golden_cross_max_days : ''}
+                onChange={(e) => setScreenerFilters({ golden_cross_max_days: e.target.value === '' ? undefined : Number(e.target.value) })}
+                className="w-full px-3 py-1.5 text-xs rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
+              />
+              <span className="text-[10px] text-slate-500">SMA20 crossed above SMA50 within N days</span>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] font-semibold text-slate-400">MACD Bull Xover ≤ N days</label>
+              <input
+                type="number"
+                step="1"
+                placeholder="e.g. 5"
+                value={screenerFilters.macd_bull_xover_max_days !== undefined ? screenerFilters.macd_bull_xover_max_days : ''}
+                onChange={(e) => setScreenerFilters({ macd_bull_xover_max_days: e.target.value === '' ? undefined : Number(e.target.value) })}
+                className="w-full px-3 py-1.5 text-xs rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
+              />
+              <span className="text-[10px] text-slate-500">MACD crossed above signal within N days</span>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] font-semibold text-slate-400">CMF Bull Xover ≤ N days</label>
+              <input
+                type="number"
+                step="1"
+                placeholder="e.g. 5"
+                value={screenerFilters.cmf_bull_xover_max_days !== undefined ? screenerFilters.cmf_bull_xover_max_days : ''}
+                onChange={(e) => setScreenerFilters({ cmf_bull_xover_max_days: e.target.value === '' ? undefined : Number(e.target.value) })}
+                className="w-full px-3 py-1.5 text-xs rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
+              />
+              <span className="text-[10px] text-slate-500">CMF crossed above zero within N days</span>
+            </div>
+          </div>
         </div>
       )}
 
@@ -1048,10 +1115,10 @@ export const ScreenerPanel: React.FC = () => {
             /* Sticky overrides for headers of pinned columns */
             .screener-grid thead th:nth-child(1) { z-index: 25; background-color: #0c0f17 !important; }
             .screener-grid thead th:nth-child(2) { z-index: 25; background-color: #0c0f17 !important; }
-            .screener-grid thead th:nth-child(34) { z-index: 25; background-color: #0c0f17 !important; }
+            .screener-grid thead th:nth-child(38) { z-index: 25; background-color: #0c0f17 !important; }
             .screener-grid thead tr:nth-child(2) td:nth-child(1) { z-index: 25; background-color: #0c0f17 !important; }
             .screener-grid thead tr:nth-child(2) td:nth-child(2) { z-index: 25; background-color: #0c0f17 !important; }
-            .screener-grid thead tr:nth-child(2) td:nth-child(34) { z-index: 25; background-color: #0c0f17 !important; }
+            .screener-grid thead tr:nth-child(2) td:nth-child(38) { z-index: 25; background-color: #0c0f17 !important; }
 
             /* Zebra striping backgrounds for scrollable cells */
             .screener-grid tbody tr:nth-child(odd) td {
@@ -1072,10 +1139,10 @@ export const ScreenerPanel: React.FC = () => {
             }
 
             /* Pinned cell backgrounds (right Actions column) */
-            .screener-grid tbody tr:nth-child(odd) td:nth-child(34) {
+            .screener-grid tbody tr:nth-child(odd) td:nth-child(38) {
               background-color: #090b10 !important;
             }
-            .screener-grid tbody tr:nth-child(even) td:nth-child(34) {
+            .screener-grid tbody tr:nth-child(even) td:nth-child(38) {
               background-color: #0f121a !important;
             }
 
@@ -1116,10 +1183,14 @@ export const ScreenerPanel: React.FC = () => {
             .screener-grid th:nth-child(31), .screener-grid td:nth-child(31) { width: 90px; min-width: 90px; } /* RS 1M */
             .screener-grid th:nth-child(32), .screener-grid td:nth-child(32) { width: 150px; min-width: 150px; } /* Patterns */
             .screener-grid th:nth-child(33), .screener-grid td:nth-child(33) { width: 120px; min-width: 120px; } /* ML Signal */
+            .screener-grid th:nth-child(34), .screener-grid td:nth-child(34) { width: 72px; min-width: 72px; } /* EMA Ribbon */
+            .screener-grid th:nth-child(35), .screener-grid td:nth-child(35) { width: 68px; min-width: 68px; } /* Golden-X */
+            .screener-grid th:nth-child(36), .screener-grid td:nth-child(36) { width: 72px; min-width: 72px; } /* MACD-X */
+            .screener-grid th:nth-child(37), .screener-grid td:nth-child(37) { width: 68px; min-width: 68px; } /* CMF-X */
 
-            /* Pin Actions column (34th column) to the right */
-            .screener-grid th:nth-child(34),
-            .screener-grid td:nth-child(34) {
+            /* Pin Actions column (38th column) to the right */
+            .screener-grid th:nth-child(38),
+            .screener-grid td:nth-child(38) {
               position: sticky;
               right: 0;
               z-index: 5;
@@ -1244,6 +1315,18 @@ export const ScreenerPanel: React.FC = () => {
                 <th className="py-2 px-1.5 text-center" title="Pattern triggers">Patterns</th>
                 <th className="py-2 px-1.5 text-center cursor-pointer hover:text-white transition" title="VajraML 5-day return prediction rank" onClick={() => handleSort('ml_rank')}>
                   ML Signal {renderSortIcon('ml_rank')}
+                </th>
+                <th className="py-2 px-1.5 text-center cursor-pointer hover:text-white transition" title="Days since EMA9 crossed above EMA20 (golden ribbon)" onClick={() => handleSort('days_since_ema9_ema20_bull')}>
+                  EMA Rbbn {renderSortIcon('days_since_ema9_ema20_bull')}
+                </th>
+                <th className="py-2 px-1.5 text-center cursor-pointer hover:text-white transition" title="Days since SMA20 crossed above SMA50 (golden cross)" onClick={() => handleSort('days_since_sma20_sma50_bull')}>
+                  Gold-X {renderSortIcon('days_since_sma20_sma50_bull')}
+                </th>
+                <th className="py-2 px-1.5 text-center cursor-pointer hover:text-white transition" title="Days since MACD crossed above signal line" onClick={() => handleSort('days_since_macd_bull')}>
+                  MACD-X {renderSortIcon('days_since_macd_bull')}
+                </th>
+                <th className="py-2 px-1.5 text-center cursor-pointer hover:text-white transition" title="Days since CMF crossed above zero" onClick={() => handleSort('days_since_cmf_bull')}>
+                  CMF-X {renderSortIcon('days_since_cmf_bull')}
                 </th>
                 <th className="py-2 px-1.5 text-right">Actions</th>
               </tr>
@@ -1636,6 +1719,50 @@ export const ScreenerPanel: React.FC = () => {
                     />
                   </td>
 
+                  {/* EMA Ribbon */}
+                  <td className="py-1 px-1.5 text-center">
+                    <input
+                      type="text"
+                      placeholder="<5"
+                      value={colFilters.days_since_ema9_ema20_bull}
+                      onChange={(e) => setColFilters({ ...colFilters, days_since_ema9_ema20_bull: e.target.value })}
+                      className="w-full min-w-[40px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-purple-500 focus:text-white text-center transition font-mono"
+                    />
+                  </td>
+
+                  {/* Golden Cross */}
+                  <td className="py-1 px-1.5 text-center">
+                    <input
+                      type="text"
+                      placeholder="<10"
+                      value={colFilters.days_since_sma20_sma50_bull}
+                      onChange={(e) => setColFilters({ ...colFilters, days_since_sma20_sma50_bull: e.target.value })}
+                      className="w-full min-w-[40px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-purple-500 focus:text-white text-center transition font-mono"
+                    />
+                  </td>
+
+                  {/* MACD Xover */}
+                  <td className="py-1 px-1.5 text-center">
+                    <input
+                      type="text"
+                      placeholder="<5"
+                      value={colFilters.days_since_macd_bull}
+                      onChange={(e) => setColFilters({ ...colFilters, days_since_macd_bull: e.target.value })}
+                      className="w-full min-w-[40px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-purple-500 focus:text-white text-center transition font-mono"
+                    />
+                  </td>
+
+                  {/* CMF Xover */}
+                  <td className="py-1 px-1.5 text-center">
+                    <input
+                      type="text"
+                      placeholder="<5"
+                      value={colFilters.days_since_cmf_bull}
+                      onChange={(e) => setColFilters({ ...colFilters, days_since_cmf_bull: e.target.value })}
+                      className="w-full min-w-[40px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-purple-500 focus:text-white text-center transition font-mono"
+                    />
+                  </td>
+
                   {/* Actions */}
                   <td className="py-1 px-1.5 text-right">
                     {/* Empty space matching actions column */}
@@ -1646,7 +1773,7 @@ export const ScreenerPanel: React.FC = () => {
             <tbody className="divide-y divide-slate-850">
               {filteredResults.length === 0 ? (
                 <tr>
-                  <td colSpan={34} className="py-10 text-center text-slate-500 text-xs">
+                  <td colSpan={38} className="py-10 text-center text-slate-500 text-xs">
                     {isLoading 
                       ? 'Executing database snapshot sweep...' 
                       : 'No stock matches found for the current criteria.'}
@@ -2013,6 +2140,66 @@ export const ScreenerPanel: React.FC = () => {
                             </span>
                           );
                         })()}
+                      </td>
+
+                      {/* EMA Ribbon crossover */}
+                      <td className="py-2 px-1.5 text-center">
+                        {row.days_since_ema9_ema20_bull != null ? (
+                          <span className={`font-mono text-xs px-1 py-0.5 rounded border ${
+                            row.days_since_ema9_ema20_bull <= 3
+                              ? 'text-emerald-300 bg-emerald-950/30 border-emerald-700/40 font-bold'
+                              : row.days_since_ema9_ema20_bull <= 7
+                              ? 'text-teal-400 bg-teal-950/20 border-teal-800/30'
+                              : 'text-slate-500 bg-slate-900/30 border-slate-800/30'
+                          }`} title={`EMA9 crossed above EMA20: ${row.days_since_ema9_ema20_bull}d ago${row.ema9_ema20_spread != null ? ` · spread ${row.ema9_ema20_spread.toFixed(2)}%` : ''}`}>
+                            {row.days_since_ema9_ema20_bull}d
+                          </span>
+                        ) : <span className="text-slate-700">—</span>}
+                      </td>
+
+                      {/* Golden Cross */}
+                      <td className="py-2 px-1.5 text-center">
+                        {row.days_since_sma20_sma50_bull != null ? (
+                          <span className={`font-mono text-xs px-1 py-0.5 rounded border ${
+                            row.days_since_sma20_sma50_bull <= 5
+                              ? 'text-amber-300 bg-amber-950/30 border-amber-700/40 font-bold'
+                              : row.days_since_sma20_sma50_bull <= 10
+                              ? 'text-amber-500 bg-amber-950/15 border-amber-800/25'
+                              : 'text-slate-500 bg-slate-900/30 border-slate-800/30'
+                          }`} title={`SMA20 crossed above SMA50: ${row.days_since_sma20_sma50_bull}d ago`}>
+                            {row.days_since_sma20_sma50_bull}d
+                          </span>
+                        ) : <span className="text-slate-700">—</span>}
+                      </td>
+
+                      {/* MACD crossover */}
+                      <td className="py-2 px-1.5 text-center">
+                        {row.days_since_macd_bull != null ? (
+                          <span className={`font-mono text-xs px-1 py-0.5 rounded border ${
+                            row.days_since_macd_bull <= 3
+                              ? 'text-emerald-300 bg-emerald-950/30 border-emerald-700/40 font-bold'
+                              : row.days_since_macd_bull <= 7
+                              ? 'text-teal-400 bg-teal-950/20 border-teal-800/30'
+                              : 'text-slate-500 bg-slate-900/30 border-slate-800/30'
+                          }`} title={`MACD crossed above signal: ${row.days_since_macd_bull}d ago${row.macd_above_zero ? ' · MACD above zero ✓' : ''}${row.macd_histogram_slope != null ? ` · hist slope ${row.macd_histogram_slope > 0 ? '+' : ''}${row.macd_histogram_slope.toFixed(4)}` : ''}`}>
+                            {row.days_since_macd_bull}d{row.macd_above_zero ? '↑' : ''}
+                          </span>
+                        ) : <span className="text-slate-700">—</span>}
+                      </td>
+
+                      {/* CMF crossover */}
+                      <td className="py-2 px-1.5 text-center">
+                        {row.days_since_cmf_bull != null ? (
+                          <span className={`font-mono text-xs px-1 py-0.5 rounded border ${
+                            row.days_since_cmf_bull <= 3
+                              ? 'text-cyan-300 bg-cyan-950/30 border-cyan-700/40 font-bold'
+                              : row.days_since_cmf_bull <= 7
+                              ? 'text-cyan-500 bg-cyan-950/15 border-cyan-800/25'
+                              : 'text-slate-500 bg-slate-900/30 border-slate-800/30'
+                          }`} title={`CMF crossed above zero: ${row.days_since_cmf_bull}d ago${row.cmf_slope_5d != null ? ` · 5d slope ${row.cmf_slope_5d > 0 ? '+' : ''}${row.cmf_slope_5d.toFixed(3)}` : ''}`}>
+                            {row.days_since_cmf_bull}d
+                          </span>
+                        ) : <span className="text-slate-700">—</span>}
                       </td>
 
                       {/* Actions */}

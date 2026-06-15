@@ -253,6 +253,21 @@ export interface ScreenerRow {
   ml_rank?: number | null;
   ml_label?: string | null;
   strategy_signals?: Record<string, { signal: string; score: number | null }>;
+  // Crossover recency
+  days_since_price_sma20_bull?: number | null;
+  days_since_price_sma50_bull?: number | null;
+  days_since_price_ema20_bull?: number | null;
+  days_since_ema9_ema20_bull?: number | null;
+  days_since_ema9_ema20_bear?: number | null;
+  days_since_sma20_sma50_bull?: number | null;
+  days_since_macd_bull?: number | null;
+  days_since_macd_bear?: number | null;
+  days_since_cmf_bull?: number | null;
+  days_since_cmf_bear?: number | null;
+  ema9_ema20_spread?: number | null;
+  macd_histogram_slope?: number | null;
+  macd_above_zero?: boolean | null;
+  cmf_slope_5d?: number | null;
 }
 
 // ── Strategy Screener ─────────────────────────────────────────────────────────
@@ -531,6 +546,10 @@ export const apiService = {
     min_stochrsi_k?: number;
     max_stochrsi_k?: number;
     stochrsi_bullish_xover_max_days?: number;
+    ema_ribbon_bull_max_days?: number;
+    golden_cross_max_days?: number;
+    macd_bull_xover_max_days?: number;
+    cmf_bull_xover_max_days?: number;
     limit?: number;
   }): Promise<ScreenerRow[]> {
     const response = await fetch(`${BASE_URL}/screeners/run`, {
@@ -560,6 +579,10 @@ export const apiService = {
         min_stochrsi_k: filters.min_stochrsi_k ?? null,
         max_stochrsi_k: filters.max_stochrsi_k ?? null,
         stochrsi_bullish_xover_max_days: filters.stochrsi_bullish_xover_max_days ?? null,
+        ema_ribbon_bull_max_days: filters.ema_ribbon_bull_max_days ?? null,
+        golden_cross_max_days: filters.golden_cross_max_days ?? null,
+        macd_bull_xover_max_days: filters.macd_bull_xover_max_days ?? null,
+        cmf_bull_xover_max_days: filters.cmf_bull_xover_max_days ?? null,
         limit: filters.limit ?? 100
       })
     });

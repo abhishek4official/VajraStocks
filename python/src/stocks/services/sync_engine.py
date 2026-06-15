@@ -253,7 +253,7 @@ class SyncEngine:
                 range_groups[key].append(item[0])
 
             # 5. Process each date range group in batches
-            batch_size = self.config.downloader.batch_size
+            batch_size = min(50, self.config.downloader.batch_size)
 
             for (start_date, end_date), symbols_list in range_groups.items():
                 logger.info(

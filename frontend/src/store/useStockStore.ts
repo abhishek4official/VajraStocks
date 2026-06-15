@@ -44,6 +44,10 @@ interface ScreenerFilters {
   min_stochrsi_k?: number;
   max_stochrsi_k?: number;
   stochrsi_bullish_xover_max_days?: number;
+  ema_ribbon_bull_max_days?: number;
+  golden_cross_max_days?: number;
+  macd_bull_xover_max_days?: number;
+  cmf_bull_xover_max_days?: number;
   limit?: number;
 }
 

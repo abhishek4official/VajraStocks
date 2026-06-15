@@ -204,6 +204,11 @@ class ScreeningParams(BaseModel):
     max_stochrsi_k: float | None = None
     min_stochrsi_k: float | None = None
     stochrsi_bullish_xover_max_days: int | None = None
+    # Crossover recency filters
+    ema_ribbon_bull_max_days:  int | None = None   # days_since_ema9_ema20_bull
+    golden_cross_max_days:     int | None = None   # days_since_sma20_sma50_bull
+    macd_bull_xover_max_days:  int | None = None   # days_since_macd_bull
+    cmf_bull_xover_max_days:   int | None = None   # days_since_cmf_bull
     limit: int = 2500
 
 
@@ -270,6 +275,21 @@ class ScreenerRowResponse(BaseModel):
     ml_rank: int | None = None
     ml_label: str | None = None
     strategy_signals: dict = {}   # {strategy_id: {"signal": str, "score": float|None}}
+    # Crossover recency
+    days_since_price_sma20_bull: int | None = None
+    days_since_price_sma50_bull: int | None = None
+    days_since_price_ema20_bull: int | None = None
+    days_since_ema9_ema20_bull:  int | None = None
+    days_since_ema9_ema20_bear:  int | None = None
+    days_since_sma20_sma50_bull: int | None = None
+    days_since_macd_bull:        int | None = None
+    days_since_macd_bear:        int | None = None
+    days_since_cmf_bull:         int | None = None
+    days_since_cmf_bear:         int | None = None
+    ema9_ema20_spread:           float | None = None
+    macd_histogram_slope:        float | None = None
+    macd_above_zero:             bool | None = None
+    cmf_slope_5d:                float | None = None
 
     class Config:
         from_attributes = True
@@ -371,6 +391,20 @@ def _build_row(r, confl_by_symbol_id: dict, risk_per_trade: float, strat_by_symb
         "ml_rank": getattr(r, "ml_rank", None),
         "ml_label": getattr(r, "ml_label", None),
         "strategy_signals": (strat_by_symbol_id or {}).get(r.symbol_id, {}),
+        "days_since_price_sma20_bull": getattr(r, "days_since_price_sma20_bull", None),
+        "days_since_price_sma50_bull": getattr(r, "days_since_price_sma50_bull", None),
+        "days_since_price_ema20_bull": getattr(r, "days_since_price_ema20_bull", None),
+        "days_since_ema9_ema20_bull":  getattr(r, "days_since_ema9_ema20_bull", None),
+        "days_since_ema9_ema20_bear":  getattr(r, "days_since_ema9_ema20_bear", None),
+        "days_since_sma20_sma50_bull": getattr(r, "days_since_sma20_sma50_bull", None),
+        "days_since_macd_bull":        getattr(r, "days_since_macd_bull", None),
+        "days_since_macd_bear":        getattr(r, "days_since_macd_bear", None),
+        "days_since_cmf_bull":         getattr(r, "days_since_cmf_bull", None),
+        "days_since_cmf_bear":         getattr(r, "days_since_cmf_bear", None),
+        "ema9_ema20_spread":           getattr(r, "ema9_ema20_spread", None),
+        "macd_histogram_slope":        getattr(r, "macd_histogram_slope", None),
+        "macd_above_zero":             getattr(r, "macd_above_zero", None),
+        "cmf_slope_5d":                getattr(r, "cmf_slope_5d", None),
     }
 
 
@@ -399,6 +433,10 @@ def get_screening_results_get(
     max_stochrsi_k: float | None = None,
     min_stochrsi_k: float | None = None,
     stochrsi_bullish_xover_max_days: int | None = None,
+    ema_ribbon_bull_max_days: int | None = None,
+    golden_cross_max_days: int | None = None,
+    macd_bull_xover_max_days: int | None = None,
+    cmf_bull_xover_max_days: int | None = None,
     limit: int = 2500,
     db: Session = Depends(get_db),
 ):
@@ -428,6 +466,10 @@ def get_screening_results_get(
         max_stochrsi_k=max_stochrsi_k,
         min_stochrsi_k=min_stochrsi_k,
         stochrsi_bullish_xover_max_days=stochrsi_bullish_xover_max_days,
+        ema_ribbon_bull_max_days=ema_ribbon_bull_max_days,
+        golden_cross_max_days=golden_cross_max_days,
+        macd_bull_xover_max_days=macd_bull_xover_max_days,
+        cmf_bull_xover_max_days=cmf_bull_xover_max_days,
         limit=limit,
     )
 
@@ -466,6 +508,10 @@ def get_screening_results_post(params: ScreeningParams, db: Session = Depends(ge
         max_stochrsi_k=params.max_stochrsi_k,
         min_stochrsi_k=params.min_stochrsi_k,
         stochrsi_bullish_xover_max_days=params.stochrsi_bullish_xover_max_days,
+        ema_ribbon_bull_max_days=params.ema_ribbon_bull_max_days,
+        golden_cross_max_days=params.golden_cross_max_days,
+        macd_bull_xover_max_days=params.macd_bull_xover_max_days,
+        cmf_bull_xover_max_days=params.cmf_bull_xover_max_days,
         limit=params.limit,
     )
 

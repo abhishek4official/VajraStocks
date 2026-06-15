@@ -367,6 +367,24 @@ class ScreeningSnapshot(Base):
     ml_rank: Mapped[int | None] = mapped_column(Integer, nullable=True)
     ml_label: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
+    # Crossover recency — trading days since last crossover event (None = not seen within 20-day window)
+    days_since_price_sma20_bull: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    days_since_price_sma50_bull: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    days_since_price_ema20_bull: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    days_since_ema9_ema20_bull:  Mapped[int | None] = mapped_column(Integer, nullable=True)
+    days_since_ema9_ema20_bear:  Mapped[int | None] = mapped_column(Integer, nullable=True)
+    days_since_sma20_sma50_bull: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    days_since_macd_bull:        Mapped[int | None] = mapped_column(Integer, nullable=True)
+    days_since_macd_bear:        Mapped[int | None] = mapped_column(Integer, nullable=True)
+    days_since_cmf_bull:         Mapped[int | None] = mapped_column(Integer, nullable=True)
+    days_since_cmf_bear:         Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    # Continuous crossover distance / momentum
+    ema9_ema20_spread:    Mapped[float | None] = mapped_column(Float, nullable=True)   # (EMA9-EMA20)/close*100
+    macd_histogram_slope: Mapped[float | None] = mapped_column(Float, nullable=True)   # 3-day macd_hist slope
+    macd_above_zero:      Mapped[bool | None]  = mapped_column(Boolean, nullable=True) # macd_line > 0
+    cmf_slope_5d:         Mapped[float | None] = mapped_column(Float, nullable=True)   # CMF 5-day change
+
     updated_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now())
 
     # Relationships
