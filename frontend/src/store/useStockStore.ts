@@ -75,7 +75,7 @@ export interface WatchlistAlert {
   createdAt: string;
 }
 
-type TabId = 'explorer' | 'screener' | 'strategy' | 'sync' | 'ai-research' | 'portfolio' | 'watchlist' | 'compare' | 'settings' | 'about' | 'ml-training' | 'ml2-training';
+type TabId = 'explorer' | 'screener' | 'strategy' | 'sync' | 'ai-research' | 'portfolio' | 'watchlist' | 'compare' | 'settings' | 'about' | 'ml2-training';
 type ChartTimeframe = '1W' | '1M' | '3M' | '6M' | '1Y' | 'MAX';
 
 // ─── Store shape ──────────────────────────────────────────────────────────────

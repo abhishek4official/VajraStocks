@@ -18,7 +18,6 @@ import { ComparePanel } from './components/ComparePanel';
 import { SettingsPanel } from './components/SettingsPanel';
 import { SetupWizard } from './components/SetupWizard';
 import { AboutPanel } from './components/AboutPanel';
-import { MLTrainingPanel } from './components/MLTrainingPanel';
 import { ML2TrainingPanel } from './components/ML2TrainingPanel';
 import { FundamentalsCard } from './components/FundamentalsCard';
 import { AnnouncementsPanel } from './components/AnnouncementsPanel';
@@ -149,7 +148,7 @@ function Dashboard() {
 
     const handlePopState = () => {
       const path = window.location.pathname.replace(/^\/+/, '').split('/')[0];
-      const valid = ['explorer', 'screener', 'strategy', 'sync', 'ai-research', 'portfolio', 'watchlist', 'about', 'ml-training', 'ml2-training'];
+      const valid = ['explorer', 'screener', 'strategy', 'sync', 'ai-research', 'portfolio', 'watchlist', 'about', 'ml2-training'];
       const tab = valid.includes(path) ? path : 'explorer';
       useStockStore.setState({ activeTab: tab as any });
     };
@@ -209,8 +208,7 @@ function Dashboard() {
             { id: 'watchlist',   label: 'Watchlist',   Icon: Bookmark    },
             { id: 'compare',     label: 'Compare',     Icon: TrendingUp  },
             { id: 'ai-research', label: 'AI Research', Icon: Cpu         },
-            { id: 'ml-training', label: 'ML Model',    Icon: Brain       },
-            { id: 'ml2-training', label: 'ML2 Model',   Icon: Brain       },
+            { id: 'ml2-training', label: 'ML Model',    Icon: Brain       },
             { id: 'about',       label: 'About',       Icon: BookOpen    },
             { id: 'settings',    label: 'Settings',    Icon: Settings    },
           ] as const).map(({ id, label, Icon }) => (
@@ -589,9 +587,6 @@ function Dashboard() {
         {activeTab === 'about' && <AboutPanel />}
 
         {/* ML Training */}
-        {activeTab === 'ml-training' && <MLTrainingPanel />}
-
-        {/* ML2 Training */}
         {activeTab === 'ml2-training' && <ML2TrainingPanel />}
 
         {/* TAB 6: Watchlist */}

@@ -253,10 +253,7 @@ def run_ml2_snapshot_update(engine) -> int:
                         ml2_p_sl      = :p_sl,
                         ml2_ev_score  = :ev,
                         ml2_rank      = :rank,
-                        ml2_signal    = :signal,
-                        ml_prediction = :ev,
-                        ml_rank       = :rank,
-                        ml_label      = :signal
+                        ml2_signal    = :signal
                     WHERE symbol_id = :sid
                 """),
                 {

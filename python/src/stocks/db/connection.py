@@ -282,10 +282,6 @@ class DatabaseManager:
             ("screening_snapshots", "stochrsi_zone",                "VARCHAR(15)",  "VARCHAR(15)"),
             ("screening_snapshots", "stochrsi_bullish_xover_days_ago", "INTEGER",   "INT"),
             ("screening_snapshots", "stochrsi_bearish_xover_days_ago", "INTEGER",   "INT"),
-            # ML Prediction columns (written by VajraML post-sync hook)
-            ("screening_snapshots", "ml_prediction",        "FLOAT",        "FLOAT"),
-            ("screening_snapshots", "ml_rank",              "INTEGER",      "INT"),
-            ("screening_snapshots", "ml_label",             "VARCHAR(20)",  "VARCHAR(20)"),
             # VajraML2 prediction columns (triple-barrier classifier)
             ("screening_snapshots", "ml2_p_tp",             "FLOAT",        "FLOAT"),
             ("screening_snapshots", "ml2_p_sl",             "FLOAT",        "FLOAT"),

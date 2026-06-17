@@ -362,11 +362,6 @@ class ScreeningSnapshot(Base):
     stochrsi_bullish_xover_days_ago: Mapped[int | None] = mapped_column(Integer, nullable=True)
     stochrsi_bearish_xover_days_ago: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
-    # ML Prediction (written by VajraML post-sync hook, not by the per-symbol screening refresh)
-    ml_prediction: Mapped[float | None] = mapped_column(Float, nullable=True)
-    ml_rank: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    ml_label: Mapped[str | None] = mapped_column(String(20), nullable=True)
-
     # VajraML2 Prediction (triple-barrier classifier, written by V2 post-sync hook)
     ml2_p_tp: Mapped[float | None] = mapped_column(Float, nullable=True)
     ml2_p_sl: Mapped[float | None] = mapped_column(Float, nullable=True)

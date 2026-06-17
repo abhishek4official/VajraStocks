@@ -350,9 +350,6 @@ async def lifespan(app: FastAPI):
     _vajra_root = str(_Path(__file__).parents[4])
     if _vajra_root not in _sys.path:
         _sys.path.insert(0, _vajra_root)
-    from VajraML.train_service import TrainingJobManager
-    app.state.training_manager = TrainingJobManager()
-
     from VajraML2.train_service import TrainingJobManagerV2
     app.state.training_manager_v2 = TrainingJobManagerV2()
 
