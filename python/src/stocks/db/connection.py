@@ -263,7 +263,7 @@ class DatabaseManager:
             ("screening_snapshots", "supertrend_dir",       "VARCHAR(10)",  "VARCHAR(10)"),
             ("screening_snapshots", "stoch_state",          "VARCHAR(15)",  "VARCHAR(15)"),
             # Volume profile
-            ("screening_snapshots", "weekly_avg_volume",    "FLOAT",        "FLOAT"),
+            ("screening_snapshots", "avg_traded_value",     "FLOAT",        "FLOAT"),
             ("screening_snapshots", "volume_breakout_ratio","FLOAT",        "FLOAT"),
             # Composite score columns
             ("screening_snapshots", "composite_score",      "FLOAT",        "FLOAT"),
@@ -286,6 +286,12 @@ class DatabaseManager:
             ("screening_snapshots", "ml_prediction",        "FLOAT",        "FLOAT"),
             ("screening_snapshots", "ml_rank",              "INTEGER",      "INT"),
             ("screening_snapshots", "ml_label",             "VARCHAR(20)",  "VARCHAR(20)"),
+            # VajraML2 prediction columns (triple-barrier classifier)
+            ("screening_snapshots", "ml2_p_tp",             "FLOAT",        "FLOAT"),
+            ("screening_snapshots", "ml2_p_sl",             "FLOAT",        "FLOAT"),
+            ("screening_snapshots", "ml2_ev_score",         "FLOAT",        "FLOAT"),
+            ("screening_snapshots", "ml2_rank",             "INTEGER",      "INT"),
+            ("screening_snapshots", "ml2_signal",           "VARCHAR(20)",  "VARCHAR(20)"),
             # Crossover recency columns
             ("screening_snapshots", "days_since_price_sma20_bull", "INTEGER", "INT"),
             ("screening_snapshots", "days_since_price_sma50_bull", "INTEGER", "INT"),

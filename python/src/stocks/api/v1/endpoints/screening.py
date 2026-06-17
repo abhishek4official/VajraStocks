@@ -188,7 +188,7 @@ class ScreeningParams(BaseModel):
     ha_dir: str | None = None  # 'UP', 'DOWN'
     renko_dir: str | None = None  # 'UP', 'DOWN'
     lb_dir: str | None = None  # 'UP', 'DOWN'
-    min_weekly_avg_volume: float | None = None
+    min_avg_traded_value: float | None = None
     volume_breakout: str | None = None  # 'ANY', '1.5X', '2.0X', '3.0X'
     only_nr7: bool = False
     only_inside_bar: bool = False
@@ -236,7 +236,7 @@ class ScreenerRowResponse(BaseModel):
     rs_score_1m: float | None = None
     regime_bias: str | None = None
     weekly_trend: str | None = None
-    weekly_avg_volume: float | None = None
+    avg_traded_value: float | None = None
     volume_breakout_ratio: float | None = None
     ret_1w: float | None = None
     ret_2w: float | None = None
@@ -274,6 +274,11 @@ class ScreenerRowResponse(BaseModel):
     ml_prediction: float | None = None
     ml_rank: int | None = None
     ml_label: str | None = None
+    ml2_p_tp: float | None = None
+    ml2_p_sl: float | None = None
+    ml2_ev_score: float | None = None
+    ml2_rank: int | None = None
+    ml2_signal: str | None = None
     strategy_signals: dict = {}   # {strategy_id: {"signal": str, "score": float|None}}
     # Crossover recency
     days_since_price_sma20_bull: int | None = None
@@ -358,7 +363,7 @@ def _build_row(r, confl_by_symbol_id: dict, risk_per_trade: float, strat_by_symb
         "rs_score_1m": r.rs_score_1m,
         "regime_bias": getattr(r, "regime_bias", None),
         "weekly_trend": getattr(r, "weekly_trend", None),
-        "weekly_avg_volume": getattr(r, "weekly_avg_volume", None),
+        "avg_traded_value": getattr(r, "avg_traded_value", None),
         "volume_breakout_ratio": getattr(r, "volume_breakout_ratio", None),
         "ret_1w": r.ret_1w,
         "ret_2w": r.ret_2w,
@@ -390,6 +395,11 @@ def _build_row(r, confl_by_symbol_id: dict, risk_per_trade: float, strat_by_symb
         "ml_prediction": getattr(r, "ml_prediction", None),
         "ml_rank": getattr(r, "ml_rank", None),
         "ml_label": getattr(r, "ml_label", None),
+        "ml2_p_tp":    getattr(r, "ml2_p_tp",    None),
+        "ml2_p_sl":    getattr(r, "ml2_p_sl",    None),
+        "ml2_ev_score":getattr(r, "ml2_ev_score", None),
+        "ml2_rank":    getattr(r, "ml2_rank",     None),
+        "ml2_signal":  getattr(r, "ml2_signal",   None),
         "strategy_signals": (strat_by_symbol_id or {}).get(r.symbol_id, {}),
         "days_since_price_sma20_bull": getattr(r, "days_since_price_sma20_bull", None),
         "days_since_price_sma50_bull": getattr(r, "days_since_price_sma50_bull", None),
@@ -419,7 +429,7 @@ def get_screening_results_get(
     ha_dir: str | None = None,
     renko_dir: str | None = None,
     lb_dir: str | None = None,
-    min_weekly_avg_volume: float | None = None,
+    min_avg_traded_value: float | None = None,
     volume_breakout: str | None = None,
     only_nr7: bool = False,
     only_inside_bar: bool = False,
@@ -452,7 +462,7 @@ def get_screening_results_get(
         ha_dir=ha_dir,
         renko_dir=renko_dir,
         lb_dir=lb_dir,
-        min_weekly_avg_volume=min_weekly_avg_volume,
+        min_avg_traded_value=min_avg_traded_value,
         volume_breakout=volume_breakout,
         only_nr7=only_nr7,
         only_inside_bar=only_inside_bar,
@@ -494,7 +504,7 @@ def get_screening_results_post(params: ScreeningParams, db: Session = Depends(ge
         ha_dir=params.ha_dir,
         renko_dir=params.renko_dir,
         lb_dir=params.lb_dir,
-        min_weekly_avg_volume=params.min_weekly_avg_volume,
+        min_avg_traded_value=params.min_avg_traded_value,
         volume_breakout=params.volume_breakout,
         only_nr7=params.only_nr7,
         only_inside_bar=params.only_inside_bar,

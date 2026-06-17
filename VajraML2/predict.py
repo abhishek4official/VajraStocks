@@ -171,6 +171,109 @@ def _grade(row, regime_ok: bool) -> str:
     return "Avoid"
 
 
+def run_ml2_snapshot_update(engine) -> int:
+    """
+    Run V2 predictions for all universe stocks and write results to screening_snapshots.
+
+    Columns written: ml2_p_tp, ml2_p_sl, ml2_ev_score, ml2_rank, ml2_signal.
+    Called as a post-sync hook — uses the app's existing engine, no second connection.
+    Returns the number of snapshot rows updated.
+    """
+    from sqlalchemy import text
+    from VajraML2.pipeline2 import build_inference_dataset
+
+    print("VajraML2: building inference dataset for post-sync V2 update...")
+    df, feature_cols = build_inference_dataset(engine)
+
+    latest_date = df["trading_date"].max()
+    latest = df[df["trading_date"] == latest_date].copy()
+    print(f"VajraML2: predicting {len(latest)} stocks for {latest_date.date()}")
+
+    # ── Load V2 model ─────────────────────────────────────────────────────────
+    v2_model_path = MODELS_DIR / "fold_final" / "lgbm_v2.txt"
+    if not v2_model_path.exists():
+        fold_dirs = sorted(MODELS_DIR.glob("fold_*"))
+        if not fold_dirs:
+            raise FileNotFoundError(
+                f"No V2 models in {MODELS_DIR}. Run VajraML2 training first."
+            )
+        v2_model_path = fold_dirs[-1] / "lgbm_v2.txt"
+
+    fc_path = v2_model_path.parent / "feature_cols.json"
+    if fc_path.exists():
+        v2_feature_cols = json.loads(fc_path.read_text())
+    else:
+        v2_feature_cols = feature_cols
+
+    booster_v2 = lgb.Booster(model_str=v2_model_path.read_text(encoding="utf-8"))
+    proba = booster_v2.predict(latest[v2_feature_cols].values)
+    p_sl   = proba[:, 0]
+    p_tp   = proba[:, 2]
+    ev     = ev_score(p_tp, p_sl)
+
+    # ── Load V1 model for dual-model agreement ────────────────────────────────
+    v1_model_path = _V1_MODELS_DIR / "fold_final" / "lgbm.txt"
+    if not v1_model_path.exists():
+        v1_fold_dirs = sorted(_V1_MODELS_DIR.glob("fold_*"))
+        v1_model_path = v1_fold_dirs[-1] / "lgbm.txt" if v1_fold_dirs else None
+
+    if v1_model_path and v1_model_path.exists():
+        booster_v1 = lgb.Booster(model_str=v1_model_path.read_text(encoding="utf-8"))
+        v1_feature_names = booster_v1.feature_name()
+        v1_pred = booster_v1.predict(latest[v1_feature_names].values)
+        v1_rank_pct = pd.Series(v1_pred).rank(pct=True).values
+    else:
+        v1_rank_pct = np.zeros(len(latest))
+
+    # ── Regime gate ───────────────────────────────────────────────────────────
+    nifty_vs_sma200 = float(latest["nifty_vs_sma200"].iloc[0])
+    nifty_high_vol  = int(latest["nifty_high_vol_flag"].iloc[0])
+    regime_ok = (nifty_vs_sma200 > REGIME_SMA200_FLOOR) and (nifty_high_vol == 0)
+
+    # ── Assemble result DataFrame ─────────────────────────────────────────────
+    result = latest[["symbol_id", "volume_ratio_20d"]].copy().reset_index(drop=True)
+    result["p_tp"]        = p_tp
+    result["p_sl"]        = p_sl
+    result["ev_score"]    = ev
+    result["v1_rank_pct"] = v1_rank_pct
+    result["volume_ok"]   = result["volume_ratio_20d"] >= VOLUME_MIN_RATIO
+
+    result["ml2_signal"] = result.apply(lambda r: _grade(r, regime_ok), axis=1)
+    result["ml2_rank"]   = result["ev_score"].rank(ascending=False).astype(int)
+
+    # ── Bulk write to screening_snapshots ─────────────────────────────────────
+    # V2 is the primary ML signal — writes to both ml2_* and the shared ml_* columns.
+    updated = 0
+    with engine.begin() as conn:
+        for _, row in result.iterrows():
+            conn.execute(
+                text("""
+                    UPDATE screening_snapshots
+                    SET ml2_p_tp      = :p_tp,
+                        ml2_p_sl      = :p_sl,
+                        ml2_ev_score  = :ev,
+                        ml2_rank      = :rank,
+                        ml2_signal    = :signal,
+                        ml_prediction = :ev,
+                        ml_rank       = :rank,
+                        ml_label      = :signal
+                    WHERE symbol_id = :sid
+                """),
+                {
+                    "p_tp":   float(row["p_tp"]),
+                    "p_sl":   float(row["p_sl"]),
+                    "ev":     float(row["ev_score"]),
+                    "rank":   int(row["ml2_rank"]),
+                    "signal": str(row["ml2_signal"]),
+                    "sid":    int(row["symbol_id"]),
+                },
+            )
+            updated += 1
+
+    print(f"VajraML2: V2 snapshot update complete — {updated} rows written for {latest_date.date()}")
+    return updated
+
+
 if __name__ == "__main__":
     import sys
     sys.path.insert(0, str(Path(__file__).parent.parent))

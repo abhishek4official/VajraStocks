@@ -338,7 +338,7 @@ class ScreeningSnapshot(Base):
     stoch_state: Mapped[str | None] = mapped_column(String(15), nullable=True)           # OVERBOUGHT / OVERSOLD / NEUTRAL
 
     # Volume profile
-    weekly_avg_volume: Mapped[float | None] = mapped_column(Float, nullable=True)
+    avg_traded_value: Mapped[float | None] = mapped_column(Float, nullable=True)
     volume_breakout_ratio: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     # Composite scoring (0-100 per component + weighted total)
@@ -366,6 +366,13 @@ class ScreeningSnapshot(Base):
     ml_prediction: Mapped[float | None] = mapped_column(Float, nullable=True)
     ml_rank: Mapped[int | None] = mapped_column(Integer, nullable=True)
     ml_label: Mapped[str | None] = mapped_column(String(20), nullable=True)
+
+    # VajraML2 Prediction (triple-barrier classifier, written by V2 post-sync hook)
+    ml2_p_tp: Mapped[float | None] = mapped_column(Float, nullable=True)
+    ml2_p_sl: Mapped[float | None] = mapped_column(Float, nullable=True)
+    ml2_ev_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    ml2_rank: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    ml2_signal: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     # Crossover recency — trading days since last crossover event (None = not seen within 20-day window)
     days_since_price_sma20_bull: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -413,6 +420,25 @@ class MLTrainingRun(Base):
     date_range_start: Mapped[datetime.date | None] = mapped_column(Date, nullable=True)
     date_range_end:   Mapped[datetime.date | None] = mapped_column(Date, nullable=True)
     mean_ic:          Mapped[float | None]         = mapped_column(Float, nullable=True)
+    fold_metrics:     Mapped[str | None]           = mapped_column(Text, nullable=True)   # JSON array
+    error_message:    Mapped[str | None]           = mapped_column(Text, nullable=True)
+    started_at:       Mapped[datetime.datetime]    = mapped_column(DateTime, default=func.now())
+    completed_at:     Mapped[datetime.datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class ML2TrainingRun(Base):
+    """Persists each VajraML2 (triple-barrier classifier) training run."""
+
+    __tablename__ = "ml2_training_runs"
+
+    id:               Mapped[int]                  = mapped_column(Integer, primary_key=True, autoincrement=True)
+    version:          Mapped[str]                  = mapped_column(String(30), nullable=False)
+    status:           Mapped[str]                  = mapped_column(String(20), nullable=False, default="RUNNING")
+    num_folds:        Mapped[int | None]           = mapped_column(Integer, nullable=True)
+    dataset_rows:     Mapped[int | None]           = mapped_column(Integer, nullable=True)
+    date_range_start: Mapped[datetime.date | None] = mapped_column(Date, nullable=True)
+    date_range_end:   Mapped[datetime.date | None] = mapped_column(Date, nullable=True)
+    mean_ic_ptp:      Mapped[float | None]         = mapped_column(Float, nullable=True)
     fold_metrics:     Mapped[str | None]           = mapped_column(Text, nullable=True)   # JSON array
     error_message:    Mapped[str | None]           = mapped_column(Text, nullable=True)
     started_at:       Mapped[datetime.datetime]    = mapped_column(DateTime, default=func.now())
@@ -587,4 +613,89 @@ class WatchlistItem(Base):
 
     __table_args__ = (
         UniqueConstraint("watchlist_id", "symbol", name="UQ_WatchlistItem_WatchlistSymbol"),
+    )
+
+
+class SymbolFundamentals(Base):
+    """Fundamental data fetched weekly via yfinance for each symbol."""
+
+    __tablename__ = "symbol_fundamentals"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    symbol_id: Mapped[int] = mapped_column(Integer, ForeignKey("symbols.id", ondelete="CASCADE"), nullable=False, unique=True)
+    symbol: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+
+    # Valuation
+    market_cap: Mapped[float | None] = mapped_column(Float, nullable=True)
+    enterprise_value: Mapped[float | None] = mapped_column(Float, nullable=True)
+    pe_ratio: Mapped[float | None] = mapped_column(Float, nullable=True)
+    forward_pe: Mapped[float | None] = mapped_column(Float, nullable=True)
+    pb_ratio: Mapped[float | None] = mapped_column(Float, nullable=True)
+    ev_ebitda: Mapped[float | None] = mapped_column(Float, nullable=True)
+    price_to_sales: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    # Income
+    revenue_ttm: Mapped[float | None] = mapped_column(Float, nullable=True)
+    net_profit_ttm: Mapped[float | None] = mapped_column(Float, nullable=True)
+    ebitda: Mapped[float | None] = mapped_column(Float, nullable=True)
+    gross_margin: Mapped[float | None] = mapped_column(Float, nullable=True)
+    profit_margin: Mapped[float | None] = mapped_column(Float, nullable=True)
+    operating_margin: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    # Per share
+    eps_ttm: Mapped[float | None] = mapped_column(Float, nullable=True)
+    book_value: Mapped[float | None] = mapped_column(Float, nullable=True)
+    dividend_yield: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    # Quality
+    roe: Mapped[float | None] = mapped_column(Float, nullable=True)
+    roa: Mapped[float | None] = mapped_column(Float, nullable=True)
+    debt_to_equity: Mapped[float | None] = mapped_column(Float, nullable=True)
+    current_ratio: Mapped[float | None] = mapped_column(Float, nullable=True)
+    free_cashflow: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    # Classification
+    sector: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    industry: Mapped[str | None] = mapped_column(String(200), nullable=True)
+
+    fetched_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now())
+
+
+class NSEAnnouncement(Base):
+    """Corporate announcements fetched from NSE's official public API."""
+
+    __tablename__ = "nse_announcements"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    symbol_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("symbols.id", ondelete="CASCADE"), nullable=True)
+    symbol: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    seq_id: Mapped[str] = mapped_column(String(50), nullable=False, unique=True)
+    announcement_date: Mapped[datetime.datetime] = mapped_column(DateTime, nullable=False)
+    subject: Mapped[str] = mapped_column(String(500), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    file_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    fetched_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=func.now())
+
+    __table_args__ = (
+        Index("ix_nse_announcements_symbol_date", "symbol", "announcement_date"),
+    )
+
+
+class NewsItem(Base):
+    """Financial news fetched from yfinance per symbol."""
+
+    __tablename__ = "news_items"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    symbol: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    article_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    title: Mapped[str] = mapped_column(String(500), nullable=False)
+    publisher: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    link: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    published_at: Mapped[datetime.datetime | None] = mapped_column(DateTime, nullable=True)
+    fetched_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("symbol", "article_id", name="UQ_NewsItem_Symbol_ArticleId"),
+        Index("ix_news_items_symbol_published", "symbol", "published_at"),
     )

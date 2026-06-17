@@ -214,7 +214,7 @@ export interface ScreenerRow {
   rs_score_1m?: number | null;
   regime_bias?: string | null;
   weekly_trend?: string | null;
-  weekly_avg_volume?: number | null;
+  avg_traded_value?: number | null;
   volume_breakout_ratio?: number | null;
   ret_1w?: number | null;
   ret_2w?: number | null;
@@ -407,6 +407,102 @@ export interface MLProgressEvent {
   error?: string;
 }
 
+// ── ML2 Training ──────────────────────────────────────────────────────────────
+export interface ML2FoldMetric {
+  fold: number;
+  ic_ptp: number;
+  tp_prec: number;
+  hit_5d: number;
+  ls_pnl: number;
+}
+
+export interface ML2TrainingRun {
+  id: number;
+  version: string;
+  status: 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
+  num_folds: number | null;
+  dataset_rows: number | null;
+  date_range_start: string | null;
+  date_range_end: string | null;
+  mean_ic_ptp: number | null;
+  fold_metrics: ML2FoldMetric[] | null;
+  error_message: string | null;
+  started_at: string;
+  completed_at: string | null;
+}
+
+export interface ML2ProgressEvent {
+  type: 'stage' | 'dataset' | 'fold_start' | 'tree' | 'fold_done'
+      | 'complete' | 'cancelled' | 'error' | 'heartbeat' | 'stream_end';
+  pct?: number;
+  message?: string;
+  rows?: number;
+  features?: number;
+  date_start?: string;
+  date_end?: string;
+  fold?: number;
+  total?: number;
+  train_rows?: number;
+  test_rows?: number;
+  tree?: number;
+  ic_ptp?: number;
+  tp_prec?: number;
+  hit_5d?: number;
+  ls_pnl?: number;
+  mean_ic_ptp?: number;
+  mean_tp_prec?: number;
+  folds?: number;
+  error?: string;
+}
+
+// ── Fundamentals ─────────────────────────────────────────────────────────────
+export interface SymbolFundamentals {
+  symbol: string;
+  market_cap: number | null;
+  enterprise_value: number | null;
+  pe_ratio: number | null;
+  forward_pe: number | null;
+  pb_ratio: number | null;
+  ev_ebitda: number | null;
+  price_to_sales: number | null;
+  revenue_ttm: number | null;
+  net_profit_ttm: number | null;
+  ebitda: number | null;
+  gross_margin: number | null;
+  profit_margin: number | null;
+  operating_margin: number | null;
+  eps_ttm: number | null;
+  book_value: number | null;
+  dividend_yield: number | null;
+  roe: number | null;
+  roa: number | null;
+  debt_to_equity: number | null;
+  current_ratio: number | null;
+  free_cashflow: number | null;
+  sector: string | null;
+  industry: string | null;
+  fetched_at: string | null;
+}
+
+export interface NSEAnnouncement {
+  id: number;
+  symbol: string;
+  seq_id: string;
+  announcement_date: string | null;
+  subject: string;
+  description: string | null;
+  file_url: string | null;
+}
+
+export interface NewsItem {
+  id: number;
+  symbol: string;
+  title: string;
+  publisher: string | null;
+  link: string | null;
+  published_at: string | null;
+}
+
 export const apiService = {
   // 1. Symbols endpoints
   async getAllSymbols(activeOnly = true): Promise<SymbolDetail[]> {
@@ -497,7 +593,7 @@ export const apiService = {
     ha_dir?: 'UP' | 'DOWN';
     renko_dir?: 'UP' | 'DOWN';
     lb_dir?: 'UP' | 'DOWN';
-    min_weekly_avg_volume?: number;
+    min_avg_traded_value?: number;
     volume_breakout?: 'ANY' | '1.5X' | '2.0X' | '3.0X';
     limit?: number;
   }): Promise<ScreenerRow[]> {
@@ -511,7 +607,7 @@ export const apiService = {
     if (filters.ha_dir !== undefined) query.append('ha_dir', filters.ha_dir);
     if (filters.renko_dir !== undefined) query.append('renko_dir', filters.renko_dir);
     if (filters.lb_dir !== undefined) query.append('lb_dir', filters.lb_dir);
-    if (filters.min_weekly_avg_volume !== undefined) query.append('min_weekly_avg_volume', String(filters.min_weekly_avg_volume));
+    if (filters.min_avg_traded_value !== undefined) query.append('min_avg_traded_value', String(filters.min_avg_traded_value * 1e7));
     if (filters.volume_breakout !== undefined) query.append('volume_breakout', filters.volume_breakout);
     if (filters.limit !== undefined) query.append('limit', String(filters.limit));
 
@@ -532,7 +628,7 @@ export const apiService = {
     ha_dir?: 'UP' | 'DOWN';
     renko_dir?: 'UP' | 'DOWN';
     lb_dir?: 'UP' | 'DOWN';
-    min_weekly_avg_volume?: number;
+    min_avg_traded_value?: number;
     volume_breakout?: 'ANY' | '1.5X' | '2.0X' | '3.0X';
     only_nr7?: boolean;
     only_inside_bar?: boolean;
@@ -565,7 +661,7 @@ export const apiService = {
         ha_dir: filters.ha_dir ?? null,
         renko_dir: filters.renko_dir ?? null,
         lb_dir: filters.lb_dir ?? null,
-        min_weekly_avg_volume: filters.min_weekly_avg_volume ?? null,
+        min_avg_traded_value: filters.min_avg_traded_value !== undefined ? filters.min_avg_traded_value * 1e7 : null,
         volume_breakout: filters.volume_breakout ?? null,
         only_nr7: filters.only_nr7 ?? false,
         only_inside_bar: filters.only_inside_bar ?? false,
@@ -786,5 +882,70 @@ export const apiService = {
       method: 'DELETE',
     });
     if (!r.ok) throw new Error('Failed to remove symbol from watchlist');
+  },
+
+  // ── Fundamentals ─────────────────────────────────────────────────────────────
+  async getFundamentals(symbol: string): Promise<SymbolFundamentals | null> {
+    try {
+      const r = await fetch(`${BASE_URL}/fundamentals/${encodeURIComponent(symbol)}`);
+      if (!r.ok) return null;
+      return r.json();
+    } catch {
+      return null;
+    }
+  },
+
+  async refreshFundamentals(symbol: string): Promise<SymbolFundamentals | null> {
+    try {
+      const r = await fetch(`${BASE_URL}/fundamentals/${encodeURIComponent(symbol)}/refresh`, { method: 'POST' });
+      if (!r.ok) return null;
+      return r.json();
+    } catch {
+      return null;
+    }
+  },
+
+  // ── NSE Announcements ─────────────────────────────────────────────────────────
+  async getAnnouncements(symbol: string, limit = 20): Promise<NSEAnnouncement[]> {
+    try {
+      const r = await fetch(`${BASE_URL}/announcements/${encodeURIComponent(symbol)}?limit=${limit}`);
+      if (!r.ok) return [];
+      return r.json();
+    } catch {
+      return [];
+    }
+  },
+
+  async refreshAnnouncements(symbol: string): Promise<NSEAnnouncement[]> {
+    try {
+      const r = await fetch(`${BASE_URL}/announcements/${encodeURIComponent(symbol)}/refresh`, { method: 'POST' });
+      if (!r.ok) return [];
+      const data = await r.json();
+      return data.items ?? [];
+    } catch {
+      return [];
+    }
+  },
+
+  // ── News ──────────────────────────────────────────────────────────────────────
+  async getNews(symbol: string, limit = 15): Promise<NewsItem[]> {
+    try {
+      const r = await fetch(`${BASE_URL}/news/${encodeURIComponent(symbol)}?limit=${limit}`);
+      if (!r.ok) return [];
+      return r.json();
+    } catch {
+      return [];
+    }
+  },
+
+  async refreshNews(symbol: string): Promise<NewsItem[]> {
+    try {
+      const r = await fetch(`${BASE_URL}/news/${encodeURIComponent(symbol)}/refresh`, { method: 'POST' });
+      if (!r.ok) return [];
+      const data = await r.json();
+      return data.items ?? [];
+    } catch {
+      return [];
+    }
   },
 };

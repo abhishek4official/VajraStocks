@@ -21,11 +21,11 @@ const DEFAULT_COL_FILTERS = {
   symbol: '', company_name: '', close_price: '', price_pct_change: '', regime_bias: '',
   ret_1w: '', ret_2w: '', ret_3w: '', ret_4w: '', stop_loss: '', target_1: '', target_2: '',
   target_3: '', potential_gain_pct: '', rr_ratio: '', trade_quality_score: '',
-  position_size_shares: '', weekly_avg_volume: '', volume_breakout_ratio: '', rsi_14: '',
+  position_size_shares: '', avg_traded_value: '', volume_breakout_ratio: '', rsi_14: '',
   cmf_20: '', stochrsi_k: '', stochrsi_d: '',
   sma_20_cross_direction: '', sma_50_cross_direction: '', sma_200_cross_direction: '',
   macd_trend: '', ha_direction: '', renko_direction: '', line_break_direction: '',
-  rs_score_1m: '', patterns: '', ml_label: '',
+  rs_score_1m: '', patterns: '', ml_label: '', ml2_signal: '',
   days_since_ema9_ema20_bull: '', days_since_sma20_sma50_bull: '',
   days_since_macd_bull: '', days_since_cmf_bull: '',
 };
@@ -323,11 +323,13 @@ export const ScreenerPanel: React.FC = () => {
     return Number(val).toFixed(decimals);
   };
 
-  const formatVolume = (vol: number | null | undefined) => {
-    if (vol === null || vol === undefined) return '-';
-    if (vol >= 1000000) return `${(vol / 1000000).toFixed(2)}M`;
-    if (vol >= 1000) return `${(vol / 1000).toFixed(1)}K`;
-    return vol.toString();
+  const formatTradedValue = (val: number | null | undefined) => {
+    if (val === null || val === undefined) return '-';
+    const cr = val / 1e7;
+    if (cr >= 100) return `${cr.toFixed(0)} Cr`;
+    if (cr >= 1) return `${cr.toFixed(2)} Cr`;
+    const lakh = val / 1e5;
+    return `${lakh.toFixed(1)} L`;
   };
 
   // Sorting Handler
@@ -405,7 +407,7 @@ export const ScreenerPanel: React.FC = () => {
         if (!matchNumericFilter(row.rr_ratio, colFilters.rr_ratio)) return false;
         if (!matchNumericFilter(row.trade_quality_score, colFilters.trade_quality_score)) return false;
         if (!matchNumericFilter(row.position_size_shares, colFilters.position_size_shares)) return false;
-        if (!matchNumericFilter(row.weekly_avg_volume, colFilters.weekly_avg_volume)) return false;
+        if (!matchNumericFilter(row.avg_traded_value, colFilters.avg_traded_value)) return false;
         if (!matchNumericFilter(row.volume_breakout_ratio, colFilters.volume_breakout_ratio)) return false;
         if (!matchNumericFilter(row.rsi_14, colFilters.rsi_14)) return false;
         if (!matchNumericFilter(row.cmf_20, colFilters.cmf_20)) return false;
@@ -457,6 +459,10 @@ export const ScreenerPanel: React.FC = () => {
           const selected = colFilters.ml_label.split(',').filter(Boolean);
           if (selected.length > 0 && !selected.includes(row.ml_label || '')) return false;
         }
+        if (colFilters.ml2_signal) {
+          const selected = colFilters.ml2_signal.split(',').filter(Boolean);
+          if (selected.length > 0 && !selected.includes((row as any).ml2_signal || '')) return false;
+        }
         if (!matchNumericFilter(row.days_since_ema9_ema20_bull, colFilters.days_since_ema9_ema20_bull)) return false;
         if (!matchNumericFilter(row.days_since_sma20_sma50_bull, colFilters.days_since_sma20_sma50_bull)) return false;
         if (!matchNumericFilter(row.days_since_macd_bull, colFilters.days_since_macd_bull)) return false;
@@ -485,7 +491,7 @@ export const ScreenerPanel: React.FC = () => {
       `"${row.company_name.replace(/"/g, '""')}"`,
       row.close_price,
       row.price_pct_change ?? '',
-      row.weekly_avg_volume ?? '',
+      row.avg_traded_value ?? '',
       row.volume_breakout_ratio ?? '',
       row.rsi_14 ?? '',
       row.sma_20_cross_direction ?? '',
@@ -578,7 +584,7 @@ export const ScreenerPanel: React.FC = () => {
                 min_price: undefined, max_price: undefined,
                 sma_20_cross: undefined, sma_50_cross: undefined, sma_200_cross: undefined,
                 macd_trend: undefined, ha_dir: undefined, renko_dir: undefined, lb_dir: undefined,
-                volume_breakout: undefined, min_weekly_avg_volume: undefined,
+                volume_breakout: undefined, min_avg_traded_value: undefined,
                 only_nr7: undefined, only_inside_bar: undefined,
                 only_gap_up: undefined, only_gap_down: undefined,
                 min_rs_1m: undefined,
@@ -617,13 +623,13 @@ export const ScreenerPanel: React.FC = () => {
             </h4>
             
             <div className="flex flex-col gap-1.5">
-              <label className="text-[11px] font-semibold text-slate-400">Min Weekly Avg Vol</label>
+              <label className="text-[11px] font-semibold text-slate-400">Min Avg Daily Value (₹ Cr)</label>
               <input
                 type="number"
                 placeholder="No Limit"
-                value={screenerFilters.min_weekly_avg_volume !== undefined ? screenerFilters.min_weekly_avg_volume : ''}
-                onChange={(e) => setScreenerFilters({ 
-                  min_weekly_avg_volume: e.target.value === '' ? undefined : Number(e.target.value) 
+                value={screenerFilters.min_avg_traded_value !== undefined ? screenerFilters.min_avg_traded_value : ''}
+                onChange={(e) => setScreenerFilters({
+                  min_avg_traded_value: e.target.value === '' ? undefined : Number(e.target.value)
                 })}
                 className="w-full px-3 py-1.5 text-xs rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
               />
@@ -1231,8 +1237,8 @@ export const ScreenerPanel: React.FC = () => {
                 <th className="py-2 px-1.5 cursor-pointer hover:text-white transition" title="Price Percentage Change" onClick={() => handleSort('price_pct_change')}>
                   Chg% {renderSortIcon('price_pct_change')}
                 </th>
-                <th className="py-2 px-1.5 text-right cursor-pointer hover:text-white transition" title="Weekly Average Volume" onClick={() => handleSort('weekly_avg_volume')}>
-                  Avg Vol {renderSortIcon('weekly_avg_volume')}
+                <th className="py-2 px-1.5 text-right cursor-pointer hover:text-white transition" title="Average Daily Traded Value (price × volume)" onClick={() => handleSort('avg_traded_value')}>
+                  Avg Val {renderSortIcon('avg_traded_value')}
                 </th>
                 <th className="py-2 px-1.5 cursor-pointer hover:text-white transition" title="Composite Bias (5-tier: VERY_BULLISH / BULLISH / NEUTRAL / BEARISH / VERY_BEARISH) — sort by composite score" onClick={() => handleSort('composite_score' as any)}>
                   Bias {renderSortIcon('composite_score' as any)}
@@ -1313,8 +1319,11 @@ export const ScreenerPanel: React.FC = () => {
                   RS 1M {renderSortIcon('rs_score_1m' as any)}
                 </th>
                 <th className="py-2 px-1.5 text-center" title="Pattern triggers">Patterns</th>
-                <th className="py-2 px-1.5 text-center cursor-pointer hover:text-white transition" title="VajraML 5-day return prediction rank" onClick={() => handleSort('ml_rank')}>
+                <th className="py-2 px-1.5 text-center cursor-pointer hover:text-white transition" title="VajraML2 triple-barrier signal (EV rank)" onClick={() => handleSort('ml_rank')}>
                   ML Signal {renderSortIcon('ml_rank')}
+                </th>
+                <th className="py-2 px-1.5 text-center cursor-pointer hover:text-white transition" title="VajraML2 triple-barrier signal (EV rank)" onClick={() => handleSort('ml2_rank' as any)}>
+                  ML2 Signal {renderSortIcon('ml2_rank' as any)}
                 </th>
                 <th className="py-2 px-1.5 text-center cursor-pointer hover:text-white transition" title="Days since EMA9 crossed above EMA20 (golden ribbon)" onClick={() => handleSort('days_since_ema9_ema20_bull')}>
                   EMA Rbbn {renderSortIcon('days_since_ema9_ema20_bull')}
@@ -1381,8 +1390,8 @@ export const ScreenerPanel: React.FC = () => {
                     <input
                       type="text"
                       placeholder=">100k"
-                      value={colFilters.weekly_avg_volume}
-                      onChange={(e) => setColFilters({ ...colFilters, weekly_avg_volume: e.target.value })}
+                      value={colFilters.avg_traded_value}
+                      onChange={(e) => setColFilters({ ...colFilters, avg_traded_value: e.target.value })}
                       className="w-full min-w-[60px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-purple-500 focus:text-white text-right transition font-mono"
                     />
                   </td>
@@ -1710,11 +1719,28 @@ export const ScreenerPanel: React.FC = () => {
                       placeholder="All"
                       minWidth="80px"
                       options={[
-                        { value: 'Very Bullish', label: 'Very Bullish', className: 'text-emerald-400 font-bold' },
-                        { value: 'Bullish', label: 'Bullish', className: 'text-emerald-500' },
-                        { value: 'Neutral', label: 'Neutral', className: 'text-slate-400' },
-                        { value: 'Bearish', label: 'Bearish', className: 'text-rose-500' },
-                        { value: 'Very Bearish', label: 'Very Bearish', className: 'text-rose-400 font-bold' },
+                        { value: 'Strong Buy',  label: 'Strong Buy',  className: 'text-emerald-300 font-bold' },
+                        { value: 'Buy',         label: 'Buy',         className: 'text-teal-400' },
+                        { value: 'Watch',       label: 'Watch',       className: 'text-amber-400' },
+                        { value: 'Avoid',       label: 'Avoid',       className: 'text-slate-500' },
+                        { value: 'Market Risk', label: 'Market Risk', className: 'text-rose-400 font-bold' },
+                      ]}
+                    />
+                  </td>
+
+                  {/* ML2 Signal */}
+                  <td className="py-1 px-1.5 text-center">
+                    <MultiSelectFilter
+                      value={colFilters.ml2_signal}
+                      onChange={(val) => setColFilters({ ...colFilters, ml2_signal: val })}
+                      placeholder="All"
+                      minWidth="80px"
+                      options={[
+                        { value: 'Strong Buy',   label: 'Strong Buy',   className: 'text-emerald-300 font-bold' },
+                        { value: 'Buy',          label: 'Buy',          className: 'text-emerald-500' },
+                        { value: 'Watch',        label: 'Watch',        className: 'text-amber-400' },
+                        { value: 'Avoid',        label: 'Avoid',        className: 'text-slate-500' },
+                        { value: 'Market Risk',  label: 'Market Risk',  className: 'text-rose-400 font-bold' },
                       ]}
                     />
                   </td>
@@ -1808,9 +1834,9 @@ export const ScreenerPanel: React.FC = () => {
                         {isChangeBullish ? '+' : ''}{formatNumber(row.price_pct_change)}%
                       </td>
 
-                      {/* Weekly Avg Vol */}
+                      {/* Avg Traded Value */}
                       <td className="py-2 px-1.5 text-right font-mono text-slate-350">
-                        {formatVolume(row.weekly_avg_volume)}
+                        {formatTradedValue(row.avg_traded_value)}
                       </td>
 
                       {/* Bias chip */}
@@ -2121,19 +2147,48 @@ export const ScreenerPanel: React.FC = () => {
                           const pred  = row.ml_prediction;
                           if (!label) return <span className="text-slate-600 text-xs">—</span>;
                           const cfg: Record<string, { bg: string; text: string }> = {
-                            'Very Bullish': { bg: 'bg-emerald-500/20 border-emerald-400/50', text: 'text-emerald-200' },
-                            'Bullish':      { bg: 'bg-teal-500/15 border-teal-400/40',        text: 'text-teal-300'   },
-                            'Neutral':      { bg: 'bg-slate-700/40 border-slate-600/40',      text: 'text-slate-400'  },
-                            'Bearish':      { bg: 'bg-orange-500/15 border-orange-500/40',    text: 'text-orange-300' },
-                            'Very Bearish': { bg: 'bg-rose-500/20 border-rose-400/50',        text: 'text-rose-200'   },
+                            'Strong Buy':  { bg: 'bg-emerald-500/20 border-emerald-400/50', text: 'text-emerald-200' },
+                            'Buy':         { bg: 'bg-teal-500/15 border-teal-400/40',       text: 'text-teal-300'   },
+                            'Watch':       { bg: 'bg-amber-500/15 border-amber-400/40',     text: 'text-amber-300'  },
+                            'Avoid':       { bg: 'bg-slate-700/40 border-slate-600/40',     text: 'text-slate-400'  },
+                            'Market Risk': { bg: 'bg-rose-500/20 border-rose-400/50',       text: 'text-rose-200'   },
                           };
-                          const c = cfg[label] ?? cfg['Neutral'];
+                          const c = cfg[label] ?? cfg['Avoid'];
                           return (
                             <span
-                              title={`ML Rank: ${rank ?? '—'} | Score: ${pred != null ? pred.toFixed(4) : '—'}`}
+                              title={`ML2 EV Rank: ${rank ?? '—'} | EV Score: ${pred != null ? pred.toFixed(4) : '—'}`}
                               className={`inline-flex flex-col items-center gap-0 px-1.5 py-0.5 rounded border text-[10px] font-bold whitespace-nowrap ${c.bg} ${c.text}`}
                             >
                               {label}
+                              {rank != null && (
+                                <span className="opacity-60 font-mono text-[9px] font-normal">#{rank}</span>
+                              )}
+                            </span>
+                          );
+                        })()}
+                      </td>
+
+                      {/* ML2 Signal */}
+                      <td className="py-2 px-1.5 text-center">
+                        {(() => {
+                          const sig  = (row as any).ml2_signal as string | null | undefined;
+                          const rank = (row as any).ml2_rank as number | null | undefined;
+                          const ptp  = (row as any).ml2_p_tp as number | null | undefined;
+                          if (!sig) return <span className="text-slate-600 text-xs">—</span>;
+                          const cfg: Record<string, { bg: string; text: string }> = {
+                            'Strong Buy':  { bg: 'bg-emerald-500/20 border-emerald-400/50', text: 'text-emerald-200' },
+                            'Buy':         { bg: 'bg-teal-500/15 border-teal-400/40',       text: 'text-teal-300'   },
+                            'Watch':       { bg: 'bg-amber-500/15 border-amber-400/40',     text: 'text-amber-300'  },
+                            'Avoid':       { bg: 'bg-slate-700/40 border-slate-600/40',     text: 'text-slate-400'  },
+                            'Market Risk': { bg: 'bg-rose-500/20 border-rose-400/50',       text: 'text-rose-200'   },
+                          };
+                          const c = cfg[sig] ?? cfg['Avoid'];
+                          return (
+                            <span
+                              title={`ML2 EV Rank: ${rank ?? '—'} | P(TP): ${ptp != null ? (ptp * 100).toFixed(1) + '%' : '—'}`}
+                              className={`inline-flex flex-col items-center gap-0 px-1.5 py-0.5 rounded border text-[10px] font-bold whitespace-nowrap ${c.bg} ${c.text}`}
+                            >
+                              {sig}
                               {rank != null && (
                                 <span className="opacity-60 font-mono text-[9px] font-normal">#{rank}</span>
                               )}

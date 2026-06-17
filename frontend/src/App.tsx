@@ -19,6 +19,10 @@ import { SettingsPanel } from './components/SettingsPanel';
 import { SetupWizard } from './components/SetupWizard';
 import { AboutPanel } from './components/AboutPanel';
 import { MLTrainingPanel } from './components/MLTrainingPanel';
+import { ML2TrainingPanel } from './components/ML2TrainingPanel';
+import { FundamentalsCard } from './components/FundamentalsCard';
+import { AnnouncementsPanel } from './components/AnnouncementsPanel';
+import { NewsPanel } from './components/NewsPanel';
 import {
   LineChart,
   Search,
@@ -98,6 +102,7 @@ function Dashboard() {
 
   const [indicatorToShow, setIndicatorToShow] = useState<'RSI' | 'MACD' | 'CMF' | 'STOCHRSI' | 'NONE'>('RSI');
   const [drawMode, setDrawMode] = useState(false);
+  const [researchTab, setResearchTab] = useState<'fundamentals' | 'news' | 'announcements'>('fundamentals');
 
   // Compute 52W High/Low from candles in the store (last 252 trading days ≈ 1 year)
   const stats52w = useMemo(() => {
@@ -144,7 +149,7 @@ function Dashboard() {
 
     const handlePopState = () => {
       const path = window.location.pathname.replace(/^\/+/, '').split('/')[0];
-      const valid = ['explorer', 'screener', 'strategy', 'sync', 'ai-research', 'portfolio', 'watchlist', 'about', 'ml-training'];
+      const valid = ['explorer', 'screener', 'strategy', 'sync', 'ai-research', 'portfolio', 'watchlist', 'about', 'ml-training', 'ml2-training'];
       const tab = valid.includes(path) ? path : 'explorer';
       useStockStore.setState({ activeTab: tab as any });
     };
@@ -205,6 +210,7 @@ function Dashboard() {
             { id: 'compare',     label: 'Compare',     Icon: TrendingUp  },
             { id: 'ai-research', label: 'AI Research', Icon: Cpu         },
             { id: 'ml-training', label: 'ML Model',    Icon: Brain       },
+            { id: 'ml2-training', label: 'ML2 Model',   Icon: Brain       },
             { id: 'about',       label: 'About',       Icon: BookOpen    },
             { id: 'settings',    label: 'Settings',    Icon: Settings    },
           ] as const).map(({ id, label, Icon }) => (
@@ -516,6 +522,36 @@ function Dashboard() {
                       <CorporateActionsTimeline />
                     </div>
                   </div>
+
+                  {/* Research panel — Fundamentals / News / NSE Announcements */}
+                  <div className="w-full rounded-xl border border-slate-800/80 bg-[#121620]/60 overflow-hidden shrink-0">
+                    {/* Tab bar */}
+                    <div className="flex items-center border-b border-slate-800 px-2 pt-1">
+                      {([
+                        { id: 'fundamentals'  as const, label: 'Fundamentals' },
+                        { id: 'news'          as const, label: 'News'         },
+                        { id: 'announcements' as const, label: 'NSE Filings'  },
+                      ]).map(({ id, label }) => (
+                        <button
+                          key={id}
+                          onClick={() => setResearchTab(id)}
+                          className={`px-4 py-2 text-xs font-bold border-b-2 transition-colors cursor-pointer ${
+                            researchTab === id
+                              ? 'border-purple-500 text-purple-300'
+                              : 'border-transparent text-slate-500 hover:text-slate-300'
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                    {/* Tab content — no extra card wrapper inside since each component is self-contained */}
+                    <div className="p-4">
+                      {researchTab === 'fundamentals'  && <FundamentalsCard  symbol={activeSymbol} />}
+                      {researchTab === 'news'          && <NewsPanel         symbol={activeSymbol} />}
+                      {researchTab === 'announcements' && <AnnouncementsPanel symbol={activeSymbol} />}
+                    </div>
+                  </div>
                 </>
               ) : (
                 <div className="flex-1 flex flex-col items-center justify-center text-slate-500 py-12">
@@ -554,6 +590,9 @@ function Dashboard() {
 
         {/* ML Training */}
         {activeTab === 'ml-training' && <MLTrainingPanel />}
+
+        {/* ML2 Training */}
+        {activeTab === 'ml2-training' && <ML2TrainingPanel />}
 
         {/* TAB 6: Watchlist */}
         {activeTab === 'watchlist' && <WatchlistPanel />}

@@ -30,7 +30,7 @@ interface ScreenerFilters {
   ha_dir?: 'UP' | 'DOWN';
   renko_dir?: 'UP' | 'DOWN';
   lb_dir?: 'UP' | 'DOWN';
-  min_weekly_avg_volume?: number;
+  min_avg_traded_value?: number;
   volume_breakout?: 'ANY' | '1.5X' | '2.0X' | '3.0X';
   only_nr7?: boolean;
   only_inside_bar?: boolean;
@@ -75,7 +75,7 @@ export interface WatchlistAlert {
   createdAt: string;
 }
 
-type TabId = 'explorer' | 'screener' | 'strategy' | 'sync' | 'ai-research' | 'portfolio' | 'watchlist' | 'compare' | 'settings' | 'about' | 'ml-training';
+type TabId = 'explorer' | 'screener' | 'strategy' | 'sync' | 'ai-research' | 'portfolio' | 'watchlist' | 'compare' | 'settings' | 'about' | 'ml-training' | 'ml2-training';
 type ChartTimeframe = '1W' | '1M' | '3M' | '6M' | '1Y' | 'MAX';
 
 // ─── Store shape ──────────────────────────────────────────────────────────────
@@ -242,7 +242,7 @@ function loadScreenerFilters(): ScreenerFilters {
     ha_dir: undefined,
     renko_dir: undefined,
     lb_dir: undefined,
-    min_weekly_avg_volume: undefined,
+    min_avg_traded_value: undefined,
     volume_breakout: undefined,
     only_nr7: undefined,
     only_inside_bar: undefined,

@@ -353,6 +353,9 @@ async def lifespan(app: FastAPI):
     from VajraML.train_service import TrainingJobManager
     app.state.training_manager = TrainingJobManager()
 
+    from VajraML2.train_service import TrainingJobManagerV2
+    app.state.training_manager_v2 = TrainingJobManagerV2()
+
     logger.info("Application startup complete.")
 
     # ⑧ — start background daily scheduler (00:00 UTC / 5:30 AM IST sync & missed runs check)
