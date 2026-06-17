@@ -219,7 +219,7 @@ function saveAlerts(a: WatchlistAlert[]) {
 
 function getInitialTab(): TabId {
   const path = window.location.pathname.replace(/^\/+/, '').split('/')[0];
-  const valid: TabId[] = ['explorer', 'screener', 'strategy', 'sync', 'ai-research', 'portfolio', 'watchlist', 'compare', 'settings', 'about', 'ml-training'];
+  const valid: TabId[] = ['explorer', 'screener', 'strategy', 'sync', 'ai-research', 'portfolio', 'watchlist', 'compare', 'settings', 'about', 'ml2-training'];
   return valid.includes(path as TabId) ? (path as TabId) : 'explorer';
 }
 
