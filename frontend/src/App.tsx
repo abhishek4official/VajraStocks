@@ -512,42 +512,43 @@ function Dashboard() {
                   
                   {/* Multi-Pane Grid details */}
                   <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 min-h-[350px]">
-                    <div className="xl:col-span-2">
+                    <div className="xl:col-span-2 flex flex-col gap-4">
                       <MetricsTable />
+                      
+                      {/* Research panel — Fundamentals / News / NSE Announcements */}
+                      <div className="w-full rounded-xl border border-slate-800/80 bg-[#121620]/60 overflow-hidden shrink-0">
+                        {/* Tab bar */}
+                        <div className="flex items-center border-b border-slate-800 px-2 pt-1">
+                          {([
+                            { id: 'fundamentals'  as const, label: 'Fundamentals' },
+                            { id: 'news'          as const, label: 'News'         },
+                            { id: 'announcements' as const, label: 'NSE Filings'  },
+                          ]).map(({ id, label }) => (
+                            <button
+                              key={id}
+                              onClick={() => setResearchTab(id)}
+                              className={`px-4 py-2 text-xs font-bold border-b-2 transition-colors cursor-pointer ${
+                                researchTab === id
+                                  ? 'border-purple-500 text-purple-300'
+                                  : 'border-transparent text-slate-500 hover:text-slate-300'
+                              }`}
+                            >
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                        {/* Tab content — no extra card wrapper inside since each component is self-contained */}
+                        <div className="p-4">
+                          {researchTab === 'fundamentals'  && <FundamentalsCard  symbol={activeSymbol} />}
+                          {researchTab === 'news'          && <NewsPanel         symbol={activeSymbol} />}
+                          {researchTab === 'announcements' && <AnnouncementsPanel symbol={activeSymbol} />}
+                        </div>
+                      </div>
                     </div>
+
                     <div className="xl:col-span-1 flex flex-col gap-4">
                       <TradePlanCard />
                       <CorporateActionsTimeline />
-                    </div>
-                  </div>
-
-                  {/* Research panel — Fundamentals / News / NSE Announcements */}
-                  <div className="w-full rounded-xl border border-slate-800/80 bg-[#121620]/60 overflow-hidden shrink-0">
-                    {/* Tab bar */}
-                    <div className="flex items-center border-b border-slate-800 px-2 pt-1">
-                      {([
-                        { id: 'fundamentals'  as const, label: 'Fundamentals' },
-                        { id: 'news'          as const, label: 'News'         },
-                        { id: 'announcements' as const, label: 'NSE Filings'  },
-                      ]).map(({ id, label }) => (
-                        <button
-                          key={id}
-                          onClick={() => setResearchTab(id)}
-                          className={`px-4 py-2 text-xs font-bold border-b-2 transition-colors cursor-pointer ${
-                            researchTab === id
-                              ? 'border-purple-500 text-purple-300'
-                              : 'border-transparent text-slate-500 hover:text-slate-300'
-                          }`}
-                        >
-                          {label}
-                        </button>
-                      ))}
-                    </div>
-                    {/* Tab content — no extra card wrapper inside since each component is self-contained */}
-                    <div className="p-4">
-                      {researchTab === 'fundamentals'  && <FundamentalsCard  symbol={activeSymbol} />}
-                      {researchTab === 'news'          && <NewsPanel         symbol={activeSymbol} />}
-                      {researchTab === 'announcements' && <AnnouncementsPanel symbol={activeSymbol} />}
                     </div>
                   </div>
                 </>

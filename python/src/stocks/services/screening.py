@@ -523,7 +523,7 @@ class ScreeningService:
                     obv_trend=obv_trend,
                     supertrend_dir=supertrend_dir_snap,
                     stoch_state=stoch_state,
-                    weekly_avg_volume=weekly_avg_volume,
+                    avg_traded_value=avg_traded_value,
                     volume_breakout_ratio=volume_breakout_ratio,
                     composite_score=composite_score,
                     trend_score_val=trend_score_val,
@@ -589,7 +589,7 @@ class ScreeningService:
                 snapshot.obv_trend = obv_trend
                 snapshot.supertrend_dir = supertrend_dir_snap
                 snapshot.stoch_state = stoch_state
-                snapshot.weekly_avg_volume = weekly_avg_volume
+                snapshot.avg_traded_value = avg_traded_value
                 snapshot.volume_breakout_ratio = volume_breakout_ratio
                 snapshot.composite_score = composite_score
                 snapshot.trend_score_val = trend_score_val
@@ -863,7 +863,7 @@ class ScreeningService:
         ha_dir: str | None = None,
         renko_dir: str | None = None,
         lb_dir: str | None = None,
-        min_weekly_avg_volume: float | None = None,
+        min_avg_traded_value: float | None = None,
         volume_breakout: str | None = None,
         only_nr7: bool = False,
         only_inside_bar: bool = False,
@@ -964,7 +964,7 @@ class ScreeningService:
         stmt = stmt.order_by(ScreeningSnapshot.symbol.asc())
 
         # Optimize: if no volume filters are applied, we can apply SQL limit immediately
-        has_volume_filters = min_weekly_avg_volume is not None or (
+        has_volume_filters = min_avg_traded_value is not None or (
             volume_breakout is not None and volume_breakout.upper() != "ANY"
         )
         if not has_volume_filters:
@@ -1009,6 +1009,7 @@ class ScreeningService:
         subq = (
             select(
                 DailyPrice.symbol_id,
+                DailyPrice.close,
                 DailyPrice.volume,
                 func.row_number()
                 .over(partition_by=DailyPrice.symbol_id, order_by=DailyPrice.trading_date.desc())
@@ -1018,41 +1019,43 @@ class ScreeningService:
             .subquery()
         )
 
-        stmt_volumes = select(subq.c.symbol_id, subq.c.volume).where(subq.c.rn <= 6)
+        stmt_prices = select(subq.c.symbol_id, subq.c.close, subq.c.volume).where(subq.c.rn <= 6)
 
-        volume_rows = self.db.execute(stmt_volumes).all()
+        price_rows = self.db.execute(stmt_prices).all()
 
         # 2. Group by symbol_id
         from collections import defaultdict
 
-        volumes_by_symbol = defaultdict(list)
-        for sym_id, vol in volume_rows:
-            volumes_by_symbol[sym_id].append(int(vol))
+        prices_by_symbol: dict[int, list[tuple[float, int]]] = defaultdict(list)
+        for sym_id, close, vol in price_rows:
+            prices_by_symbol[sym_id].append((float(close), int(vol)))
 
-        # 3. Calculate weekly avg volume and breakout ratio, then apply memory filters
+        # 3. Calculate avg traded value and breakout ratio, then apply memory filters
         filtered_results = []
         for snapshot in base_results:
             sym_id = snapshot.symbol_id
-            vols = volumes_by_symbol.get(sym_id, [])
+            sym_prices = prices_by_symbol.get(sym_id, [])
 
-            latest_volume = vols[0] if len(vols) >= 1 else int(snapshot.volume)
-            preceding_vols = vols[1:6] if len(vols) > 1 else []
+            latest_volume = sym_prices[0][1] if len(sym_prices) >= 1 else int(snapshot.volume)
+            preceding = sym_prices[1:6] if len(sym_prices) > 1 else []
 
-            if preceding_vols:
-                weekly_avg_volume = sum(preceding_vols) / len(preceding_vols)
+            if preceding:
+                avg_traded_value = sum(c * v for c, v in preceding) / len(preceding)
+                avg_vol = sum(v for _, v in preceding) / len(preceding)
             else:
-                weekly_avg_volume = float(latest_volume)
+                avg_traded_value = float(latest_volume) * float(snapshot.close_price or 0)
+                avg_vol = float(latest_volume)
 
-            breakout_ratio = (latest_volume / weekly_avg_volume) if weekly_avg_volume > 0 else 1.0
+            breakout_ratio = (latest_volume / avg_vol) if avg_vol > 0 else 1.0
 
             # Attach dynamic calculated attributes
-            snapshot.weekly_avg_volume = weekly_avg_volume
+            snapshot.avg_traded_value = avg_traded_value
             snapshot.volume_breakout_ratio = breakout_ratio
 
             # Apply memory filtering criteria
             keep = True
-            if min_weekly_avg_volume is not None:
-                if weekly_avg_volume < min_weekly_avg_volume:
+            if min_avg_traded_value is not None:
+                if avg_traded_value < min_avg_traded_value:
                     keep = False
 
             if keep and volume_breakout is not None:

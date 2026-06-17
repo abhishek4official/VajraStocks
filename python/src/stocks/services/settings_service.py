@@ -50,11 +50,12 @@ DEFAULT_SETTINGS: list[tuple[str, str, str, str, str, bool]] = [
                                                            "string",  "Fallback NSE CSV path",                    False),
 
     # AI
-    ("AI", "ai_provider",   "ollama",                    "string",  "LLM provider: ollama / openai",     False),
-    ("AI", "ai_base_url",   "http://localhost:11434",    "string",  "AI provider base URL",              False),
+    ("AI", "ai_provider",   "ollama",                    "string",  "LLM provider: ollama / openai / groq / deepseek / openrouter / lm_studio", False),
+    ("AI", "ai_base_url",   "http://localhost:11434",    "string",  "AI provider base URL (auto-filled when switching provider)", False),
     ("AI", "ai_model",      "qwen2.5-coder:7b",          "string",  "Model name to use",                 False),
-    ("AI", "ai_api_key",    "",                          "string",  "API key for cloud providers",       True),
+    ("AI", "ai_api_key",    "",                          "string",  "API key for cloud providers (Groq, DeepSeek, OpenAI, etc.)", True),
     ("AI", "ai_temperature","0.2",                       "float",   "Default LLM temperature",           False),
+    ("AI", "ai_provider_urls", '{"ollama":"http://localhost:11434","openai":"https://api.openai.com/v1","groq":"https://api.groq.com/openai/v1","deepseek":"https://api.deepseek.com/v1","openrouter":"https://openrouter.ai/api/v1","lm_studio":"http://localhost:1234/v1"}', "json", "Default base URLs per provider (read-only reference)", False),
 
     # SCREENER
     ("SCREENER", "default_limit",           "2500",  "integer", "Max rows returned by screener",                  False),

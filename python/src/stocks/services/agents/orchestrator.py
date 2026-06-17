@@ -232,7 +232,7 @@ class Orchestrator:
     def __init__(self, config: Config, db_session: Session):
         self.config = config
         self.db = db_session
-        self.llm = LLMClient(provider=config.ai.provider, base_url=config.ai.base_url)
+        self.llm = LLMClient(provider=config.ai.provider, base_url=config.ai.base_url, api_key=getattr(config.ai, "api_key", ""))
         self.pool = AgentPool(config, self.llm)
         self.db_service = DatabaseService(config, db_session)
         self.trade_planner = TradePlannerService()
@@ -495,7 +495,7 @@ class Orchestrator:
                     "volume": int(r.volume),
                     "rsi_14": r.rsi_14,
                     "renko_direction": r.renko_direction,
-                    "weekly_avg_volume": getattr(r, "weekly_avg_volume", None),
+                    "avg_traded_value": getattr(r, "avg_traded_value", None),
                     "volume_breakout_ratio": getattr(r, "volume_breakout_ratio", 1.0),
                 }
             )
@@ -926,7 +926,7 @@ class Orchestrator:
                         "macd_trend": row_dict.get("macd_trend"),
                         "renko_direction": row_dict.get("renko_direction"),
                         "line_break_direction": row_dict.get("line_break_direction"),
-                        "weekly_avg_volume": row_dict.get("weekly_avg_volume"),
+                        "avg_traded_value": row_dict.get("avg_traded_value"),
                         "volume_breakout_ratio": row_dict.get("volume_breakout_ratio"),
                     }
                 )
