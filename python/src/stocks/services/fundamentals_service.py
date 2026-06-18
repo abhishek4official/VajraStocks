@@ -41,7 +41,11 @@ class FundamentalsService:
 
         def _f(key: str) -> float | None:
             v = info.get(key)
-            return float(v) if v is not None else None
+            if v is None:
+                return None
+            import math
+            f = float(v)
+            return None if not math.isfinite(f) else f
 
         existing = self.db.scalar(select(SymbolFundamentals).where(SymbolFundamentals.symbol_id == symbol_id))
 
