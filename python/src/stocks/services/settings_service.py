@@ -59,10 +59,6 @@ DEFAULT_SETTINGS: list[tuple[str, str, str, str, str, bool]] = [
 
     # SCREENER
     ("SCREENER", "default_limit",           "2500",  "integer", "Max rows returned by screener",                  False),
-    ("SCREENER", "default_rsi_min",         "",      "string",  "Pre-filled RSI min filter (empty = off)",        False),
-    ("SCREENER", "default_rsi_max",         "",      "string",  "Pre-filled RSI max filter (empty = off)",        False),
-    ("SCREENER", "default_volume_breakout", "ANY",   "string",  "Default volume breakout filter: ANY/1.5X/2.0X/3.0X", False),
-    ("SCREENER", "default_ha_dir",          "",      "string",  "Default Heikin-Ashi direction filter (empty = off)", False),
 
     # PORTFOLIO
     ("PORTFOLIO", "default_risk_amount",  "5000", "float",   "Default capital at risk per trade (₹)",  False),
@@ -79,17 +75,16 @@ DEFAULT_SETTINGS: list[tuple[str, str, str, str, str, bool]] = [
     ("PORTFOLIO", "mtf_active_track",     "daily","string",  "Active MTF track: daily / weekly",         False),
     ("PORTFOLIO", "daily_regime_ema",     "200",  "integer", "Daily regime filter EMA length (bars)",    False),
     ("PORTFOLIO", "weekly_regime_ema",    "40",   "integer", "Weekly regime filter EMA length (weeks)",  False),
-    ("PORTFOLIO", "daily_atr_low_pct",    "2.0",  "float",   "ATR%% below this = LOW volatility",        False),
-    ("PORTFOLIO", "daily_atr_high_pct",   "5.0",  "float",   "ATR%% above this = HIGH volatility",        False),
-    ("PORTFOLIO", "max_bull_heat_pct",    "8.0",  "float",   "Max portfolio heat %% in a Bull regime",    False),
-    ("PORTFOLIO", "max_neutral_heat_pct", "6.0",  "float",   "Max portfolio heat %% in a Neutral regime", False),
-    ("PORTFOLIO", "max_bear_heat_pct",    "4.0",  "float",   "Max portfolio heat %% in a Bear regime",    False),
-    ("PORTFOLIO", "max_cluster_weight_pct","25.0","float",   "Max single-name/cluster weight %% of equity", False),
+    ("PORTFOLIO", "daily_atr_low_pct",    "2.0",  "float",   "ATR% below this = LOW volatility",        False),
+    ("PORTFOLIO", "daily_atr_high_pct",   "5.0",  "float",   "ATR% above this = HIGH volatility",        False),
+    ("PORTFOLIO", "max_bull_heat_pct",    "8.0",  "float",   "Max portfolio heat % in a Bull regime",    False),
+    ("PORTFOLIO", "max_neutral_heat_pct", "6.0",  "float",   "Max portfolio heat % in a Neutral regime", False),
+    ("PORTFOLIO", "max_bear_heat_pct",    "4.0",  "float",   "Max portfolio heat % in a Bear regime",    False),
+    ("PORTFOLIO", "max_cluster_weight_pct","25.0","float",   "Max single-name/cluster weight % of equity", False),
 
     # UI
     ("UI", "sync_poll_interval_ms",   "5000",  "integer", "Sync panel auto-refresh interval (ms)",          False),
     ("UI", "chart_default_timeframe", "1Y",    "string",  "Default chart timeframe: 1W/1M/3M/6M/1Y/MAX",   False),
-    ("UI", "screener_auto_run",       "false", "boolean", "Automatically run screener when tab opens",      False),
     ("UI", "sidebar_default_sort",    "symbol","string",  "Sidebar sort order: symbol / company_name",      False),
 ]
 
@@ -105,7 +100,18 @@ class SettingsService:
     # ── Bootstrap ─────────────────────────────────────────────────────────────
 
     def seed_defaults(self, overwrite: bool = False) -> int:
-        """Inserts default settings rows. Returns the number of rows inserted."""
+        """Inserts default settings rows and prunes obsolete ones. Returns rows inserted."""
+        # Delete settings that are no longer in DEFAULT_SETTINGS to keep DB in sync
+        current_keys = {(c, k) for c, k, *rest in DEFAULT_SETTINGS}
+        all_settings = self.db.scalars(select(AppSetting)).all()
+        deleted = 0
+        for s in all_settings:
+            if (s.category, s.key) not in current_keys:
+                self.db.delete(s)
+                deleted += 1
+        if deleted > 0:
+            logger.info(f"Pruned {deleted} obsolete settings from database.")
+
         inserted = 0
         for category, key, value, value_type, description, is_secret in DEFAULT_SETTINGS:
             existing = self.db.scalar(

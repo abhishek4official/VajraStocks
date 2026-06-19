@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useStockStore } from '../store/useStockStore';
-import { Play, Eye, Filter, RefreshCw, BarChart2, Download, Bookmark, Zap, TrendingUp } from 'lucide-react';
+import { Eye, Filter, RefreshCw, BarChart2, Download, Bookmark, Zap } from 'lucide-react';
 import type { ScreenerRow, StrategyMeta } from '../services/api';
 import { apiService } from '../services/api';
 
@@ -128,8 +128,8 @@ const matchNumericFilter = (val: number | null | undefined, filterStr: string): 
   
   const trimmed = filterStr.trim().toLowerCase();
   
-  // check comparative prefix: >, <, >=, <=, =
-  const match = trimmed.match(/^([><]=?|=)?\s*([0-9.-]+)\s*([km])?$/);
+  // check comparative prefix: >, <, >=, <=, = and optional suffixes
+  const match = trimmed.match(/^([><]=?|=)?\s*([0-9.-]+)\s*(k|m|cr|crore|crores|l|la|lakh|lakhs)?$/);
   if (!match) {
     return String(val).toLowerCase().includes(trimmed);
   }
@@ -143,6 +143,10 @@ const matchNumericFilter = (val: number | null | undefined, filterStr: string): 
     num *= 1000;
   } else if (multiplier === 'm') {
     num *= 1000000;
+  } else if (multiplier === 'l' || multiplier === 'la' || multiplier === 'lakh' || multiplier === 'lakhs') {
+    num *= 100000;
+  } else if (multiplier === 'cr' || multiplier === 'crore' || multiplier === 'crores') {
+    num *= 10000000;
   }
   
   switch (op) {
@@ -252,7 +256,6 @@ const MultiSelectFilter: React.FC<MultiSelectFilterProps> = ({
 
 export const ScreenerPanel: React.FC = () => {
   const {
-    screenerFilters,
     screenerResults,
     setScreenerFilters,
     runScreener,
@@ -270,7 +273,6 @@ export const ScreenerPanel: React.FC = () => {
   const [visibleCount, setVisibleCount] = useState(50);
   const PAGE_SIZE = 50;
   const [searchQuery, setSearchQuery] = useState('');
-  const [showFilters, setShowFilters] = useState(false);
   const [strategies, setStrategies] = useState<StrategyMeta[]>([]);
 
   // Column-level filters state (cached in localStorage so they persist across reloads).
@@ -301,10 +303,7 @@ export const ScreenerPanel: React.FC = () => {
   // Reset to first page whenever results, search query, or column filters update
   useEffect(() => { setVisibleCount(PAGE_SIZE); }, [screenerResults, searchQuery, colFilters]);
 
-  const handleRunScreener = () => {
-    runScreener();
-    setShowFilters(false);
-  };
+
 
   // Navigate in-place to the Explorer Dashboard for the selected symbol
   const handleSelectScreenerMatch = async (symbol: string) => {
@@ -477,36 +476,65 @@ export const ScreenerPanel: React.FC = () => {
 
     const headers = [
       'Ticker', 'Company Name', 'Last EOD Price', 'Change %',
-      'Weekly Avg Vol', 'Vol Breakout', 'RSI (14)', 'SMA 20',
-      'SMA 50', 'SMA 200', 'MACD Trend', 'Heikin Ashi', 'Renko', 'Three Line Break', 'RS 1M',
-      'Stop', 'T1', 'T2', 'T3', 'Upside %', 'R:R', 'TQS', 'Shares'
+      'Avg Val', 'Bias', '1W Return %', '2W Return %', '3W Return %', '4W Return %',
+      'Stop Loss', 'Target 1', 'Target 2', 'Target 3', 'Upside %', 'R:R', 'TQS', 'Suggested Shares',
+      'Vol Breakout Ratio', 'RSI (14)', 'CMF (20)', 'StochRSI K', 'StochRSI D',
+      'SMA 20 Position', 'SMA 50 Position', 'SMA 200 Position', 'MACD Trend',
+      'Heikin Ashi', 'Renko', 'Three Line Break', 'RS 1M', 'Patterns',
+      'ML Signal', 'ML EV Score', 'ML Rank',
+      'Days since EMA9/20 Bull', 'Days since SMA20/50 Bull', 'Days since MACD Bull', 'Days since CMF Bull'
     ];
 
-    const rows = filteredResults.map(row => [
-      row.symbol.replace('.NS', ''),
-      `"${row.company_name.replace(/"/g, '""')}"`,
-      row.close_price,
-      row.price_pct_change ?? '',
-      row.avg_traded_value ?? '',
-      row.volume_breakout_ratio ?? '',
-      row.rsi_14 ?? '',
-      row.sma_20_cross_direction ?? '',
-      row.sma_50_cross_direction ?? '',
-      row.sma_200_cross_direction ?? '',
-      row.macd_trend ?? '',
-      row.ha_direction ?? '',
-      row.renko_direction ?? '',
-      row.line_break_direction ?? '',
-      (row as any).rs_score_1m ?? '',
-      row.stop_loss ?? '',
-      row.target_1 ?? '',
-      row.target_2 ?? '',
-      row.target_3 ?? '',
-      row.potential_gain_pct ?? '',
-      row.rr_ratio ?? '',
-      row.trade_quality_score ?? '',
-      row.position_size_shares ?? ''
-    ]);
+    const rows = filteredResults.map(row => {
+      const patterns = [
+        row.is_nr7 && 'NR7',
+        row.is_inside_bar && 'Inside',
+        row.is_gap_up && 'GapUp',
+        row.is_gap_down && 'GapDown'
+      ].filter(Boolean).join('; ');
+
+      return [
+        row.symbol.replace('.NS', ''),
+        `"${row.company_name.replace(/"/g, '""')}"`,
+        row.close_price,
+        row.price_pct_change ?? '',
+        row.avg_traded_value ?? '',
+        (row as any).regime_bias ?? '',
+        row.ret_1w ?? '',
+        row.ret_2w ?? '',
+        row.ret_3w ?? '',
+        row.ret_4w ?? '',
+        row.stop_loss ?? '',
+        row.target_1 ?? '',
+        row.target_2 ?? '',
+        row.target_3 ?? '',
+        row.potential_gain_pct ?? '',
+        row.rr_ratio ?? '',
+        row.trade_quality_score ?? '',
+        row.position_size_shares ?? '',
+        row.volume_breakout_ratio ?? '',
+        row.rsi_14 ?? '',
+        row.cmf_20 ?? '',
+        row.stochrsi_k ?? '',
+        row.stochrsi_d ?? '',
+        row.sma_20_cross_direction ?? '',
+        row.sma_50_cross_direction ?? '',
+        row.sma_200_cross_direction ?? '',
+        row.macd_trend ?? '',
+        row.ha_direction ?? '',
+        row.renko_direction ?? '',
+        row.line_break_direction ?? '',
+        (row as any).rs_score_1m ?? '',
+        patterns,
+        (row as any).ml2_signal ?? '',
+        (row as any).ml2_ev_score ?? '',
+        (row as any).ml2_rank ?? '',
+        row.days_since_ema9_ema20_bull ?? '',
+        row.days_since_sma20_sma50_bull ?? '',
+        row.days_since_macd_bull ?? '',
+        row.days_since_cmf_bull ?? ''
+      ];
+    });
 
     const csvContent = [
       headers.join(','),
@@ -538,32 +566,13 @@ export const ScreenerPanel: React.FC = () => {
         </div>
         <div className="flex items-center gap-3">
           <button
-            onClick={() => setShowFilters(!showFilters)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition cursor-pointer border ${
-              showFilters 
-                ? 'bg-purple-950/40 border-purple-500 text-purple-200' 
-                : 'bg-slate-800 border-slate-700 text-slate-300 hover:text-white hover:bg-slate-700'
-            }`}
-          >
-            <Filter className="w-4 h-4" />
-            {showFilters ? 'Hide Filters' : 'Show Filters'}
-          </button>
-          <button
             onClick={exportToCSV}
             disabled={screenerResults.length === 0}
-            className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed text-slate-300 hover:text-white border border-slate-700 rounded-lg text-sm font-bold transition cursor-pointer"
+            className="flex items-center gap-2 px-4 py-2 bg-[#121620]/80 hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed text-slate-350 hover:text-white border border-slate-800 rounded-lg text-sm font-bold transition cursor-pointer"
             title="Export filtered results to CSV file"
           >
             <Download className="w-4 h-4" />
             Export CSV
-          </button>
-          <button
-            onClick={handleRunScreener}
-            disabled={isLoading}
-            className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-500 disabled:bg-purple-800 text-white rounded-lg text-sm font-bold shadow-lg shadow-purple-900/25 hover:shadow-purple-500/25 transition cursor-pointer"
-          >
-            <Play className="w-4 h-4 fill-white" />
-            Run Filter Sweep
           </button>
         </div>
       </div>
@@ -591,7 +600,6 @@ export const ScreenerPanel: React.FC = () => {
                 ...p.filters,
               });
               runScreener();
-              setShowFilters(false);
             }}
             disabled={isLoading}
             className="flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-800/80 bg-[#121620]/30 hover:bg-[#121620]/70 hover:border-purple-500/40 disabled:opacity-40 transition cursor-pointer text-left"
@@ -607,409 +615,6 @@ export const ScreenerPanel: React.FC = () => {
           </button>
         ))}
       </div>
-
-      {/* Organized Filter Grid (Toggleable) */}
-      {showFilters && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-6 p-5 rounded-xl border border-slate-800/80 bg-[#121620]/30 shadow-inner">
-          
-          {/* Column 1: Price & Volume */}
-          <div className="flex flex-col gap-4 lg:border-r border-slate-850 lg:pr-4">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-purple-400 flex items-center gap-1.5 mb-1 select-none">
-              <BarChart2 className="w-3.5 h-3.5 text-purple-500" /> Price & Volume
-            </h4>
-            
-            <div className="flex flex-col gap-1.5">
-              <label className="text-[11px] font-semibold text-slate-400">Min Avg Daily Value (₹ Cr)</label>
-              <input
-                type="number"
-                placeholder="No Limit"
-                value={screenerFilters.min_avg_traded_value !== undefined ? screenerFilters.min_avg_traded_value : ''}
-                onChange={(e) => setScreenerFilters({
-                  min_avg_traded_value: e.target.value === '' ? undefined : Number(e.target.value)
-                })}
-                className="w-full px-3 py-1.5 text-xs rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
-              />
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <label className="text-[11px] font-semibold text-slate-400">Volume Breakout</label>
-              <select
-                value={screenerFilters.volume_breakout || 'ANY'}
-                onChange={(e) => setScreenerFilters({ 
-                  volume_breakout: e.target.value === 'ANY' ? undefined : e.target.value as any 
-                })}
-                className="w-full px-3 py-1.5 text-xs rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
-              >
-                <option value="ANY">Any Volume</option>
-                <option value="1.5X">1.5x Breakout</option>
-                <option value="2.0X">2.0x Breakout</option>
-                <option value="3.0X">3.0x Breakout</option>
-              </select>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[11px] font-semibold text-slate-400">Min Price (₹)</label>
-                <input
-                  type="number"
-                  placeholder="No Limit"
-                  value={screenerFilters.min_price !== undefined ? screenerFilters.min_price : ''}
-                  onChange={(e) => setScreenerFilters({ min_price: e.target.value === '' ? undefined : Number(e.target.value) })}
-                  className="w-full px-3 py-1.5 text-xs rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
-                />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[11px] font-semibold text-slate-400">Max Price (₹)</label>
-                <input
-                  type="number"
-                  placeholder="No Limit"
-                  value={screenerFilters.max_price !== undefined ? screenerFilters.max_price : ''}
-                  onChange={(e) => setScreenerFilters({ max_price: e.target.value === '' ? undefined : Number(e.target.value) })}
-                  className="w-full px-3 py-1.5 text-xs rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Column 2: Moving Averages & RSI */}
-          <div className="flex flex-col gap-4 lg:border-r border-slate-850 lg:pr-4">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-purple-400 flex items-center gap-1.5 mb-1 select-none">
-              <Zap className="w-3.5 h-3.5 text-purple-500" /> Averages & RSI
-            </h4>
-
-            <div className="grid grid-cols-2 gap-2">
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[11px] font-semibold text-slate-400">Min RSI (14)</label>
-                <input
-                  type="number"
-                  placeholder="No Limit"
-                  value={screenerFilters.min_rsi !== undefined ? screenerFilters.min_rsi : ''}
-                  onChange={(e) => setScreenerFilters({ 
-                    min_rsi: e.target.value === '' ? undefined : Number(e.target.value) 
-                  })}
-                  className="w-full px-3 py-1.5 text-xs rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
-                />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[11px] font-semibold text-slate-400">Max RSI (14)</label>
-                <input
-                  type="number"
-                  placeholder="No Limit"
-                  value={screenerFilters.max_rsi !== undefined ? screenerFilters.max_rsi : ''}
-                  onChange={(e) => setScreenerFilters({ 
-                    max_rsi: e.target.value === '' ? undefined : Number(e.target.value) 
-                  })}
-                  className="w-full px-3 py-1.5 text-xs rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
-                />
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <label className="text-[11px] font-semibold text-slate-400">SMA 20 Cross</label>
-              <select
-                value={screenerFilters.sma_20_cross || 'ANY'}
-                onChange={(e) => setScreenerFilters({ 
-                  sma_20_cross: e.target.value === 'ANY' ? undefined : e.target.value as any 
-                })}
-                className="w-full px-3 py-1.5 text-xs rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
-              >
-                <option value="ANY">Any Position</option>
-                <option value="ABOVE">Above SMA 20</option>
-                <option value="BELOW">Below SMA 20</option>
-              </select>
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <label className="text-[11px] font-semibold text-slate-400">SMA 50 Cross</label>
-              <select
-                value={screenerFilters.sma_50_cross || 'ANY'}
-                onChange={(e) => setScreenerFilters({ 
-                  sma_50_cross: e.target.value === 'ANY' ? undefined : e.target.value as any 
-                })}
-                className="w-full px-3 py-1.5 text-xs rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
-              >
-                <option value="ANY">Any Position</option>
-                <option value="ABOVE">Above SMA 50</option>
-                <option value="BELOW">Below SMA 50</option>
-              </select>
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <label className="text-[11px] font-semibold text-slate-400">SMA 200 Cross</label>
-              <select
-                value={screenerFilters.sma_200_cross || 'ANY'}
-                onChange={(e) => setScreenerFilters({ 
-                  sma_200_cross: e.target.value === 'ANY' ? undefined : e.target.value as any 
-                })}
-                className="w-full px-3 py-1.5 text-xs rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
-              >
-                <option value="ANY">Any Position</option>
-                <option value="ABOVE">Above SMA 200</option>
-                <option value="BELOW">Below SMA 200</option>
-              </select>
-            </div>
-          </div>
-
-          {/* Column 3: Trend Signals */}
-          <div className="flex flex-col gap-4 lg:border-r border-slate-850 lg:pr-4">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-purple-400 flex items-center gap-1.5 mb-1 select-none">
-              <Eye className="w-3.5 h-3.5 text-purple-500" /> Trend Signals
-            </h4>
-
-            <div className="flex flex-col gap-1.5">
-              <label className="text-[11px] font-semibold text-slate-400">MACD Trend</label>
-              <select
-                value={screenerFilters.macd_trend || 'ANY'}
-                onChange={(e) => setScreenerFilters({ 
-                  macd_trend: e.target.value === 'ANY' ? undefined : e.target.value as any 
-                })}
-                className="w-full px-3 py-1.5 text-xs rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
-              >
-                <option value="ANY">Any Trend</option>
-                <option value="BULLISH">Bullish (MACD &gt; Sig)</option>
-                <option value="BEARISH">Bearish (MACD &lt; Sig)</option>
-              </select>
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <label className="text-[11px] font-semibold text-slate-400">Heikin Ashi Trend</label>
-              <select
-                value={screenerFilters.ha_dir || 'ANY'}
-                onChange={(e) => setScreenerFilters({ 
-                  ha_dir: e.target.value === 'ANY' ? undefined : e.target.value as any 
-                })}
-                className="w-full px-3 py-1.5 text-xs rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
-              >
-                <option value="ANY">Any Trend</option>
-                <option value="UP">Bullish (UP)</option>
-                <option value="DOWN">Bearish (DOWN)</option>
-              </select>
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <label className="text-[11px] font-semibold text-slate-400">Renko Brick</label>
-              <select
-                value={screenerFilters.renko_dir || 'ANY'}
-                onChange={(e) => setScreenerFilters({ 
-                  renko_dir: e.target.value === 'ANY' ? undefined : e.target.value as any 
-                })}
-                className="w-full px-3 py-1.5 text-xs rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
-              >
-                <option value="ANY">Any Direction</option>
-                <option value="UP">Bullish (UP)</option>
-                <option value="DOWN">Bearish (DOWN)</option>
-              </select>
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <label className="text-[11px] font-semibold text-slate-400">Three Line Break</label>
-              <select
-                value={screenerFilters.lb_dir || 'ANY'}
-                onChange={(e) => setScreenerFilters({
-                  lb_dir: e.target.value === 'ANY' ? undefined : e.target.value as any
-                })}
-                className="w-full px-3 py-1.5 text-xs rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
-              >
-                <option value="ANY">Any Direction</option>
-                <option value="UP">Bullish (UP)</option>
-                <option value="DOWN">Bearish (DOWN)</option>
-              </select>
-            </div>
-          </div>
-
-          {/* Column 4: Strength & Patterns */}
-          <div className="flex flex-col gap-4 lg:border-r border-slate-850 lg:pr-4">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-purple-400 flex items-center gap-1.5 mb-1 select-none">
-              <Filter className="w-3.5 h-3.5 text-purple-500" /> Patterns & RS
-            </h4>
-
-            <div className="flex flex-col gap-1.5">
-              <label className="text-[11px] font-semibold text-slate-400">Min RS vs NIFTY</label>
-              <input
-                type="number"
-                step="0.1"
-                placeholder="e.g. 1.2"
-                value={screenerFilters.min_rs_1m !== undefined ? screenerFilters.min_rs_1m : ''}
-                onChange={(e) => setScreenerFilters({ min_rs_1m: e.target.value === '' ? undefined : Number(e.target.value) })}
-                className="w-full px-3 py-1.5 text-xs rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
-              />
-              <span className="text-[10px] text-slate-500">1.0 = matches NIFTY · &gt;1.2 = outperforming</span>
-            </div>
-
-            <div className="flex flex-col gap-1.5 mt-1.5">
-              <label className="text-[11px] font-semibold text-slate-400">Patterns</label>
-              <div className="grid grid-cols-2 gap-x-2 gap-y-3 mt-1">
-                {([
-                  { key: 'only_nr7' as const,       label: 'NR7 only'       },
-                  { key: 'only_inside_bar' as const, label: 'Inside Bar'     },
-                  { key: 'only_gap_up' as const,     label: 'Gap Up (>1%)'   },
-                  { key: 'only_gap_down' as const,   label: 'Gap Down (>1%)' },
-                ]).map(({ key, label }) => (
-                  <label key={key} className="flex items-center gap-2 cursor-pointer select-none group">
-                    <input
-                      type="checkbox"
-                      checked={!!screenerFilters[key]}
-                      onChange={(e) => setScreenerFilters({ [key]: e.target.checked || undefined })}
-                      className="accent-purple-500 w-3.5 h-3.5 cursor-pointer rounded"
-                    />
-                    <span className="text-xs text-slate-300 group-hover:text-white transition">{label}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Column 5: Money Flow & StochRSI */}
-          <div className="flex flex-col gap-4">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-purple-400 flex items-center gap-1.5 mb-1 select-none">
-              <BarChart2 className="w-3.5 h-3.5 text-purple-500" /> Money Flow
-            </h4>
-
-            <div className="grid grid-cols-2 gap-2">
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[11px] font-semibold text-slate-400">Min CMF</label>
-                <input
-                  type="number"
-                  step="0.05"
-                  placeholder="-1 to 1"
-                  value={screenerFilters.min_cmf !== undefined ? screenerFilters.min_cmf : ''}
-                  onChange={(e) => setScreenerFilters({ min_cmf: e.target.value === '' ? undefined : Number(e.target.value) })}
-                  className="w-full px-3 py-1.5 text-xs rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
-                />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[11px] font-semibold text-slate-400">Max CMF</label>
-                <input
-                  type="number"
-                  step="0.05"
-                  placeholder="-1 to 1"
-                  value={screenerFilters.max_cmf !== undefined ? screenerFilters.max_cmf : ''}
-                  onChange={(e) => setScreenerFilters({ max_cmf: e.target.value === '' ? undefined : Number(e.target.value) })}
-                  className="w-full px-3 py-1.5 text-xs rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
-                />
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-2 mt-0.5">
-              <label className="flex items-center gap-2 cursor-pointer select-none group">
-                <input
-                  type="checkbox"
-                  checked={!!screenerFilters.cmf_rising}
-                  onChange={(e) => setScreenerFilters({ cmf_rising: e.target.checked || undefined })}
-                  className="accent-purple-500 w-3.5 h-3.5 cursor-pointer rounded"
-                />
-                <span className="text-xs text-slate-300 group-hover:text-white transition">CMF Rising</span>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer select-none group">
-                <input
-                  type="checkbox"
-                  checked={!!screenerFilters.cmf_crossed_zero}
-                  onChange={(e) => setScreenerFilters({ cmf_crossed_zero: e.target.checked || undefined })}
-                  className="accent-purple-500 w-3.5 h-3.5 cursor-pointer rounded"
-                />
-                <span className="text-xs text-slate-300 group-hover:text-white transition">CMF Crossed Zero</span>
-              </label>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[11px] font-semibold text-slate-400">Min StochRSI K</label>
-                <input
-                  type="number"
-                  step="5"
-                  placeholder="0–100"
-                  value={screenerFilters.min_stochrsi_k !== undefined ? screenerFilters.min_stochrsi_k : ''}
-                  onChange={(e) => setScreenerFilters({ min_stochrsi_k: e.target.value === '' ? undefined : Number(e.target.value) })}
-                  className="w-full px-3 py-1.5 text-xs rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
-                />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[11px] font-semibold text-slate-400">Max StochRSI K</label>
-                <input
-                  type="number"
-                  step="5"
-                  placeholder="0–100"
-                  value={screenerFilters.max_stochrsi_k !== undefined ? screenerFilters.max_stochrsi_k : ''}
-                  onChange={(e) => setScreenerFilters({ max_stochrsi_k: e.target.value === '' ? undefined : Number(e.target.value) })}
-                  className="w-full px-3 py-1.5 text-xs rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
-                />
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <label className="text-[11px] font-semibold text-slate-400">Bullish Xover Within (days)</label>
-              <input
-                type="number"
-                step="1"
-                placeholder="e.g. 3"
-                value={screenerFilters.stochrsi_bullish_xover_max_days !== undefined ? screenerFilters.stochrsi_bullish_xover_max_days : ''}
-                onChange={(e) => setScreenerFilters({ stochrsi_bullish_xover_max_days: e.target.value === '' ? undefined : Number(e.target.value) })}
-                className="w-full px-3 py-1.5 text-xs rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
-              />
-              <span className="text-[10px] text-slate-500">StochRSI %K crossed above %D within N days</span>
-            </div>
-          </div>
-
-          {/* Column 6: Crossovers */}
-          <div className="flex flex-col gap-4">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-purple-400 flex items-center gap-1.5 mb-1 select-none">
-              <TrendingUp className="w-3.5 h-3.5 text-purple-500" /> Crossovers
-            </h4>
-
-            <div className="flex flex-col gap-1.5">
-              <label className="text-[11px] font-semibold text-slate-400">EMA Ribbon Bull ≤ N days</label>
-              <input
-                type="number"
-                step="1"
-                placeholder="e.g. 5"
-                value={screenerFilters.ema_ribbon_bull_max_days !== undefined ? screenerFilters.ema_ribbon_bull_max_days : ''}
-                onChange={(e) => setScreenerFilters({ ema_ribbon_bull_max_days: e.target.value === '' ? undefined : Number(e.target.value) })}
-                className="w-full px-3 py-1.5 text-xs rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
-              />
-              <span className="text-[10px] text-slate-500">EMA9 crossed above EMA20 within N days</span>
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <label className="text-[11px] font-semibold text-slate-400">Golden Cross ≤ N days</label>
-              <input
-                type="number"
-                step="1"
-                placeholder="e.g. 10"
-                value={screenerFilters.golden_cross_max_days !== undefined ? screenerFilters.golden_cross_max_days : ''}
-                onChange={(e) => setScreenerFilters({ golden_cross_max_days: e.target.value === '' ? undefined : Number(e.target.value) })}
-                className="w-full px-3 py-1.5 text-xs rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
-              />
-              <span className="text-[10px] text-slate-500">SMA20 crossed above SMA50 within N days</span>
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <label className="text-[11px] font-semibold text-slate-400">MACD Bull Xover ≤ N days</label>
-              <input
-                type="number"
-                step="1"
-                placeholder="e.g. 5"
-                value={screenerFilters.macd_bull_xover_max_days !== undefined ? screenerFilters.macd_bull_xover_max_days : ''}
-                onChange={(e) => setScreenerFilters({ macd_bull_xover_max_days: e.target.value === '' ? undefined : Number(e.target.value) })}
-                className="w-full px-3 py-1.5 text-xs rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
-              />
-              <span className="text-[10px] text-slate-500">MACD crossed above signal within N days</span>
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <label className="text-[11px] font-semibold text-slate-400">CMF Bull Xover ≤ N days</label>
-              <input
-                type="number"
-                step="1"
-                placeholder="e.g. 5"
-                value={screenerFilters.cmf_bull_xover_max_days !== undefined ? screenerFilters.cmf_bull_xover_max_days : ''}
-                onChange={(e) => setScreenerFilters({ cmf_bull_xover_max_days: e.target.value === '' ? undefined : Number(e.target.value) })}
-                className="w-full px-3 py-1.5 text-xs rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
-              />
-              <span className="text-[10px] text-slate-500">CMF crossed above zero within N days</span>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Results Grid Table */}
       <div className="flex-1 bg-[#121620]/60 rounded-xl border border-slate-800/80 p-4 overflow-hidden flex flex-col min-h-[300px]">

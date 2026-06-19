@@ -314,6 +314,9 @@ class SyncEngine:
                                         logger.error(
                                             f"[{ticker}] Failed to calculate or save derived data: {derived_err}"
                                         )
+
+                                    # Post-sync hook: Option B conditional news/fundamentals
+                                    self.sync_news_and_fundamentals_if_stale(session, symbol_obj, ticker)
                                 else:
                                     failed_symbols += 1
                                     err_summary_list.append(
@@ -375,6 +378,9 @@ class SyncEngine:
                                         logger.error(
                                             f"[{ticker}] Failed to calculate or save derived data: {derived_err}"
                                         )
+
+                                    # Post-sync hook: Option B conditional news/fundamentals
+                                    self.sync_news_and_fundamentals_if_stale(session, symbol_obj, ticker)
                                 else:
                                     failed_symbols += 1
                                     err_summary_list.append(
@@ -615,3 +621,44 @@ class SyncEngine:
             return False
 
         return True
+
+    def sync_news_and_fundamentals_if_stale(
+        self, session, symbol_obj: Any, ticker: str
+    ) -> None:
+        """Fetch and store news and fundamentals only if missing or stale (Option B)."""
+        try:
+            import sys
+            if "pytest" in sys.modules:
+                return
+
+            from sqlalchemy import select
+            from sqlalchemy.orm import Session
+            from stocks.db.models import NewsItem
+            from stocks.services.fundamentals_service import FundamentalsService
+            from stocks.services.news_service import NewsService
+
+            clean_symbol = ticker.replace(".NS", "").upper()
+
+            # 1. Fundamentals (get_or_fetch automatically caches for 7 days)
+            fundamentals_svc = FundamentalsService(session)
+            fundamentals_svc.get_or_fetch(symbol_obj.id, clean_symbol)
+
+            # 2. News (fetch if missing or if the latest fetch is older than 24 hours)
+            latest_news = session.scalar(
+                select(NewsItem)
+                .where(NewsItem.symbol == clean_symbol)
+                .order_by(NewsItem.fetched_at.desc())
+                .limit(1)
+            )
+
+            should_fetch_news = True
+            if latest_news:
+                age_hours = (datetime.datetime.now() - latest_news.fetched_at).total_seconds() / 3600.0
+                if age_hours < 24.0:
+                    should_fetch_news = False
+
+            if should_fetch_news:
+                NewsService(session).fetch_and_store(clean_symbol)
+
+        except Exception as info_err:
+            logger.error(f"[{ticker}] Failed to sync news/fundamentals: {info_err}")
