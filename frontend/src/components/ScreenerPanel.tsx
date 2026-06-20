@@ -28,6 +28,9 @@ const DEFAULT_COL_FILTERS = {
   rs_score_1m: '', patterns: '', ml2_signal: '',
   days_since_ema9_ema20_bull: '', days_since_sma20_sma50_bull: '',
   days_since_macd_bull: '', days_since_cmf_bull: '',
+  // Fundamentals
+  market_cap: '', pe_ratio: '', pb_ratio: '', ev_ebitda: '',
+  roe: '', debt_to_equity: '', profit_margin: '', eps_ttm: '', sector: '',
 };
 type ColFilters = typeof DEFAULT_COL_FILTERS;
 
@@ -462,6 +465,16 @@ export const ScreenerPanel: React.FC = () => {
         if (!matchNumericFilter(row.days_since_sma20_sma50_bull, colFilters.days_since_sma20_sma50_bull)) return false;
         if (!matchNumericFilter(row.days_since_macd_bull, colFilters.days_since_macd_bull)) return false;
         if (!matchNumericFilter(row.days_since_cmf_bull, colFilters.days_since_cmf_bull)) return false;
+        // Fundamentals (ratio fields converted to % for intuitive ">15" style filtering)
+        if (!matchNumericFilter(row.market_cap, colFilters.market_cap)) return false;
+        if (!matchNumericFilter(row.pe_ratio, colFilters.pe_ratio)) return false;
+        if (!matchNumericFilter(row.pb_ratio, colFilters.pb_ratio)) return false;
+        if (!matchNumericFilter(row.ev_ebitda, colFilters.ev_ebitda)) return false;
+        if (!matchNumericFilter(row.roe != null ? row.roe * 100 : undefined, colFilters.roe)) return false;
+        if (!matchNumericFilter(row.debt_to_equity, colFilters.debt_to_equity)) return false;
+        if (!matchNumericFilter(row.profit_margin != null ? row.profit_margin * 100 : undefined, colFilters.profit_margin)) return false;
+        if (!matchNumericFilter(row.eps_ttm, colFilters.eps_ttm)) return false;
+        if (!matchTextFilter(row.sector, colFilters.sector)) return false;
 
         return true;
       });
@@ -482,7 +495,8 @@ export const ScreenerPanel: React.FC = () => {
       'SMA 20 Position', 'SMA 50 Position', 'SMA 200 Position', 'MACD Trend',
       'Heikin Ashi', 'Renko', 'Three Line Break', 'RS 1M', 'Patterns',
       'ML Signal', 'ML EV Score', 'ML Rank',
-      'Days since EMA9/20 Bull', 'Days since SMA20/50 Bull', 'Days since MACD Bull', 'Days since CMF Bull'
+      'Days since EMA9/20 Bull', 'Days since SMA20/50 Bull', 'Days since MACD Bull', 'Days since CMF Bull',
+      'Mkt Cap', 'P/E', 'P/B', 'EV/EBITDA', 'ROE %', 'D/E', 'Net Margin %', 'EPS TTM', 'Sector'
     ];
 
     const rows = filteredResults.map(row => {
@@ -532,7 +546,16 @@ export const ScreenerPanel: React.FC = () => {
         row.days_since_ema9_ema20_bull ?? '',
         row.days_since_sma20_sma50_bull ?? '',
         row.days_since_macd_bull ?? '',
-        row.days_since_cmf_bull ?? ''
+        row.days_since_cmf_bull ?? '',
+        row.market_cap ?? '',
+        row.pe_ratio ?? '',
+        row.pb_ratio ?? '',
+        row.ev_ebitda ?? '',
+        row.roe != null ? (row.roe * 100).toFixed(2) : '',
+        row.debt_to_equity ?? '',
+        row.profit_margin != null ? (row.profit_margin * 100).toFixed(2) : '',
+        row.eps_ttm ?? '',
+        row.sector ? `"${row.sector.replace(/"/g, '""')}"` : ''
       ];
     });
 
@@ -722,10 +745,10 @@ export const ScreenerPanel: React.FC = () => {
             /* Sticky overrides for headers of pinned columns */
             .screener-grid thead th:nth-child(1) { z-index: 25; background-color: #0c0f17 !important; }
             .screener-grid thead th:nth-child(2) { z-index: 25; background-color: #0c0f17 !important; }
-            .screener-grid thead th:nth-child(38) { z-index: 25; background-color: #0c0f17 !important; }
+            .screener-grid thead th:nth-child(47) { z-index: 25; background-color: #0c0f17 !important; }
             .screener-grid thead tr:nth-child(2) td:nth-child(1) { z-index: 25; background-color: #0c0f17 !important; }
             .screener-grid thead tr:nth-child(2) td:nth-child(2) { z-index: 25; background-color: #0c0f17 !important; }
-            .screener-grid thead tr:nth-child(2) td:nth-child(38) { z-index: 25; background-color: #0c0f17 !important; }
+            .screener-grid thead tr:nth-child(2) td:nth-child(47) { z-index: 25; background-color: #0c0f17 !important; }
 
             /* Zebra striping backgrounds for scrollable cells */
             .screener-grid tbody tr:nth-child(odd) td {
@@ -746,10 +769,10 @@ export const ScreenerPanel: React.FC = () => {
             }
 
             /* Pinned cell backgrounds (right Actions column) */
-            .screener-grid tbody tr:nth-child(odd) td:nth-child(38) {
+            .screener-grid tbody tr:nth-child(odd) td:nth-child(47) {
               background-color: #090b10 !important;
             }
-            .screener-grid tbody tr:nth-child(even) td:nth-child(38) {
+            .screener-grid tbody tr:nth-child(even) td:nth-child(47) {
               background-color: #0f121a !important;
             }
 
@@ -794,10 +817,20 @@ export const ScreenerPanel: React.FC = () => {
             .screener-grid th:nth-child(35), .screener-grid td:nth-child(35) { width: 68px; min-width: 68px; } /* Golden-X */
             .screener-grid th:nth-child(36), .screener-grid td:nth-child(36) { width: 72px; min-width: 72px; } /* MACD-X */
             .screener-grid th:nth-child(37), .screener-grid td:nth-child(37) { width: 68px; min-width: 68px; } /* CMF-X */
+            /* Fundamental columns */
+            .screener-grid th:nth-child(38), .screener-grid td:nth-child(38) { width: 110px; min-width: 110px; } /* Mkt Cap */
+            .screener-grid th:nth-child(39), .screener-grid td:nth-child(39) { width: 70px; min-width: 70px; }  /* P/E */
+            .screener-grid th:nth-child(40), .screener-grid td:nth-child(40) { width: 70px; min-width: 70px; }  /* P/B */
+            .screener-grid th:nth-child(41), .screener-grid td:nth-child(41) { width: 90px; min-width: 90px; }  /* EV/EBITDA */
+            .screener-grid th:nth-child(42), .screener-grid td:nth-child(42) { width: 75px; min-width: 75px; }  /* ROE */
+            .screener-grid th:nth-child(43), .screener-grid td:nth-child(43) { width: 70px; min-width: 70px; }  /* D/E */
+            .screener-grid th:nth-child(44), .screener-grid td:nth-child(44) { width: 85px; min-width: 85px; }  /* Net Mgn */
+            .screener-grid th:nth-child(45), .screener-grid td:nth-child(45) { width: 75px; min-width: 75px; }  /* EPS */
+            .screener-grid th:nth-child(46), .screener-grid td:nth-child(46) { width: 140px; min-width: 140px; } /* Sector */
 
-            /* Pin Actions column (38th column) to the right */
-            .screener-grid th:nth-child(38),
-            .screener-grid td:nth-child(38) {
+            /* Pin Actions column (47th column) to the right */
+            .screener-grid th:nth-child(47),
+            .screener-grid td:nth-child(47) {
               position: sticky;
               right: 0;
               z-index: 5;
@@ -934,6 +967,33 @@ export const ScreenerPanel: React.FC = () => {
                 </th>
                 <th className="py-2 px-1.5 text-center cursor-pointer hover:text-white transition" title="Days since CMF crossed above zero" onClick={() => handleSort('days_since_cmf_bull')}>
                   CMF-X {renderSortIcon('days_since_cmf_bull')}
+                </th>
+                <th className="py-2 px-1.5 text-right cursor-pointer hover:text-white transition" title="Market Capitalisation" onClick={() => handleSort('market_cap' as any)}>
+                  Mkt Cap {renderSortIcon('market_cap' as any)}
+                </th>
+                <th className="py-2 px-1.5 text-right cursor-pointer hover:text-white transition" title="Price-to-Earnings Ratio (TTM)" onClick={() => handleSort('pe_ratio' as any)}>
+                  P/E {renderSortIcon('pe_ratio' as any)}
+                </th>
+                <th className="py-2 px-1.5 text-right cursor-pointer hover:text-white transition" title="Price-to-Book Ratio" onClick={() => handleSort('pb_ratio' as any)}>
+                  P/B {renderSortIcon('pb_ratio' as any)}
+                </th>
+                <th className="py-2 px-1.5 text-right cursor-pointer hover:text-white transition" title="EV / EBITDA" onClick={() => handleSort('ev_ebitda' as any)}>
+                  EV/EB {renderSortIcon('ev_ebitda' as any)}
+                </th>
+                <th className="py-2 px-1.5 text-right cursor-pointer hover:text-white transition" title="Return on Equity (%)" onClick={() => handleSort('roe' as any)}>
+                  ROE {renderSortIcon('roe' as any)}
+                </th>
+                <th className="py-2 px-1.5 text-right cursor-pointer hover:text-white transition" title="Debt to Equity Ratio" onClick={() => handleSort('debt_to_equity' as any)}>
+                  D/E {renderSortIcon('debt_to_equity' as any)}
+                </th>
+                <th className="py-2 px-1.5 text-right cursor-pointer hover:text-white transition" title="Net Profit Margin (%)" onClick={() => handleSort('profit_margin' as any)}>
+                  Net Mgn {renderSortIcon('profit_margin' as any)}
+                </th>
+                <th className="py-2 px-1.5 text-right cursor-pointer hover:text-white transition" title="Earnings Per Share (TTM)" onClick={() => handleSort('eps_ttm' as any)}>
+                  EPS {renderSortIcon('eps_ttm' as any)}
+                </th>
+                <th className="py-2 px-1.5 cursor-pointer hover:text-white transition" title="Sector" onClick={() => handleSort('sector' as any)}>
+                  Sector {renderSortIcon('sector' as any)}
                 </th>
                 <th className="py-2 px-1.5 text-right">Actions</th>
               </tr>
@@ -1370,6 +1430,105 @@ export const ScreenerPanel: React.FC = () => {
                     />
                   </td>
 
+                  {/* Mkt Cap */}
+                  <td className="py-1 px-1.5 text-right">
+                    <input
+                      type="text"
+                      placeholder=">1000cr"
+                      value={colFilters.market_cap}
+                      onChange={(e) => setColFilters({ ...colFilters, market_cap: e.target.value })}
+                      className="w-full min-w-[65px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-blue-500 focus:text-white text-right transition font-mono"
+                    />
+                  </td>
+
+                  {/* P/E */}
+                  <td className="py-1 px-1.5 text-right">
+                    <input
+                      type="text"
+                      placeholder="<30"
+                      value={colFilters.pe_ratio}
+                      onChange={(e) => setColFilters({ ...colFilters, pe_ratio: e.target.value })}
+                      className="w-full min-w-[40px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-blue-500 focus:text-white text-right transition font-mono"
+                    />
+                  </td>
+
+                  {/* P/B */}
+                  <td className="py-1 px-1.5 text-right">
+                    <input
+                      type="text"
+                      placeholder="<5"
+                      value={colFilters.pb_ratio}
+                      onChange={(e) => setColFilters({ ...colFilters, pb_ratio: e.target.value })}
+                      className="w-full min-w-[40px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-blue-500 focus:text-white text-right transition font-mono"
+                    />
+                  </td>
+
+                  {/* EV/EBITDA */}
+                  <td className="py-1 px-1.5 text-right">
+                    <input
+                      type="text"
+                      placeholder="<20"
+                      value={colFilters.ev_ebitda}
+                      onChange={(e) => setColFilters({ ...colFilters, ev_ebitda: e.target.value })}
+                      className="w-full min-w-[50px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-blue-500 focus:text-white text-right transition font-mono"
+                    />
+                  </td>
+
+                  {/* ROE */}
+                  <td className="py-1 px-1.5 text-right">
+                    <input
+                      type="text"
+                      placeholder=">15"
+                      value={colFilters.roe}
+                      onChange={(e) => setColFilters({ ...colFilters, roe: e.target.value })}
+                      className="w-full min-w-[40px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-blue-500 focus:text-white text-right transition font-mono"
+                    />
+                  </td>
+
+                  {/* D/E */}
+                  <td className="py-1 px-1.5 text-right">
+                    <input
+                      type="text"
+                      placeholder="<1"
+                      value={colFilters.debt_to_equity}
+                      onChange={(e) => setColFilters({ ...colFilters, debt_to_equity: e.target.value })}
+                      className="w-full min-w-[40px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-blue-500 focus:text-white text-right transition font-mono"
+                    />
+                  </td>
+
+                  {/* Net Margin */}
+                  <td className="py-1 px-1.5 text-right">
+                    <input
+                      type="text"
+                      placeholder=">10"
+                      value={colFilters.profit_margin}
+                      onChange={(e) => setColFilters({ ...colFilters, profit_margin: e.target.value })}
+                      className="w-full min-w-[40px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-blue-500 focus:text-white text-right transition font-mono"
+                    />
+                  </td>
+
+                  {/* EPS */}
+                  <td className="py-1 px-1.5 text-right">
+                    <input
+                      type="text"
+                      placeholder=">10"
+                      value={colFilters.eps_ttm}
+                      onChange={(e) => setColFilters({ ...colFilters, eps_ttm: e.target.value })}
+                      className="w-full min-w-[40px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-blue-500 focus:text-white text-right transition font-mono"
+                    />
+                  </td>
+
+                  {/* Sector */}
+                  <td className="py-1 px-1.5">
+                    <input
+                      type="text"
+                      placeholder="Filter..."
+                      value={colFilters.sector}
+                      onChange={(e) => setColFilters({ ...colFilters, sector: e.target.value })}
+                      className="w-full min-w-[70px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-blue-500 focus:text-white transition"
+                    />
+                  </td>
+
                   {/* Actions */}
                   <td className="py-1 px-1.5 text-right">
                     {/* Empty space matching actions column */}
@@ -1380,7 +1539,7 @@ export const ScreenerPanel: React.FC = () => {
             <tbody className="divide-y divide-slate-850">
               {filteredResults.length === 0 ? (
                 <tr>
-                  <td colSpan={38} className="py-10 text-center text-slate-500 text-xs">
+                  <td colSpan={47} className="py-10 text-center text-slate-500 text-xs">
                     {isLoading 
                       ? 'Executing database snapshot sweep...' 
                       : 'No stock matches found for the current criteria.'}
@@ -1807,6 +1966,79 @@ export const ScreenerPanel: React.FC = () => {
                             {row.days_since_cmf_bull}d
                           </span>
                         ) : <span className="text-slate-700">—</span>}
+                      </td>
+
+                      {/* Mkt Cap */}
+                      <td className="py-2 px-1.5 text-right font-mono text-xs text-slate-350">
+                        {row.market_cap != null ? formatTradedValue(row.market_cap) : <span className="text-slate-700">—</span>}
+                      </td>
+
+                      {/* P/E */}
+                      <td className="py-2 px-1.5 text-right font-mono text-xs">
+                        {row.pe_ratio != null ? (
+                          <span className={row.pe_ratio > 50 ? 'text-amber-400' : row.pe_ratio < 15 ? 'text-emerald-400' : 'text-slate-300'}>
+                            {row.pe_ratio.toFixed(1)}
+                          </span>
+                        ) : <span className="text-slate-700">—</span>}
+                      </td>
+
+                      {/* P/B */}
+                      <td className="py-2 px-1.5 text-right font-mono text-xs">
+                        {row.pb_ratio != null ? (
+                          <span className={row.pb_ratio > 5 ? 'text-amber-400' : 'text-slate-300'}>
+                            {row.pb_ratio.toFixed(1)}
+                          </span>
+                        ) : <span className="text-slate-700">—</span>}
+                      </td>
+
+                      {/* EV/EBITDA */}
+                      <td className="py-2 px-1.5 text-right font-mono text-xs">
+                        {row.ev_ebitda != null ? (
+                          <span className={row.ev_ebitda > 20 ? 'text-amber-400' : 'text-slate-300'}>
+                            {row.ev_ebitda.toFixed(1)}x
+                          </span>
+                        ) : <span className="text-slate-700">—</span>}
+                      </td>
+
+                      {/* ROE */}
+                      <td className="py-2 px-1.5 text-right font-mono text-xs">
+                        {row.roe != null ? (
+                          <span className={row.roe >= 0.20 ? 'text-emerald-400' : row.roe >= 0.10 ? 'text-slate-300' : 'text-rose-400'}>
+                            {(row.roe * 100).toFixed(1)}%
+                          </span>
+                        ) : <span className="text-slate-700">—</span>}
+                      </td>
+
+                      {/* D/E */}
+                      <td className="py-2 px-1.5 text-right font-mono text-xs">
+                        {row.debt_to_equity != null ? (
+                          <span className={row.debt_to_equity > 1 ? 'text-amber-400' : row.debt_to_equity > 0.5 ? 'text-slate-300' : 'text-emerald-400'}>
+                            {row.debt_to_equity.toFixed(2)}
+                          </span>
+                        ) : <span className="text-slate-700">—</span>}
+                      </td>
+
+                      {/* Net Margin */}
+                      <td className="py-2 px-1.5 text-right font-mono text-xs">
+                        {row.profit_margin != null ? (
+                          <span className={row.profit_margin >= 0.15 ? 'text-emerald-400' : row.profit_margin >= 0.05 ? 'text-slate-300' : row.profit_margin < 0 ? 'text-rose-400' : 'text-slate-400'}>
+                            {(row.profit_margin * 100).toFixed(1)}%
+                          </span>
+                        ) : <span className="text-slate-700">—</span>}
+                      </td>
+
+                      {/* EPS */}
+                      <td className="py-2 px-1.5 text-right font-mono text-xs">
+                        {row.eps_ttm != null ? (
+                          <span className={row.eps_ttm > 0 ? 'text-slate-300' : 'text-rose-400'}>
+                            ₹{row.eps_ttm.toFixed(1)}
+                          </span>
+                        ) : <span className="text-slate-700">—</span>}
+                      </td>
+
+                      {/* Sector */}
+                      <td className="py-2 px-1.5 text-xs text-slate-400 truncate max-w-[140px]" title={row.sector ?? undefined}>
+                        {row.sector ?? <span className="text-slate-700">—</span>}
                       </td>
 
                       {/* Actions */}

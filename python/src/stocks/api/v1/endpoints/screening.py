@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from stocks.api.deps import get_db
 from stocks.config import Config as _Config
-from stocks.db.models import StrategySignal, SymbolConfluenceLevel
+from stocks.db.models import StrategySignal, SymbolConfluenceLevel, SymbolFundamentals
 from stocks.services.quant.confluence_service import ConfluenceService
 
 config = _Config.load()
@@ -292,6 +292,30 @@ class ScreenerRowResponse(BaseModel):
     macd_histogram_slope:        float | None = None
     macd_above_zero:             bool | None = None
     cmf_slope_5d:                float | None = None
+    # Fundamentals
+    market_cap:       float | None = None
+    enterprise_value: float | None = None
+    pe_ratio:         float | None = None
+    forward_pe:       float | None = None
+    pb_ratio:         float | None = None
+    ev_ebitda:        float | None = None
+    price_to_sales:   float | None = None
+    revenue_ttm:      float | None = None
+    net_profit_ttm:   float | None = None
+    ebitda:           float | None = None
+    gross_margin:     float | None = None
+    profit_margin:    float | None = None
+    operating_margin: float | None = None
+    eps_ttm:          float | None = None
+    book_value:       float | None = None
+    dividend_yield:   float | None = None
+    roe:              float | None = None
+    roa:              float | None = None
+    debt_to_equity:   float | None = None
+    current_ratio:    float | None = None
+    free_cashflow:    float | None = None
+    sector:           str | None = None
+    industry:         str | None = None
 
     class Config:
         from_attributes = True
@@ -331,11 +355,27 @@ def _build_strategy_signal_map(db: Session, symbol_ids: list[int]) -> dict:
     return out
 
 
-def _build_row(r, confl_by_symbol_id: dict, risk_per_trade: float, strat_by_symbol_id: dict | None = None) -> dict:
+def _build_fund_map(db: Session, symbol_ids: list[int]) -> dict:
+    """Batch-loads SymbolFundamentals keyed by symbol_id."""
+    fund_by_id: dict = {}
+    if not symbol_ids:
+        return fund_by_id
+    chunk_size = 1000
+    for i in range(0, len(symbol_ids), chunk_size):
+        chunk = symbol_ids[i : i + chunk_size]
+        for f in db.scalars(
+            select(SymbolFundamentals).where(SymbolFundamentals.symbol_id.in_(chunk))
+        ).all():
+            fund_by_id[f.symbol_id] = f
+    return fund_by_id
+
+
+def _build_row(r, confl_by_symbol_id: dict, risk_per_trade: float, strat_by_symbol_id: dict | None = None, fund_by_symbol_id: dict | None = None) -> dict:
     """Builds a single screener response row dict from a ScreeningSnapshot."""
     close = float(r.close_price)
     setup = _structural_trade_setup(close, r.atr_pct, confl_by_symbol_id.get(r.symbol_id, []), risk_per_trade)
     tqs = compute_trade_quality_score(r, setup.get("rr_ratio"))
+    fund = (fund_by_symbol_id or {}).get(r.symbol_id)
     return {
         "symbol_id": r.symbol_id,
         "symbol": r.symbol,
@@ -395,6 +435,29 @@ def _build_row(r, confl_by_symbol_id: dict, risk_per_trade: float, strat_by_symb
         "ml2_rank":    getattr(r, "ml2_rank",     None),
         "ml2_signal":  getattr(r, "ml2_signal",   None),
         "strategy_signals": (strat_by_symbol_id or {}).get(r.symbol_id, {}),
+        "market_cap":       getattr(fund, "market_cap",       None),
+        "enterprise_value": getattr(fund, "enterprise_value", None),
+        "pe_ratio":         getattr(fund, "pe_ratio",         None),
+        "forward_pe":       getattr(fund, "forward_pe",       None),
+        "pb_ratio":         getattr(fund, "pb_ratio",         None),
+        "ev_ebitda":        getattr(fund, "ev_ebitda",        None),
+        "price_to_sales":   getattr(fund, "price_to_sales",   None),
+        "revenue_ttm":      getattr(fund, "revenue_ttm",      None),
+        "net_profit_ttm":   getattr(fund, "net_profit_ttm",   None),
+        "ebitda":           getattr(fund, "ebitda",           None),
+        "gross_margin":     getattr(fund, "gross_margin",     None),
+        "profit_margin":    getattr(fund, "profit_margin",    None),
+        "operating_margin": getattr(fund, "operating_margin", None),
+        "eps_ttm":          getattr(fund, "eps_ttm",          None),
+        "book_value":       getattr(fund, "book_value",       None),
+        "dividend_yield":   getattr(fund, "dividend_yield",   None),
+        "roe":              getattr(fund, "roe",              None),
+        "roa":              getattr(fund, "roa",              None),
+        "debt_to_equity":   getattr(fund, "debt_to_equity",   None),
+        "current_ratio":    getattr(fund, "current_ratio",    None),
+        "free_cashflow":    getattr(fund, "free_cashflow",    None),
+        "sector":           getattr(fund, "sector",           None),
+        "industry":         getattr(fund, "industry",         None),
         "days_since_price_sma20_bull": getattr(r, "days_since_price_sma20_bull", None),
         "days_since_price_sma50_bull": getattr(r, "days_since_price_sma50_bull", None),
         "days_since_price_ema20_bull": getattr(r, "days_since_price_ema20_bull", None),
@@ -481,7 +544,8 @@ def get_screening_results_get(
     ids = [r.symbol_id for r in results]
     confl_by_symbol_id = _build_confl_map(db, ids)
     strat_by_symbol_id = _build_strategy_signal_map(db, ids)
-    return [_build_row(r, confl_by_symbol_id, risk_per_trade, strat_by_symbol_id) for r in results]
+    fund_by_symbol_id = _build_fund_map(db, ids)
+    return [_build_row(r, confl_by_symbol_id, risk_per_trade, strat_by_symbol_id, fund_by_symbol_id) for r in results]
 
 
 @router.post("/run", response_model=list[ScreenerRowResponse])
@@ -523,4 +587,5 @@ def get_screening_results_post(params: ScreeningParams, db: Session = Depends(ge
     ids = [r.symbol_id for r in results]
     confl_by_symbol_id = _build_confl_map(db, ids)
     strat_by_symbol_id = _build_strategy_signal_map(db, ids)
-    return [_build_row(r, confl_by_symbol_id, risk_per_trade, strat_by_symbol_id) for r in results]
+    fund_by_symbol_id = _build_fund_map(db, ids)
+    return [_build_row(r, confl_by_symbol_id, risk_per_trade, strat_by_symbol_id, fund_by_symbol_id) for r in results]

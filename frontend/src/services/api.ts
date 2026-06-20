@@ -268,6 +268,30 @@ export interface ScreenerRow {
   macd_histogram_slope?: number | null;
   macd_above_zero?: boolean | null;
   cmf_slope_5d?: number | null;
+  // Fundamentals
+  market_cap?: number | null;
+  enterprise_value?: number | null;
+  pe_ratio?: number | null;
+  forward_pe?: number | null;
+  pb_ratio?: number | null;
+  ev_ebitda?: number | null;
+  price_to_sales?: number | null;
+  revenue_ttm?: number | null;
+  net_profit_ttm?: number | null;
+  ebitda?: number | null;
+  gross_margin?: number | null;
+  profit_margin?: number | null;
+  operating_margin?: number | null;
+  eps_ttm?: number | null;
+  book_value?: number | null;
+  dividend_yield?: number | null;
+  roe?: number | null;
+  roa?: number | null;
+  debt_to_equity?: number | null;
+  current_ratio?: number | null;
+  free_cashflow?: number | null;
+  sector?: string | null;
+  industry?: string | null;
 }
 
 // ── Strategy Screener ─────────────────────────────────────────────────────────
