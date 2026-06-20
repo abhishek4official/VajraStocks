@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useStockStore } from '../store/useStockStore';
-import { Eye, Filter, RefreshCw, BarChart2, Download, Bookmark, Zap } from 'lucide-react';
+import { Eye, Filter, RefreshCw, BarChart2, Download, Bookmark, Zap, TrendingUp } from 'lucide-react';
+import { StockChartWorkspace } from './StockChartWorkspace';
 import type { ScreenerRow, StrategyMeta } from '../services/api';
 import { apiService } from '../services/api';
 
@@ -277,6 +278,13 @@ export const ScreenerPanel: React.FC = () => {
   const PAGE_SIZE = 50;
   const [searchQuery, setSearchQuery] = useState('');
   const [strategies, setStrategies] = useState<StrategyMeta[]>([]);
+
+  const [modalSymbol, setModalSymbol] = useState<string | null>(null);
+
+  const handleOpenChartModal = async (symbol: string) => {
+    setModalSymbol(symbol);
+    await setSelectedSymbol(symbol);
+  };
 
   // Column-level filters state (cached in localStorage so they persist across reloads).
   const [showColFilters, setShowColFilters] = useState(() => {
@@ -2058,6 +2066,14 @@ export const ScreenerPanel: React.FC = () => {
                             <Eye className="w-3 h-3" />
                             Inspect
                           </button>
+                          <button
+                            onClick={() => handleOpenChartModal(row.symbol)}
+                            title="Quick Chart View"
+                            className="p-0.5 px-1.5 rounded bg-slate-900 border border-slate-800 hover:border-indigo-500/80 text-slate-400 hover:text-text-main text-xs flex items-center gap-1 transition cursor-pointer"
+                          >
+                            <TrendingUp className="w-3 h-3" />
+                            Chart
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -2092,6 +2108,19 @@ export const ScreenerPanel: React.FC = () => {
               </div>
             </div>
           )}
+      {/* ── Modal Stock Chart ── */}
+      {modalSymbol && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-6xl bg-bg-surface border border-border-subtle rounded-2xl shadow-2xl flex flex-col max-h-[95vh] overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="flex-1 flex flex-col p-6 overflow-y-auto">
+              <StockChartWorkspace
+                onClose={() => setModalSymbol(null)}
+                hideWatchlistButton={true}
+              />
+            </div>
+          </div>
+        </div>
+      )}
         </div>
       </div>
     </div>

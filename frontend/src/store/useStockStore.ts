@@ -89,6 +89,7 @@ interface StockState {
   chartType: 'candles' | 'heikin-ashi' | 'renko' | 'line-break';
   chartTimeframe: ChartTimeframe;
   chartOverlays: Set<ChartOverlay>;
+  indicatorToShow: 'RSI' | 'MACD' | 'CMF' | 'STOCHRSI' | 'NONE';
 
   candles: CandleData[];
   heikinAshi: CandleData[];
@@ -136,6 +137,7 @@ interface StockState {
   setChartType: (type: 'candles' | 'heikin-ashi' | 'renko' | 'line-break') => void;
   setChartTimeframe: (tf: ChartTimeframe) => void;
   toggleChartOverlay: (overlay: ChartOverlay) => void;
+  setIndicatorToShow: (ind: 'RSI' | 'MACD' | 'CMF' | 'STOCHRSI' | 'NONE') => void;
   setScreenerFilters: (filters: Partial<ScreenerFilters>) => void;
   // Portfolio actions (backend-driven)
   fetchPortfolio: () => Promise<void>;
@@ -246,6 +248,36 @@ function saveScreenerFilters(filters: ScreenerFilters) {
   localStorage.setItem(SCREENER_FILTERS_KEY, JSON.stringify(filters));
 }
 
+// ─── Chart preferences persistence ───────────────────────────────────────────
+const CHART_PREFS_KEY = 'vajra_chart_prefs';
+
+interface ChartPrefs {
+  chartType: 'candles' | 'heikin-ashi' | 'renko' | 'line-break';
+  chartTimeframe: ChartTimeframe;
+  chartOverlays: string[];
+  indicatorToShow: 'RSI' | 'MACD' | 'CMF' | 'STOCHRSI' | 'NONE';
+}
+
+function loadChartPrefs(): ChartPrefs {
+  try {
+    const raw = localStorage.getItem(CHART_PREFS_KEY);
+    if (raw) return JSON.parse(raw) as ChartPrefs;
+  } catch { /* ignore */ }
+  return {
+    chartType: 'candles',
+    chartTimeframe: '1Y',
+    chartOverlays: ['sma20', 'sma50', 'sma200'],
+    indicatorToShow: 'RSI',
+  };
+}
+
+function saveChartPrefs(prefs: Partial<ChartPrefs>) {
+  try {
+    const current = loadChartPrefs();
+    localStorage.setItem(CHART_PREFS_KEY, JSON.stringify({ ...current, ...prefs }));
+  } catch { /* ignore */ }
+}
+
 // Load screener limit from DB settings asynchronously (non-blocking)
 function loadScreenerLimitFromDB(): void {
   const BASE = API_BASE;
@@ -275,9 +307,10 @@ export const useStockStore = create<StockState>((set, get) => ({
   activeSymbol: null,
   activeSymbolDetail: null,
   activeTab: getInitialTab(),
-  chartType: 'candles',
-  chartTimeframe: '1Y',
-  chartOverlays: new Set<ChartOverlay>(['sma20', 'sma50', 'sma200']),
+  chartType: loadChartPrefs().chartType,
+  chartTimeframe: loadChartPrefs().chartTimeframe,
+  chartOverlays: new Set<ChartOverlay>(loadChartPrefs().chartOverlays as ChartOverlay[]),
+  indicatorToShow: loadChartPrefs().indicatorToShow,
 
   candles: [],
   heikinAshi: [],
@@ -319,13 +352,15 @@ export const useStockStore = create<StockState>((set, get) => ({
       window.history.pushState(null, '', cleanPath);
     }
   },
-  setChartType: (chartType) => set({ chartType }),
-  setChartTimeframe: (chartTimeframe) => set({ chartTimeframe }),
+  setChartType: (chartType) => { set({ chartType }); saveChartPrefs({ chartType }); },
+  setChartTimeframe: (chartTimeframe) => { set({ chartTimeframe }); saveChartPrefs({ chartTimeframe }); },
   toggleChartOverlay: (overlay) => {
     const next = new Set(get().chartOverlays);
     if (next.has(overlay)) next.delete(overlay); else next.add(overlay);
     set({ chartOverlays: next });
+    saveChartPrefs({ chartOverlays: [...next] });
   },
+  setIndicatorToShow: (indicatorToShow) => { set({ indicatorToShow }); saveChartPrefs({ indicatorToShow }); },
   setScreenerFilters: (filters) => {
     const nextFilters = { ...get().screenerFilters, ...filters };
     saveScreenerFilters(nextFilters);

@@ -1,10 +1,11 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useStockStore } from '../store/useStockStore';
 import {
   Upload, Trash2, TrendingUp, TrendingDown, Minus, BarChart2, ShieldAlert,
   Wallet, Gauge, PieChart, ArrowUpRight, ArrowDownRight, Sparkles, RefreshCw,
 } from 'lucide-react';
 import type { PortfolioHolding } from '../services/api';
+import { StockChartWorkspace } from './StockChartWorkspace';
 
 export const PortfolioPanel: React.FC = () => {
   const {
@@ -18,6 +19,7 @@ export const PortfolioPanel: React.FC = () => {
   const agg = portfolio?.aggregates ?? null;
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [modalSymbol, setModalSymbol] = useState<string | null>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -29,6 +31,12 @@ export const PortfolioPanel: React.FC = () => {
     const symbol = instrument.endsWith('.NS') ? instrument : `${instrument}.NS`;
     await setSelectedSymbol(symbol);
     setActiveTab('explorer');
+  };
+
+  const handleOpenChartModal = async (instrument: string) => {
+    const symbol = instrument.endsWith('.NS') ? instrument : `${instrument}.NS`;
+    setModalSymbol(symbol);
+    await setSelectedSymbol(symbol);
   };
 
   // ── Formatters ───────────────────────────────────────────────────────────
@@ -424,12 +432,22 @@ export const PortfolioPanel: React.FC = () => {
                       ) : <span className="text-slate-600 text-xs">—</span>}
                     </td>
                     <td className="py-3 pr-5 pl-3 text-center">
-                      <button
-                        onClick={() => handleInspect(h.instrument)}
-                        className="px-2.5 py-1 rounded-md bg-slate-900 border border-slate-800 hover:border-purple-500/80 text-slate-400 hover:text-text-main text-xs transition cursor-pointer"
-                      >
-                        View
-                      </button>
+                      <div className="flex items-center gap-1 justify-center">
+                        <button
+                          onClick={() => handleInspect(h.instrument)}
+                          className="px-2 py-1 rounded bg-slate-900 border border-slate-800 hover:border-purple-500/80 text-slate-400 hover:text-text-main text-xs transition cursor-pointer"
+                        >
+                          View
+                        </button>
+                        <button
+                          onClick={() => handleOpenChartModal(h.instrument)}
+                          title="Quick Chart View"
+                          className="p-1 px-1.5 rounded bg-slate-900 border border-slate-800 hover:border-indigo-500/80 text-slate-400 hover:text-text-main text-xs flex items-center gap-1 transition cursor-pointer"
+                        >
+                          <TrendingUp className="w-3 h-3" />
+                          Chart
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -472,9 +490,18 @@ export const PortfolioPanel: React.FC = () => {
                     <span className="text-[10px] font-mono text-slate-600">#{i + 1}</span>
                     <span className="text-sm font-bold text-text-main font-mono group-hover:text-emerald-300 transition">{c.symbol}</span>
                   </div>
-                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded border text-emerald-400 bg-emerald-500/10 border-emerald-500/25">
-                    {c.bias}
-                  </span>
+                  <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      onClick={() => handleOpenChartModal(c.symbol)}
+                      title="Quick Chart View"
+                      className="p-1 rounded bg-slate-955 border border-slate-800 hover:border-indigo-500/80 text-slate-400 hover:text-text-main transition cursor-pointer"
+                    >
+                      <TrendingUp className="w-3 h-3" />
+                    </button>
+                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded border text-emerald-400 bg-emerald-500/10 border-emerald-500/25">
+                      {c.bias}
+                    </span>
+                  </div>
                 </div>
                 <p className="text-[10px] text-slate-500 truncate mt-1">{c.company_name}</p>
                 <div className="flex items-center gap-3 mt-2.5 text-[10px] font-mono text-slate-400">
@@ -528,6 +555,20 @@ export const PortfolioPanel: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* ── Modal Stock Chart ── */}
+      {modalSymbol && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-6xl bg-bg-surface border border-border-subtle rounded-2xl shadow-2xl flex flex-col max-h-[95vh] overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="flex-1 flex flex-col p-6 overflow-y-auto">
+              <StockChartWorkspace
+                onClose={() => setModalSymbol(null)}
+                hideWatchlistButton={true}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

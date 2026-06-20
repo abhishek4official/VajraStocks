@@ -48,7 +48,12 @@ export function AgentSidebar() {
     useConversationStore();
 
   useEffect(() => {
-    loadThreads();
+    loadThreads(activeAgent).then(() => {
+      // Re-hydrate the last active thread's messages on mount
+      if (activeThreadId) {
+        selectThread(activeThreadId);
+      }
+    });
   }, []);
 
   const handleAgentClick = (agentId: string) => {
