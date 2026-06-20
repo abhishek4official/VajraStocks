@@ -185,18 +185,18 @@ export const ComparePanel: React.FC = () => {
                 onChange={e => setInputVal(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') addTicker(inputVal); if (e.key === 'Escape') setInputVal(''); }}
                 placeholder="Add ticker (e.g. TCS)…"
-                className="text-xs bg-transparent text-white focus:outline-none w-36 placeholder-slate-600"
+                className="text-xs bg-transparent text-text-main focus:outline-none w-36 placeholder-slate-600"
               />
             </div>
             {suggestions.length > 0 && (
-              <div className="absolute top-full left-0 mt-1 w-64 bg-[#0d0f14] border border-slate-800 rounded-xl shadow-2xl z-50 overflow-hidden">
+              <div className="absolute top-full left-0 mt-1 w-64 bg-bg-surface border border-border-subtle rounded-xl shadow-2xl z-50 overflow-hidden">
                 {suggestions.map(s => (
                   <button
                     key={s.symbol}
                     onClick={() => addTicker(s.symbol)}
                     className="w-full flex items-center gap-2 px-3 py-2 hover:bg-slate-800 text-left transition cursor-pointer"
                   >
-                    <span className="text-xs font-bold text-white font-mono">{s.symbol.replace('.NS', '')}</span>
+                    <span className="text-xs font-bold text-text-main font-mono">{s.symbol.replace('.NS', '')}</span>
                     <span className="text-[11px] text-slate-400 truncate">{s.company_name}</span>
                   </button>
                 ))}
@@ -210,7 +210,7 @@ export const ComparePanel: React.FC = () => {
       {returns.length > 0 && (
         <div className="flex flex-wrap gap-3">
           {returns.map((r, i) => (
-            <div key={r.symbol} className="flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-800 bg-[#121620]/40">
+            <div key={r.symbol} className="flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-800 bg-bg-surface/40">
               <span className="w-2 h-2 rounded-full" style={{ background: COLORS[i % COLORS.length] }} />
               <span className="text-xs font-bold text-slate-300">{r.symbol.replace('.NS', '')}</span>
               <span className={`text-xs font-mono font-bold ${r.ret == null ? 'text-slate-500' : r.ret >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>

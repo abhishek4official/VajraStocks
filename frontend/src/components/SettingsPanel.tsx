@@ -75,7 +75,7 @@ const SettingInput: React.FC<{
   onToggleReveal: () => void;
   onProviderChange?: (provider: string) => void;
 }> = ({ s, value, revealed, onChange, onToggleReveal, onProviderChange }) => {
-  const base = 'w-full px-3 py-1.5 text-xs rounded-lg bg-slate-900 border text-white focus:outline-none transition font-mono';
+  const base = 'w-full px-3 py-1.5 text-xs rounded-lg bg-slate-900 border text-text-main focus:outline-none transition font-mono';
 
   // Special dropdown for ai_provider
   if (s.category === 'AI' && s.key === 'ai_provider') {
@@ -156,7 +156,7 @@ const SettingInput: React.FC<{
         <button
           type="button"
           onClick={onToggleReveal}
-          className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white cursor-pointer"
+          className="absolute right-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-main cursor-pointer"
         >
           {revealed ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
         </button>
@@ -318,8 +318,8 @@ export const SettingsPanel: React.FC = () => {
       {/* ── Page header ── */}
       <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800 shrink-0">
         <div>
-          <h2 className="text-xl font-bold text-white flex items-center gap-2">
-            <Settings className="w-5 h-5 text-purple-500" /> Application Settings
+          <h2 className="text-xl font-bold text-text-main flex items-center gap-2">
+            <Settings className="w-5 h-5 text-accent-primary" /> Application Settings
           </h2>
           <p className="text-xs text-slate-400 mt-0.5">
             All settings are persisted in the database.
@@ -331,7 +331,7 @@ export const SettingsPanel: React.FC = () => {
           <button
             onClick={load}
             disabled={loading}
-            className="p-2 rounded-lg border border-slate-800 hover:bg-slate-800 text-slate-400 hover:text-white transition cursor-pointer"
+            className="p-2 rounded-lg border border-border-subtle hover:bg-bg-surface text-slate-400 hover:text-text-main transition cursor-pointer"
             title="Reload settings"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
@@ -368,7 +368,7 @@ export const SettingsPanel: React.FC = () => {
             </div>
             <div className="flex gap-2 shrink-0">
               <button onClick={() => setNeedsRestart(false)}
-                className="px-3 py-1.5 text-xs rounded-lg border border-slate-700 text-slate-400 hover:text-white transition cursor-pointer">
+                className="px-3 py-1.5 text-xs rounded-lg border border-slate-700 text-slate-400 hover:text-text-main transition cursor-pointer">
                 Dismiss
               </button>
               <button onClick={handleRestart} disabled={restarting}
@@ -398,7 +398,7 @@ export const SettingsPanel: React.FC = () => {
               <p className="text-xs text-rose-500/80 mt-0.5">Server did not respond within 30 s. Check the terminal.</p>
             </div>
             <button onClick={() => { setReconnectFailed(false); setNeedsRestart(true); }}
-              className="px-3 py-1.5 text-xs rounded-lg border border-rose-700 text-rose-400 hover:text-white transition cursor-pointer shrink-0">
+              className="px-3 py-1.5 text-xs rounded-lg border border-rose-700 text-rose-400 hover:bg-rose-700 hover:text-white transition cursor-pointer shrink-0">
               Try again
             </button>
           </div>
@@ -423,8 +423,8 @@ export const SettingsPanel: React.FC = () => {
               onClick={() => setActiveCat(cat.category)}
               className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold text-left transition cursor-pointer ${
                 activeCategory === cat.category
-                  ? 'bg-purple-600/20 border border-purple-500/40 text-white'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
+                  ? 'bg-purple-600/20 border border-purple-500/40 text-text-main font-bold'
+                  : 'text-text-muted hover:text-text-main hover:bg-bg-surface/40'
               }`}
             >
               <span>{CATEGORY_ICONS[cat.category] ?? '⚙️'}</span>
@@ -442,7 +442,7 @@ export const SettingsPanel: React.FC = () => {
           {activeMeta && (
             <div className="flex items-center justify-between mb-3 shrink-0">
               <div>
-                <h3 className="text-sm font-bold text-white">
+                <h3 className="text-sm font-bold text-text-main">
                   {CATEGORY_ICONS[activeMeta.category] ?? ''} {activeMeta.label}
                 </h3>
                 <p className="text-[10px] text-slate-500 mt-0.5">{activeMeta.count} settings</p>
@@ -461,7 +461,7 @@ export const SettingsPanel: React.FC = () => {
           )}
 
           {/* Rows */}
-          <div className="flex-1 overflow-y-auto rounded-xl border border-slate-800/80 bg-[#121620]/30 divide-y divide-slate-800/50">
+          <div className="flex-1 overflow-y-auto rounded-xl border border-border-subtle bg-bg-surface/30 divide-y divide-border-subtle/50">
             {loading ? (
               <div className="flex items-center justify-center py-12 text-slate-500">
                 <RefreshCw className="w-4 h-4 animate-spin mr-2" /> Loading…

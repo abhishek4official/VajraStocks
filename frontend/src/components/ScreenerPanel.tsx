@@ -215,7 +215,7 @@ const MultiSelectFilter: React.FC<MultiSelectFilterProps> = ({
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full flex items-center justify-between px-1.5 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-355 hover:text-white hover:border-slate-700 transition cursor-pointer select-none text-left font-mono h-[22px]"
+        className="w-full flex items-center justify-between px-1.5 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-355 hover:text-text-main hover:border-slate-700 transition cursor-pointer select-none text-left font-mono h-[22px]"
       >
         <span className="truncate mr-1">{displayLabel}</span>
         <span className="text-[8px] text-slate-500">▼</span>
@@ -228,7 +228,7 @@ const MultiSelectFilter: React.FC<MultiSelectFilterProps> = ({
             return (
               <label
                 key={opt.value}
-                className="flex items-center gap-2 px-2 py-1.5 hover:bg-slate-900 cursor-pointer select-none text-slate-300 hover:text-white"
+                className="flex items-center gap-2 px-2 py-1.5 hover:bg-slate-900 cursor-pointer select-none text-slate-300 hover:text-text-main"
               >
                 <input
                   type="checkbox"
@@ -591,7 +591,7 @@ export const ScreenerPanel: React.FC = () => {
           <button
             onClick={exportToCSV}
             disabled={screenerResults.length === 0}
-            className="flex items-center gap-2 px-4 py-2 bg-[#121620]/80 hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed text-slate-350 hover:text-white border border-slate-800 rounded-lg text-sm font-bold transition cursor-pointer"
+            className="flex items-center gap-2 px-4 py-2 bg-bg-surface/80 hover:bg-bg-surface disabled:opacity-40 disabled:cursor-not-allowed text-text-muted hover:text-text-main border border-border-subtle rounded-lg text-sm font-bold transition cursor-pointer"
             title="Export filtered results to CSV file"
           >
             <Download className="w-4 h-4" />
@@ -625,7 +625,7 @@ export const ScreenerPanel: React.FC = () => {
               runScreener();
             }}
             disabled={isLoading}
-            className="flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-800/80 bg-[#121620]/30 hover:bg-[#121620]/70 hover:border-purple-500/40 disabled:opacity-40 transition cursor-pointer text-left"
+            className="flex items-center gap-2 px-3 py-2 rounded-xl border border-border-subtle bg-bg-surface/30 hover:bg-bg-surface/70 hover:border-accent-primary/40 disabled:opacity-40 transition cursor-pointer text-left"
           >
             <span className="text-base leading-none">{p.emoji}</span>
             <div>
@@ -640,7 +640,7 @@ export const ScreenerPanel: React.FC = () => {
       </div>
 
       {/* Results Grid Table */}
-      <div className="flex-1 bg-[#121620]/60 rounded-xl border border-slate-800/80 p-4 overflow-hidden flex flex-col min-h-[300px]">
+      <div className="flex-1 bg-bg-surface/60 rounded-xl border border-border-subtle p-4 overflow-hidden flex flex-col min-h-[300px]">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800 mb-3 shrink-0">
           <h3 className="text-sm font-bold text-white tracking-wide flex items-center gap-1.5">
             <BarChart2 className="w-4 h-4 text-purple-400" />
@@ -663,7 +663,7 @@ export const ScreenerPanel: React.FC = () => {
               className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border transition cursor-pointer ${
                 showColFilters
                   ? 'bg-purple-950/40 border-purple-500/50 text-purple-200'
-                  : 'bg-slate-800 border-slate-700 text-slate-350 hover:text-white hover:bg-slate-700'
+                  : 'bg-slate-800 border-slate-700 text-slate-350 hover:text-text-main hover:bg-slate-700'
               }`}
               title="Toggle inline column filters"
             >
@@ -730,50 +730,50 @@ export const ScreenerPanel: React.FC = () => {
             .screener-grid thead th {
               position: sticky;
               top: 0;
-              background-color: #0c0f17;
+              background-color: var(--bg-surface);
               z-index: 10;
-              border-bottom: 1px solid rgba(51, 65, 85, 0.5);
+              border-bottom: 1px solid var(--border-subtle);
             }
             .screener-grid thead tr:nth-child(2) td {
               position: sticky;
               top: 32px; /* height of header row */
-              background-color: #0c0f17;
+              background-color: var(--bg-surface);
               z-index: 10;
-              border-bottom: 2px solid rgba(51, 65, 85, 0.6);
+              border-bottom: 2px solid var(--border-subtle);
             }
 
             /* Sticky overrides for headers of pinned columns */
-            .screener-grid thead th:nth-child(1) { z-index: 25; background-color: #0c0f17 !important; }
-            .screener-grid thead th:nth-child(2) { z-index: 25; background-color: #0c0f17 !important; }
-            .screener-grid thead th:nth-child(47) { z-index: 25; background-color: #0c0f17 !important; }
-            .screener-grid thead tr:nth-child(2) td:nth-child(1) { z-index: 25; background-color: #0c0f17 !important; }
-            .screener-grid thead tr:nth-child(2) td:nth-child(2) { z-index: 25; background-color: #0c0f17 !important; }
-            .screener-grid thead tr:nth-child(2) td:nth-child(47) { z-index: 25; background-color: #0c0f17 !important; }
+            .screener-grid thead th:nth-child(1) { z-index: 25; background-color: var(--bg-surface) !important; }
+            .screener-grid thead th:nth-child(2) { z-index: 25; background-color: var(--bg-surface) !important; }
+            .screener-grid thead th:nth-child(47) { z-index: 25; background-color: var(--bg-surface) !important; }
+            .screener-grid thead tr:nth-child(2) td:nth-child(1) { z-index: 25; background-color: var(--bg-surface) !important; }
+            .screener-grid thead tr:nth-child(2) td:nth-child(2) { z-index: 25; background-color: var(--bg-surface) !important; }
+            .screener-grid thead tr:nth-child(2) td:nth-child(47) { z-index: 25; background-color: var(--bg-surface) !important; }
 
             /* Zebra striping backgrounds for scrollable cells */
             .screener-grid tbody tr:nth-child(odd) td {
-              background-color: #0c0f17;
+              background-color: var(--bg-base);
             }
             .screener-grid tbody tr:nth-child(even) td {
-              background-color: #121620;
+              background-color: var(--bg-surface);
             }
 
             /* Pinned cell backgrounds (left columns) */
             .screener-grid tbody tr:nth-child(odd) td:nth-child(1),
             .screener-grid tbody tr:nth-child(odd) td:nth-child(2) {
-              background-color: #090b10 !important;
+              background-color: var(--bg-base) !important;
             }
             .screener-grid tbody tr:nth-child(even) td:nth-child(1),
             .screener-grid tbody tr:nth-child(even) td:nth-child(2) {
-              background-color: #0f121a !important;
+              background-color: var(--bg-surface) !important;
             }
 
             /* Pinned cell backgrounds (right Actions column) */
             .screener-grid tbody tr:nth-child(odd) td:nth-child(47) {
-              background-color: #090b10 !important;
+              background-color: var(--bg-base) !important;
             }
             .screener-grid tbody tr:nth-child(even) td:nth-child(47) {
-              background-color: #0f121a !important;
+              background-color: var(--bg-surface) !important;
             }
 
             /* Row hovers */
@@ -859,146 +859,146 @@ export const ScreenerPanel: React.FC = () => {
           <table className="screener-grid min-w-max w-full border-collapse text-left text-xs text-slate-300">
             <thead>
               <tr className="border-b border-slate-800 text-xs text-slate-400 uppercase tracking-wider font-mono select-none whitespace-nowrap">
-                <th className="py-2 px-1.5 cursor-pointer hover:text-white transition" onClick={() => handleSort('symbol')}>
+                <th className="py-2 px-1.5 cursor-pointer hover:text-text-main transition" onClick={() => handleSort('symbol')}>
                   Ticker {renderSortIcon('symbol')}
                 </th>
-                <th className="py-2 px-1.5 cursor-pointer hover:text-white transition" title="Company Name" onClick={() => handleSort('company_name')}>
+                <th className="py-2 px-1.5 cursor-pointer hover:text-text-main transition" title="Company Name" onClick={() => handleSort('company_name')}>
                   Company {renderSortIcon('company_name')}
                 </th>
-                <th className="py-2 px-1.5 cursor-pointer hover:text-white transition" title="Last End of Day Price" onClick={() => handleSort('close_price')}>
+                <th className="py-2 px-1.5 cursor-pointer hover:text-text-main transition" title="Last End of Day Price" onClick={() => handleSort('close_price')}>
                   Price {renderSortIcon('close_price')}
                 </th>
-                <th className="py-2 px-1.5 cursor-pointer hover:text-white transition" title="Price Percentage Change" onClick={() => handleSort('price_pct_change')}>
+                <th className="py-2 px-1.5 cursor-pointer hover:text-text-main transition" title="Price Percentage Change" onClick={() => handleSort('price_pct_change')}>
                   Chg% {renderSortIcon('price_pct_change')}
                 </th>
-                <th className="py-2 px-1.5 text-right cursor-pointer hover:text-white transition" title="Average Daily Traded Value (price × volume)" onClick={() => handleSort('avg_traded_value')}>
+                <th className="py-2 px-1.5 text-right cursor-pointer hover:text-text-main transition" title="Average Daily Traded Value (price × volume)" onClick={() => handleSort('avg_traded_value')}>
                   Avg Val {renderSortIcon('avg_traded_value')}
                 </th>
-                <th className="py-2 px-1.5 cursor-pointer hover:text-white transition" title="Composite Bias (5-tier: VERY_BULLISH / BULLISH / NEUTRAL / BEARISH / VERY_BEARISH) — sort by composite score" onClick={() => handleSort('composite_score' as any)}>
+                <th className="py-2 px-1.5 cursor-pointer hover:text-text-main transition" title="Composite Bias (5-tier: VERY_BULLISH / BULLISH / NEUTRAL / BEARISH / VERY_BEARISH) — sort by composite score" onClick={() => handleSort('composite_score' as any)}>
                   Bias {renderSortIcon('composite_score' as any)}
                 </th>
-                <th className="py-2 px-1 text-right cursor-pointer hover:text-white transition" title="1-week rolling return" onClick={() => handleSort('ret_1w')}>
+                <th className="py-2 px-1 text-right cursor-pointer hover:text-text-main transition" title="1-week rolling return" onClick={() => handleSort('ret_1w')}>
                   1W {renderSortIcon('ret_1w')}
                 </th>
-                <th className="py-2 px-1 text-right cursor-pointer hover:text-white transition" title="2-week rolling return" onClick={() => handleSort('ret_2w')}>
+                <th className="py-2 px-1 text-right cursor-pointer hover:text-text-main transition" title="2-week rolling return" onClick={() => handleSort('ret_2w')}>
                   2W {renderSortIcon('ret_2w')}
                 </th>
-                <th className="py-2 px-1 text-right cursor-pointer hover:text-white transition" title="3-week rolling return" onClick={() => handleSort('ret_3w')}>
+                <th className="py-2 px-1 text-right cursor-pointer hover:text-text-main transition" title="3-week rolling return" onClick={() => handleSort('ret_3w')}>
                   3W {renderSortIcon('ret_3w')}
                 </th>
-                <th className="py-2 px-1 text-right cursor-pointer hover:text-white transition" title="4-week rolling return" onClick={() => handleSort('ret_4w')}>
+                <th className="py-2 px-1 text-right cursor-pointer hover:text-text-main transition" title="4-week rolling return" onClick={() => handleSort('ret_4w')}>
                   4W {renderSortIcon('ret_4w')}
                 </th>
-                <th className="py-2 px-1 text-right cursor-pointer hover:text-white transition" title="Stop Loss (Close - 1.5 * ATR)" onClick={() => handleSort('stop_loss')}>
+                <th className="py-2 px-1 text-right cursor-pointer hover:text-text-main transition" title="Stop Loss (Close - 1.5 * ATR)" onClick={() => handleSort('stop_loss')}>
                   Stop {renderSortIcon('stop_loss')}
                 </th>
-                <th className="py-2 px-1 text-right cursor-pointer hover:text-white transition" title="Target 1 — strongest structural resistance above price" onClick={() => handleSort('target_1')}>
+                <th className="py-2 px-1 text-right cursor-pointer hover:text-text-main transition" title="Target 1 — strongest structural resistance above price" onClick={() => handleSort('target_1')}>
                   T1 {renderSortIcon('target_1')}
                 </th>
-                <th className="py-2 px-1 text-right cursor-pointer hover:text-white transition" title="Target 2 — next structural resistance above T1" onClick={() => handleSort('target_2' as any)}>
+                <th className="py-2 px-1 text-right cursor-pointer hover:text-text-main transition" title="Target 2 — next structural resistance above T1" onClick={() => handleSort('target_2' as any)}>
                   T2 {renderSortIcon('target_2' as any)}
                 </th>
-                <th className="py-2 px-1 text-right cursor-pointer hover:text-white transition" title="Target 3 — third structural resistance" onClick={() => handleSort('target_3' as any)}>
+                <th className="py-2 px-1 text-right cursor-pointer hover:text-text-main transition" title="Target 3 — third structural resistance" onClick={() => handleSort('target_3' as any)}>
                   T3 {renderSortIcon('target_3' as any)}
                 </th>
-                <th className="py-2 px-1 text-right cursor-pointer hover:text-white transition" title="Potential Gain % to Target 1" onClick={() => handleSort('potential_gain_pct')}>
+                <th className="py-2 px-1 text-right cursor-pointer hover:text-text-main transition" title="Potential Gain % to Target 1" onClick={() => handleSort('potential_gain_pct')}>
                   Upside {renderSortIcon('potential_gain_pct')}
                 </th>
-                <th className="py-2 px-1 text-right cursor-pointer hover:text-white transition" title="Risk-to-Reward Ratio" onClick={() => handleSort('rr_ratio')}>
+                <th className="py-2 px-1 text-right cursor-pointer hover:text-text-main transition" title="Risk-to-Reward Ratio" onClick={() => handleSort('rr_ratio')}>
                   R:R {renderSortIcon('rr_ratio')}
                 </th>
-                <th className="py-2 px-1 text-right cursor-pointer hover:text-white transition" title="Trade Quality Score (0–100): Trend + Momentum + RS + Volume + R:R" onClick={() => handleSort('trade_quality_score' as any)}>
+                <th className="py-2 px-1 text-right cursor-pointer hover:text-text-main transition" title="Trade Quality Score (0–100): Trend + Momentum + RS + Volume + R:R" onClick={() => handleSort('trade_quality_score' as any)}>
                   TQS {renderSortIcon('trade_quality_score' as any)}
                 </th>
-                <th className="py-2 px-1 text-right cursor-pointer hover:text-white transition" title="Suggested position size (shares) based on risk budget ÷ stop distance" onClick={() => handleSort('position_size_shares' as any)}>
+                <th className="py-2 px-1 text-right cursor-pointer hover:text-text-main transition" title="Suggested position size (shares) based on risk budget ÷ stop distance" onClick={() => handleSort('position_size_shares' as any)}>
                   Shares {renderSortIcon('position_size_shares' as any)}
                 </th>
-                <th className="py-2 px-1.5 text-center cursor-pointer hover:text-white transition" title="Volume Breakout Ratio" onClick={() => handleSort('volume_breakout_ratio')}>
+                <th className="py-2 px-1.5 text-center cursor-pointer hover:text-text-main transition" title="Volume Breakout Ratio" onClick={() => handleSort('volume_breakout_ratio')}>
                   Vol Brk {renderSortIcon('volume_breakout_ratio')}
                 </th>
-                <th className="py-2 px-1.5 text-center cursor-pointer hover:text-white transition" title="Relative Strength Index (14)" onClick={() => handleSort('rsi_14')}>
+                <th className="py-2 px-1.5 text-center cursor-pointer hover:text-text-main transition" title="Relative Strength Index (14)" onClick={() => handleSort('rsi_14')}>
                   RSI {renderSortIcon('rsi_14')}
                 </th>
-                <th className="py-2 px-1.5 text-center cursor-pointer hover:text-white transition" title="Chaikin Money Flow (20)" onClick={() => handleSort('cmf_20' as any)}>
+                <th className="py-2 px-1.5 text-center cursor-pointer hover:text-text-main transition" title="Chaikin Money Flow (20)" onClick={() => handleSort('cmf_20' as any)}>
                   CMF {renderSortIcon('cmf_20' as any)}
                 </th>
-                <th className="py-2 px-1.5 text-center cursor-pointer hover:text-white transition" title="StochRSI %K (14,14,3,3)" onClick={() => handleSort('stochrsi_k' as any)}>
+                <th className="py-2 px-1.5 text-center cursor-pointer hover:text-text-main transition" title="StochRSI %K (14,14,3,3)" onClick={() => handleSort('stochrsi_k' as any)}>
                   StoK {renderSortIcon('stochrsi_k' as any)}
                 </th>
-                <th className="py-2 px-1.5 text-center cursor-pointer hover:text-white transition" title="StochRSI %D (signal line)" onClick={() => handleSort('stochrsi_d' as any)}>
+                <th className="py-2 px-1.5 text-center cursor-pointer hover:text-text-main transition" title="StochRSI %D (signal line)" onClick={() => handleSort('stochrsi_d' as any)}>
                   StoD {renderSortIcon('stochrsi_d' as any)}
                 </th>
-                <th className="py-2 px-1.5 text-center cursor-pointer hover:text-white transition" title="SMA 20 position" onClick={() => handleSort('sma_20_cross_direction')}>
+                <th className="py-2 px-1.5 text-center cursor-pointer hover:text-text-main transition" title="SMA 20 position" onClick={() => handleSort('sma_20_cross_direction')}>
                   S20 {renderSortIcon('sma_20_cross_direction')}
                 </th>
-                <th className="py-2 px-1.5 text-center cursor-pointer hover:text-white transition" title="SMA 50 position" onClick={() => handleSort('sma_50_cross_direction')}>
+                <th className="py-2 px-1.5 text-center cursor-pointer hover:text-text-main transition" title="SMA 50 position" onClick={() => handleSort('sma_50_cross_direction')}>
                   S50 {renderSortIcon('sma_50_cross_direction')}
                 </th>
-                <th className="py-2 px-1.5 text-center cursor-pointer hover:text-white transition" title="SMA 200 position" onClick={() => handleSort('sma_200_cross_direction')}>
+                <th className="py-2 px-1.5 text-center cursor-pointer hover:text-text-main transition" title="SMA 200 position" onClick={() => handleSort('sma_200_cross_direction')}>
                   S200 {renderSortIcon('sma_200_cross_direction')}
                 </th>
-                <th className="py-2 px-1.5 text-center cursor-pointer hover:text-white transition" title="MACD Trend (BULLISH / BEARISH)" onClick={() => handleSort('macd_trend')}>
+                <th className="py-2 px-1.5 text-center cursor-pointer hover:text-text-main transition" title="MACD Trend (BULLISH / BEARISH)" onClick={() => handleSort('macd_trend')}>
                   MACD {renderSortIcon('macd_trend')}
                 </th>
-                <th className="py-2 px-1.5 text-center cursor-pointer hover:text-white transition" title="Heikin Ashi Direction (UP / DOWN)" onClick={() => handleSort('ha_direction')}>
+                <th className="py-2 px-1.5 text-center cursor-pointer hover:text-text-main transition" title="Heikin Ashi Direction (UP / DOWN)" onClick={() => handleSort('ha_direction')}>
                   HA {renderSortIcon('ha_direction')}
                 </th>
-                <th className="py-2 px-1.5 text-center cursor-pointer hover:text-white transition" title="Renko Brick Direction (UP / DOWN)" onClick={() => handleSort('renko_direction')}>
+                <th className="py-2 px-1.5 text-center cursor-pointer hover:text-text-main transition" title="Renko Brick Direction (UP / DOWN)" onClick={() => handleSort('renko_direction')}>
                   Renko {renderSortIcon('renko_direction')}
                 </th>
-                <th className="py-2 px-1.5 text-center cursor-pointer hover:text-white transition" title="Three Line Break Direction (UP / DOWN)" onClick={() => handleSort('line_break_direction')}>
+                <th className="py-2 px-1.5 text-center cursor-pointer hover:text-text-main transition" title="Three Line Break Direction (UP / DOWN)" onClick={() => handleSort('line_break_direction')}>
                   TLB {renderSortIcon('line_break_direction')}
                 </th>
-                <th className="py-2 px-1.5 text-center cursor-pointer hover:text-white transition" title="1-Month Relative Strength vs NIFTY 50" onClick={() => handleSort('rs_score_1m' as any)}>
+                <th className="py-2 px-1.5 text-center cursor-pointer hover:text-text-main transition" title="1-Month Relative Strength vs NIFTY 50" onClick={() => handleSort('rs_score_1m' as any)}>
                   RS 1M {renderSortIcon('rs_score_1m' as any)}
                 </th>
                 <th className="py-2 px-1.5 text-center" title="Pattern triggers">Patterns</th>
-                <th className="py-2 px-1.5 text-center cursor-pointer hover:text-white transition" title="VajraML2 triple-barrier signal (EV rank)" onClick={() => handleSort('ml2_rank' as any)}>
+                <th className="py-2 px-1.5 text-center cursor-pointer hover:text-text-main transition" title="VajraML2 triple-barrier signal (EV rank)" onClick={() => handleSort('ml2_rank' as any)}>
                   ML Signal {renderSortIcon('ml2_rank' as any)}
                 </th>
-                <th className="py-2 px-1.5 text-center cursor-pointer hover:text-white transition" title="Days since EMA9 crossed above EMA20 (golden ribbon)" onClick={() => handleSort('days_since_ema9_ema20_bull')}>
+                <th className="py-2 px-1.5 text-center cursor-pointer hover:text-text-main transition" title="Days since EMA9 crossed above EMA20 (golden ribbon)" onClick={() => handleSort('days_since_ema9_ema20_bull')}>
                   EMA Rbbn {renderSortIcon('days_since_ema9_ema20_bull')}
                 </th>
-                <th className="py-2 px-1.5 text-center cursor-pointer hover:text-white transition" title="Days since SMA20 crossed above SMA50 (golden cross)" onClick={() => handleSort('days_since_sma20_sma50_bull')}>
+                <th className="py-2 px-1.5 text-center cursor-pointer hover:text-text-main transition" title="Days since SMA20 crossed above SMA50 (golden cross)" onClick={() => handleSort('days_since_sma20_sma50_bull')}>
                   Gold-X {renderSortIcon('days_since_sma20_sma50_bull')}
                 </th>
-                <th className="py-2 px-1.5 text-center cursor-pointer hover:text-white transition" title="Days since MACD crossed above signal line" onClick={() => handleSort('days_since_macd_bull')}>
+                <th className="py-2 px-1.5 text-center cursor-pointer hover:text-text-main transition" title="Days since MACD crossed above signal line" onClick={() => handleSort('days_since_macd_bull')}>
                   MACD-X {renderSortIcon('days_since_macd_bull')}
                 </th>
-                <th className="py-2 px-1.5 text-center cursor-pointer hover:text-white transition" title="Days since CMF crossed above zero" onClick={() => handleSort('days_since_cmf_bull')}>
+                <th className="py-2 px-1.5 text-center cursor-pointer hover:text-text-main transition" title="Days since CMF crossed above zero" onClick={() => handleSort('days_since_cmf_bull')}>
                   CMF-X {renderSortIcon('days_since_cmf_bull')}
                 </th>
-                <th className="py-2 px-1.5 text-right cursor-pointer hover:text-white transition" title="Market Capitalisation" onClick={() => handleSort('market_cap' as any)}>
+                <th className="py-2 px-1.5 text-right cursor-pointer hover:text-text-main transition" title="Market Capitalisation" onClick={() => handleSort('market_cap' as any)}>
                   Mkt Cap {renderSortIcon('market_cap' as any)}
                 </th>
-                <th className="py-2 px-1.5 text-right cursor-pointer hover:text-white transition" title="Price-to-Earnings Ratio (TTM)" onClick={() => handleSort('pe_ratio' as any)}>
+                <th className="py-2 px-1.5 text-right cursor-pointer hover:text-text-main transition" title="Price-to-Earnings Ratio (TTM)" onClick={() => handleSort('pe_ratio' as any)}>
                   P/E {renderSortIcon('pe_ratio' as any)}
                 </th>
-                <th className="py-2 px-1.5 text-right cursor-pointer hover:text-white transition" title="Price-to-Book Ratio" onClick={() => handleSort('pb_ratio' as any)}>
+                <th className="py-2 px-1.5 text-right cursor-pointer hover:text-text-main transition" title="Price-to-Book Ratio" onClick={() => handleSort('pb_ratio' as any)}>
                   P/B {renderSortIcon('pb_ratio' as any)}
                 </th>
-                <th className="py-2 px-1.5 text-right cursor-pointer hover:text-white transition" title="EV / EBITDA" onClick={() => handleSort('ev_ebitda' as any)}>
+                <th className="py-2 px-1.5 text-right cursor-pointer hover:text-text-main transition" title="EV / EBITDA" onClick={() => handleSort('ev_ebitda' as any)}>
                   EV/EB {renderSortIcon('ev_ebitda' as any)}
                 </th>
-                <th className="py-2 px-1.5 text-right cursor-pointer hover:text-white transition" title="Return on Equity (%)" onClick={() => handleSort('roe' as any)}>
+                <th className="py-2 px-1.5 text-right cursor-pointer hover:text-text-main transition" title="Return on Equity (%)" onClick={() => handleSort('roe' as any)}>
                   ROE {renderSortIcon('roe' as any)}
                 </th>
-                <th className="py-2 px-1.5 text-right cursor-pointer hover:text-white transition" title="Debt to Equity Ratio" onClick={() => handleSort('debt_to_equity' as any)}>
+                <th className="py-2 px-1.5 text-right cursor-pointer hover:text-text-main transition" title="Debt to Equity Ratio" onClick={() => handleSort('debt_to_equity' as any)}>
                   D/E {renderSortIcon('debt_to_equity' as any)}
                 </th>
-                <th className="py-2 px-1.5 text-right cursor-pointer hover:text-white transition" title="Net Profit Margin (%)" onClick={() => handleSort('profit_margin' as any)}>
+                <th className="py-2 px-1.5 text-right cursor-pointer hover:text-text-main transition" title="Net Profit Margin (%)" onClick={() => handleSort('profit_margin' as any)}>
                   Net Mgn {renderSortIcon('profit_margin' as any)}
                 </th>
-                <th className="py-2 px-1.5 text-right cursor-pointer hover:text-white transition" title="Earnings Per Share (TTM)" onClick={() => handleSort('eps_ttm' as any)}>
+                <th className="py-2 px-1.5 text-right cursor-pointer hover:text-text-main transition" title="Earnings Per Share (TTM)" onClick={() => handleSort('eps_ttm' as any)}>
                   EPS {renderSortIcon('eps_ttm' as any)}
                 </th>
-                <th className="py-2 px-1.5 cursor-pointer hover:text-white transition" title="Sector" onClick={() => handleSort('sector' as any)}>
+                <th className="py-2 px-1.5 cursor-pointer hover:text-text-main transition" title="Sector" onClick={() => handleSort('sector' as any)}>
                   Sector {renderSortIcon('sector' as any)}
                 </th>
                 <th className="py-2 px-1.5 text-right">Actions</th>
               </tr>
               {showColFilters && (
-                <tr className="border-b border-slate-800 bg-[#0c0f17]/40 whitespace-nowrap filter-row">
+                <tr className="border-b border-border-subtle bg-bg-base/40 whitespace-nowrap filter-row">
                   {/* Ticker */}
                   <td className="py-1 px-1.5">
                     <input
@@ -1006,7 +1006,7 @@ export const ScreenerPanel: React.FC = () => {
                       placeholder="Filter..."
                       value={colFilters.symbol}
                       onChange={(e) => setColFilters({ ...colFilters, symbol: e.target.value })}
-                      className="w-full min-w-[50px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-purple-500 focus:text-white transition font-mono"
+                      className="w-full min-w-[50px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-purple-500 focus:text-text-main transition font-mono"
                     />
                   </td>
                   
@@ -1017,7 +1017,7 @@ export const ScreenerPanel: React.FC = () => {
                       placeholder="Filter..."
                       value={colFilters.company_name}
                       onChange={(e) => setColFilters({ ...colFilters, company_name: e.target.value })}
-                      className="w-full min-w-[75px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-purple-500 focus:text-white transition"
+                      className="w-full min-w-[75px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-purple-500 focus:text-text-main transition"
                     />
                   </td>
                   
@@ -1028,7 +1028,7 @@ export const ScreenerPanel: React.FC = () => {
                       placeholder=">100"
                       value={colFilters.close_price}
                       onChange={(e) => setColFilters({ ...colFilters, close_price: e.target.value })}
-                      className="w-full min-w-[50px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-purple-500 focus:text-white transition font-mono"
+                      className="w-full min-w-[50px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-purple-500 focus:text-text-main transition font-mono"
                     />
                   </td>
                   
@@ -1039,7 +1039,7 @@ export const ScreenerPanel: React.FC = () => {
                       placeholder=">0"
                       value={colFilters.price_pct_change}
                       onChange={(e) => setColFilters({ ...colFilters, price_pct_change: e.target.value })}
-                      className="w-full min-w-[45px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-purple-500 focus:text-white transition font-mono"
+                      className="w-full min-w-[45px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-purple-500 focus:text-text-main transition font-mono"
                     />
                   </td>
                   
@@ -1050,7 +1050,7 @@ export const ScreenerPanel: React.FC = () => {
                       placeholder=">100k"
                       value={colFilters.avg_traded_value}
                       onChange={(e) => setColFilters({ ...colFilters, avg_traded_value: e.target.value })}
-                      className="w-full min-w-[60px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-purple-500 focus:text-white text-right transition font-mono"
+                      className="w-full min-w-[60px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-purple-500 focus:text-text-main text-right transition font-mono"
                     />
                   </td>
                   
@@ -1078,7 +1078,7 @@ export const ScreenerPanel: React.FC = () => {
                       placeholder=">0"
                       value={colFilters.ret_1w}
                       onChange={(e) => setColFilters({ ...colFilters, ret_1w: e.target.value })}
-                      className="w-full min-w-[40px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-350 placeholder-slate-650 focus:outline-none focus:border-purple-500 focus:text-white text-right transition font-mono"
+                      className="w-full min-w-[40px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-350 placeholder-slate-650 focus:outline-none focus:border-purple-500 focus:text-text-main text-right transition font-mono"
                     />
                   </td>
                   {/* 2W */}
@@ -1088,7 +1088,7 @@ export const ScreenerPanel: React.FC = () => {
                       placeholder=">0"
                       value={colFilters.ret_2w}
                       onChange={(e) => setColFilters({ ...colFilters, ret_2w: e.target.value })}
-                      className="w-full min-w-[40px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-355 placeholder-slate-650 focus:outline-none focus:border-purple-500 focus:text-white text-right transition font-mono"
+                      className="w-full min-w-[40px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-355 placeholder-slate-650 focus:outline-none focus:border-purple-500 focus:text-text-main text-right transition font-mono"
                     />
                   </td>
                   {/* 3W */}
@@ -1098,7 +1098,7 @@ export const ScreenerPanel: React.FC = () => {
                       placeholder=">0"
                       value={colFilters.ret_3w}
                       onChange={(e) => setColFilters({ ...colFilters, ret_3w: e.target.value })}
-                      className="w-full min-w-[40px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-350 placeholder-slate-650 focus:outline-none focus:border-purple-500 focus:text-white text-right transition font-mono"
+                      className="w-full min-w-[40px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-350 placeholder-slate-650 focus:outline-none focus:border-purple-500 focus:text-text-main text-right transition font-mono"
                     />
                   </td>
                   {/* 4W */}
@@ -1108,7 +1108,7 @@ export const ScreenerPanel: React.FC = () => {
                       placeholder=">0"
                       value={colFilters.ret_4w}
                       onChange={(e) => setColFilters({ ...colFilters, ret_4w: e.target.value })}
-                      className="w-full min-w-[40px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-350 placeholder-slate-650 focus:outline-none focus:border-purple-500 focus:text-white text-right transition font-mono"
+                      className="w-full min-w-[40px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-350 placeholder-slate-650 focus:outline-none focus:border-purple-500 focus:text-text-main text-right transition font-mono"
                     />
                   </td>
                   
@@ -1119,7 +1119,7 @@ export const ScreenerPanel: React.FC = () => {
                       placeholder=">0"
                       value={colFilters.stop_loss}
                       onChange={(e) => setColFilters({ ...colFilters, stop_loss: e.target.value })}
-                      className="w-full min-w-[50px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-purple-500 focus:text-white text-right transition font-mono"
+                      className="w-full min-w-[50px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-purple-500 focus:text-text-main text-right transition font-mono"
                     />
                   </td>
                   {/* T1 */}
@@ -1129,7 +1129,7 @@ export const ScreenerPanel: React.FC = () => {
                       placeholder=">0"
                       value={colFilters.target_1}
                       onChange={(e) => setColFilters({ ...colFilters, target_1: e.target.value })}
-                      className="w-full min-w-[50px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-purple-500 focus:text-white text-right transition font-mono"
+                      className="w-full min-w-[50px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-purple-500 focus:text-text-main text-right transition font-mono"
                     />
                   </td>
                   {/* T2 */}
@@ -1139,7 +1139,7 @@ export const ScreenerPanel: React.FC = () => {
                       placeholder=">0"
                       value={colFilters.target_2}
                       onChange={(e) => setColFilters({ ...colFilters, target_2: e.target.value })}
-                      className="w-full min-w-[50px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-purple-500 focus:text-white text-right transition font-mono"
+                      className="w-full min-w-[50px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-purple-500 focus:text-text-main text-right transition font-mono"
                     />
                   </td>
                   {/* T3 */}
@@ -1149,7 +1149,7 @@ export const ScreenerPanel: React.FC = () => {
                       placeholder=">0"
                       value={colFilters.target_3}
                       onChange={(e) => setColFilters({ ...colFilters, target_3: e.target.value })}
-                      className="w-full min-w-[50px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-purple-500 focus:text-white text-right transition font-mono"
+                      className="w-full min-w-[50px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-purple-500 focus:text-text-main text-right transition font-mono"
                     />
                   </td>
                   {/* Upside */}
@@ -1159,7 +1159,7 @@ export const ScreenerPanel: React.FC = () => {
                       placeholder=">5"
                       value={colFilters.potential_gain_pct}
                       onChange={(e) => setColFilters({ ...colFilters, potential_gain_pct: e.target.value })}
-                      className="w-full min-w-[45px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-purple-500 focus:text-white text-right transition font-mono"
+                      className="w-full min-w-[45px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-purple-500 focus:text-text-main text-right transition font-mono"
                     />
                   </td>
                   {/* R:R */}
@@ -1169,7 +1169,7 @@ export const ScreenerPanel: React.FC = () => {
                       placeholder=">2"
                       value={colFilters.rr_ratio}
                       onChange={(e) => setColFilters({ ...colFilters, rr_ratio: e.target.value })}
-                      className="w-full min-w-[40px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-purple-500 focus:text-white text-right transition font-mono"
+                      className="w-full min-w-[40px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-purple-500 focus:text-text-main text-right transition font-mono"
                     />
                   </td>
                   {/* TQS */}
@@ -1179,7 +1179,7 @@ export const ScreenerPanel: React.FC = () => {
                       placeholder=">60"
                       value={colFilters.trade_quality_score}
                       onChange={(e) => setColFilters({ ...colFilters, trade_quality_score: e.target.value })}
-                      className="w-full min-w-[40px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-purple-500 focus:text-white text-right transition font-mono"
+                      className="w-full min-w-[40px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-purple-500 focus:text-text-main text-right transition font-mono"
                     />
                   </td>
                   {/* Shares */}
@@ -1189,7 +1189,7 @@ export const ScreenerPanel: React.FC = () => {
                       placeholder=">0"
                       value={colFilters.position_size_shares}
                       onChange={(e) => setColFilters({ ...colFilters, position_size_shares: e.target.value })}
-                      className="w-full min-w-[50px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-purple-500 focus:text-white text-right transition font-mono"
+                      className="w-full min-w-[50px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-purple-500 focus:text-text-main text-right transition font-mono"
                     />
                   </td>
                   {/* Vol Brk */}
@@ -1199,7 +1199,7 @@ export const ScreenerPanel: React.FC = () => {
                       placeholder=">1.5"
                       value={colFilters.volume_breakout_ratio}
                       onChange={(e) => setColFilters({ ...colFilters, volume_breakout_ratio: e.target.value })}
-                      className="w-full min-w-[45px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-purple-500 focus:text-white text-center transition font-mono"
+                      className="w-full min-w-[45px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-purple-500 focus:text-text-main text-center transition font-mono"
                     />
                   </td>
                   {/* RSI */}
@@ -1209,7 +1209,7 @@ export const ScreenerPanel: React.FC = () => {
                       placeholder="<30"
                       value={colFilters.rsi_14}
                       onChange={(e) => setColFilters({ ...colFilters, rsi_14: e.target.value })}
-                      className="w-full min-w-[45px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-purple-500 focus:text-white text-center transition font-mono"
+                      className="w-full min-w-[45px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-purple-500 focus:text-text-main text-center transition font-mono"
                     />
                   </td>
 
@@ -1220,7 +1220,7 @@ export const ScreenerPanel: React.FC = () => {
                       placeholder=">0.1"
                       value={colFilters.cmf_20}
                       onChange={(e) => setColFilters({ ...colFilters, cmf_20: e.target.value })}
-                      className="w-full min-w-[45px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-purple-500 focus:text-white text-center transition font-mono"
+                      className="w-full min-w-[45px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-purple-500 focus:text-text-main text-center transition font-mono"
                     />
                   </td>
 
@@ -1231,7 +1231,7 @@ export const ScreenerPanel: React.FC = () => {
                       placeholder="<20"
                       value={colFilters.stochrsi_k}
                       onChange={(e) => setColFilters({ ...colFilters, stochrsi_k: e.target.value })}
-                      className="w-full min-w-[40px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-purple-500 focus:text-white text-center transition font-mono"
+                      className="w-full min-w-[40px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-purple-500 focus:text-text-main text-center transition font-mono"
                     />
                   </td>
 
@@ -1242,7 +1242,7 @@ export const ScreenerPanel: React.FC = () => {
                       placeholder="<20"
                       value={colFilters.stochrsi_d}
                       onChange={(e) => setColFilters({ ...colFilters, stochrsi_d: e.target.value })}
-                      className="w-full min-w-[40px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-purple-500 focus:text-white text-center transition font-mono"
+                      className="w-full min-w-[40px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-purple-500 focus:text-text-main text-center transition font-mono"
                     />
                   </td>
 
@@ -1349,7 +1349,7 @@ export const ScreenerPanel: React.FC = () => {
                       placeholder=">1.2"
                       value={colFilters.rs_score_1m}
                       onChange={(e) => setColFilters({ ...colFilters, rs_score_1m: e.target.value })}
-                      className="w-full min-w-[45px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-purple-500 focus:text-white text-center transition font-mono"
+                      className="w-full min-w-[45px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-purple-500 focus:text-text-main text-center transition font-mono"
                     />
                   </td>
                   
@@ -1393,7 +1393,7 @@ export const ScreenerPanel: React.FC = () => {
                       placeholder="<5"
                       value={colFilters.days_since_ema9_ema20_bull}
                       onChange={(e) => setColFilters({ ...colFilters, days_since_ema9_ema20_bull: e.target.value })}
-                      className="w-full min-w-[40px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-purple-500 focus:text-white text-center transition font-mono"
+                      className="w-full min-w-[40px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-purple-500 focus:text-text-main text-center transition font-mono"
                     />
                   </td>
 
@@ -1404,7 +1404,7 @@ export const ScreenerPanel: React.FC = () => {
                       placeholder="<10"
                       value={colFilters.days_since_sma20_sma50_bull}
                       onChange={(e) => setColFilters({ ...colFilters, days_since_sma20_sma50_bull: e.target.value })}
-                      className="w-full min-w-[40px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-purple-500 focus:text-white text-center transition font-mono"
+                      className="w-full min-w-[40px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-purple-500 focus:text-text-main text-center transition font-mono"
                     />
                   </td>
 
@@ -1415,7 +1415,7 @@ export const ScreenerPanel: React.FC = () => {
                       placeholder="<5"
                       value={colFilters.days_since_macd_bull}
                       onChange={(e) => setColFilters({ ...colFilters, days_since_macd_bull: e.target.value })}
-                      className="w-full min-w-[40px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-purple-500 focus:text-white text-center transition font-mono"
+                      className="w-full min-w-[40px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-purple-500 focus:text-text-main text-center transition font-mono"
                     />
                   </td>
 
@@ -1426,7 +1426,7 @@ export const ScreenerPanel: React.FC = () => {
                       placeholder="<5"
                       value={colFilters.days_since_cmf_bull}
                       onChange={(e) => setColFilters({ ...colFilters, days_since_cmf_bull: e.target.value })}
-                      className="w-full min-w-[40px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-purple-500 focus:text-white text-center transition font-mono"
+                      className="w-full min-w-[40px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-purple-500 focus:text-text-main text-center transition font-mono"
                     />
                   </td>
 
@@ -1437,7 +1437,7 @@ export const ScreenerPanel: React.FC = () => {
                       placeholder=">1000cr"
                       value={colFilters.market_cap}
                       onChange={(e) => setColFilters({ ...colFilters, market_cap: e.target.value })}
-                      className="w-full min-w-[65px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-blue-500 focus:text-white text-right transition font-mono"
+                      className="w-full min-w-[65px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-blue-500 focus:text-text-main text-right transition font-mono"
                     />
                   </td>
 
@@ -1448,7 +1448,7 @@ export const ScreenerPanel: React.FC = () => {
                       placeholder="<30"
                       value={colFilters.pe_ratio}
                       onChange={(e) => setColFilters({ ...colFilters, pe_ratio: e.target.value })}
-                      className="w-full min-w-[40px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-blue-500 focus:text-white text-right transition font-mono"
+                      className="w-full min-w-[40px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-blue-500 focus:text-text-main text-right transition font-mono"
                     />
                   </td>
 
@@ -1459,7 +1459,7 @@ export const ScreenerPanel: React.FC = () => {
                       placeholder="<5"
                       value={colFilters.pb_ratio}
                       onChange={(e) => setColFilters({ ...colFilters, pb_ratio: e.target.value })}
-                      className="w-full min-w-[40px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-blue-500 focus:text-white text-right transition font-mono"
+                      className="w-full min-w-[40px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-blue-500 focus:text-text-main text-right transition font-mono"
                     />
                   </td>
 
@@ -1470,7 +1470,7 @@ export const ScreenerPanel: React.FC = () => {
                       placeholder="<20"
                       value={colFilters.ev_ebitda}
                       onChange={(e) => setColFilters({ ...colFilters, ev_ebitda: e.target.value })}
-                      className="w-full min-w-[50px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-blue-500 focus:text-white text-right transition font-mono"
+                      className="w-full min-w-[50px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-blue-500 focus:text-text-main text-right transition font-mono"
                     />
                   </td>
 
@@ -1481,7 +1481,7 @@ export const ScreenerPanel: React.FC = () => {
                       placeholder=">15"
                       value={colFilters.roe}
                       onChange={(e) => setColFilters({ ...colFilters, roe: e.target.value })}
-                      className="w-full min-w-[40px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-blue-500 focus:text-white text-right transition font-mono"
+                      className="w-full min-w-[40px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-blue-500 focus:text-text-main text-right transition font-mono"
                     />
                   </td>
 
@@ -1492,7 +1492,7 @@ export const ScreenerPanel: React.FC = () => {
                       placeholder="<1"
                       value={colFilters.debt_to_equity}
                       onChange={(e) => setColFilters({ ...colFilters, debt_to_equity: e.target.value })}
-                      className="w-full min-w-[40px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-blue-500 focus:text-white text-right transition font-mono"
+                      className="w-full min-w-[40px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-blue-500 focus:text-text-main text-right transition font-mono"
                     />
                   </td>
 
@@ -1503,7 +1503,7 @@ export const ScreenerPanel: React.FC = () => {
                       placeholder=">10"
                       value={colFilters.profit_margin}
                       onChange={(e) => setColFilters({ ...colFilters, profit_margin: e.target.value })}
-                      className="w-full min-w-[40px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-blue-500 focus:text-white text-right transition font-mono"
+                      className="w-full min-w-[40px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-blue-500 focus:text-text-main text-right transition font-mono"
                     />
                   </td>
 
@@ -1514,7 +1514,7 @@ export const ScreenerPanel: React.FC = () => {
                       placeholder=">10"
                       value={colFilters.eps_ttm}
                       onChange={(e) => setColFilters({ ...colFilters, eps_ttm: e.target.value })}
-                      className="w-full min-w-[40px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-blue-500 focus:text-white text-right transition font-mono"
+                      className="w-full min-w-[40px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-blue-500 focus:text-text-main text-right transition font-mono"
                     />
                   </td>
 
@@ -1525,7 +1525,7 @@ export const ScreenerPanel: React.FC = () => {
                       placeholder="Filter..."
                       value={colFilters.sector}
                       onChange={(e) => setColFilters({ ...colFilters, sector: e.target.value })}
-                      className="w-full min-w-[70px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-blue-500 focus:text-white transition"
+                      className="w-full min-w-[70px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-blue-500 focus:text-text-main transition"
                     />
                   </td>
 
@@ -1555,7 +1555,7 @@ export const ScreenerPanel: React.FC = () => {
                   return (
                     <tr key={row.symbol_id} className="hover:bg-slate-900/40 transition whitespace-nowrap text-xs">
                       {/* Ticker */}
-                      <td className="py-2 px-1.5 font-bold text-white font-mono">
+                      <td className="py-2 px-1.5 font-bold text-text-main font-mono">
                         {row.symbol.replace('.NS', '')}
                       </td>
                       
@@ -1647,7 +1647,7 @@ export const ScreenerPanel: React.FC = () => {
                             row.rr_ratio >= 2.0
                               ? 'text-emerald-400 bg-emerald-950/20'
                               : row.rr_ratio >= 1.0
-                              ? 'text-indigo-400 bg-[#121620]'
+                              ? 'text-indigo-400 bg-bg-surface'
                               : 'text-rose-400 bg-rose-950/20'
                           }`}>
                             {row.rr_ratio.toFixed(2)}x
@@ -2053,7 +2053,7 @@ export const ScreenerPanel: React.FC = () => {
                           </button>
                           <button
                             onClick={() => handleSelectScreenerMatch(row.symbol)}
-                            className="p-0.5 px-1.5 rounded bg-slate-900 border border-slate-800 hover:border-purple-500/80 text-slate-400 hover:text-white text-xs flex items-center gap-1 transition cursor-pointer"
+                            className="p-0.5 px-1.5 rounded bg-slate-900 border border-slate-800 hover:border-purple-500/80 text-slate-400 hover:text-text-main text-xs flex items-center gap-1 transition cursor-pointer"
                           >
                             <Eye className="w-3 h-3" />
                             Inspect
@@ -2068,7 +2068,7 @@ export const ScreenerPanel: React.FC = () => {
           </table>
           {/* Pagination footer */}
           {filteredResults.length > PAGE_SIZE && (
-            <div className="shrink-0 flex items-center justify-between px-4 py-2 border-t border-slate-800 bg-[#0c0f17] mt-2">
+            <div className="shrink-0 flex items-center justify-between px-4 py-2 border-t border-border-subtle bg-bg-base mt-2">
               <span className="text-xs text-slate-500">
                 Showing <span className="text-slate-300 font-semibold">{Math.min(visibleCount, filteredResults.length).toLocaleString()}</span> of <span className="text-slate-300 font-semibold">{filteredResults.length.toLocaleString()}</span> results
               </span>
@@ -2076,7 +2076,7 @@ export const ScreenerPanel: React.FC = () => {
                 {visibleCount < filteredResults.length && (
                   <button
                     onClick={() => setVisibleCount(v => Math.min(v + PAGE_SIZE, filteredResults.length))}
-                    className="px-2.5 py-1 text-xs font-bold bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white rounded transition cursor-pointer"
+                    className="px-2.5 py-1 text-xs font-bold bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-text-main rounded transition cursor-pointer"
                   >
                     Load {Math.min(PAGE_SIZE, filteredResults.length - visibleCount)} More
                   </button>
@@ -2084,7 +2084,7 @@ export const ScreenerPanel: React.FC = () => {
                 {visibleCount < filteredResults.length && (
                   <button
                     onClick={() => setVisibleCount(filteredResults.length)}
-                    className="px-2.5 py-1 text-xs font-bold bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-400 hover:text-white rounded transition cursor-pointer"
+                    className="px-2.5 py-1 text-xs font-bold bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-400 hover:text-text-main rounded transition cursor-pointer"
                   >
                     Load All ({filteredResults.length.toLocaleString()})
                   </button>

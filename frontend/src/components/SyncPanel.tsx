@@ -69,7 +69,7 @@ export const SyncPanel: React.FC = () => {
       {/* Header Banner */}
       <div className="flex items-center justify-between pb-3 border-b border-slate-800 shrink-0">
         <div>
-          <h2 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
+          <h2 className="text-xl font-bold text-text-main tracking-tight flex items-center gap-2">
             <Settings className="w-5 h-5 text-purple-500" />
             Synchronization & Engine Center
           </h2>
@@ -80,7 +80,7 @@ export const SyncPanel: React.FC = () => {
         <button
           onClick={() => fetchSyncLogs()}
           disabled={isSyncing}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-800 bg-slate-900/50 hover:bg-slate-800 text-slate-300 hover:text-white transition text-xs font-semibold cursor-pointer"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-800 bg-slate-900/50 hover:bg-slate-800 text-slate-300 hover:text-text-main transition text-xs font-semibold cursor-pointer"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
           Refresh Stats
@@ -90,25 +90,25 @@ export const SyncPanel: React.FC = () => {
       {/* Quick Metrics KPI cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 shrink-0">
         {/* Sync Rate */}
-        <div className="p-4 rounded-xl border border-slate-800 bg-[#121620]/30 flex items-center justify-between">
+        <div className="p-4 rounded-xl border border-border-subtle bg-bg-surface/30 flex items-center justify-between">
           <div>
             <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Sync Health Rate</span>
-            <span className="text-2xl font-bold text-purple-400 mt-1 block">{healthyRate}%</span>
+            <span className="text-2xl font-bold text-accent-primary mt-1 block">{healthyRate}%</span>
           </div>
-          <Heart className="w-8 h-8 text-purple-500/25" />
+          <Heart className="w-8 h-8 text-accent-primary/25" />
         </div>
 
         {/* Registered */}
-        <div className="p-4 rounded-xl border border-slate-800 bg-[#121620]/30 flex items-center justify-between">
+        <div className="p-4 rounded-xl border border-border-subtle bg-bg-surface/30 flex items-center justify-between">
           <div>
             <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Registered Stocks</span>
-            <span className="text-2xl font-bold text-white mt-1 block">{totalRegistered}</span>
+            <span className="text-2xl font-bold text-text-main mt-1 block">{totalRegistered}</span>
           </div>
           <CheckCircle className="w-8 h-8 text-emerald-500/20" />
         </div>
 
         {/* Success */}
-        <div className="p-4 rounded-xl border border-slate-800 bg-[#121620]/30 flex items-center justify-between">
+        <div className="p-4 rounded-xl border border-border-subtle bg-bg-surface/30 flex items-center justify-between">
           <div>
             <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Synchronized (EOD)</span>
             <span className="text-2xl font-bold text-emerald-400 mt-1 block">{successfulCount}</span>
@@ -117,7 +117,7 @@ export const SyncPanel: React.FC = () => {
         </div>
 
         {/* Failures */}
-        <div className="p-4 rounded-xl border border-slate-800 bg-[#121620]/30 flex items-center justify-between">
+        <div className="p-4 rounded-xl border border-border-subtle bg-bg-surface/30 flex items-center justify-between">
           <div>
             <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Triage Failures</span>
             <span className="text-2xl font-bold text-rose-400 mt-1 block">{failedCount}</span>
@@ -129,7 +129,7 @@ export const SyncPanel: React.FC = () => {
       {/* Control Actions Card */}
       <div className="p-4 rounded-xl border border-slate-800/80 bg-slate-900/10 flex flex-col md:flex-row gap-4 justify-between items-center shrink-0">
         <div>
-          <h3 className="text-sm font-bold text-white tracking-wide">Manual Job Dispatcher</h3>
+          <h3 className="text-sm font-bold text-text-main tracking-wide">Manual Job Dispatcher</h3>
           <p className="text-xs text-slate-400 mt-0.5">
             Manually trigger parallel background EOD downloads or force technical engine recalibrations.
           </p>
@@ -154,7 +154,7 @@ export const SyncPanel: React.FC = () => {
             className={`flex items-center gap-2 px-4 py-2 bg-slate-900 border ${
               isJobRunning 
                 ? 'border-slate-800 text-slate-500 cursor-not-allowed' 
-                : 'border-purple-500/30 hover:border-purple-500 text-purple-400 hover:text-white'
+                : 'border-purple-500/30 hover:border-purple-500 text-purple-400 hover:text-text-main'
             } rounded-lg text-xs font-bold transition duration-150 cursor-pointer shadow-lg shadow-purple-900/5`}
           >
             <RefreshCw className="w-3.5 h-3.5" />
@@ -206,14 +206,14 @@ export const SyncPanel: React.FC = () => {
       )}
 
       {/* Detail logs sub-tabs */}
-      <div className="flex-1 bg-[#121620]/60 rounded-xl border border-slate-800/80 p-4 overflow-hidden flex flex-col min-h-[350px]">
+      <div className="flex-1 bg-bg-surface/60 rounded-xl border border-border-subtle p-4 overflow-hidden flex flex-col min-h-[350px]">
         {/* Tabs Bar */}
-        <div className="flex items-center gap-4 border-b border-slate-800 pb-3 mb-3 shrink-0">
+        <div className="flex items-center gap-4 border-b border-border-subtle pb-3 mb-3 shrink-0">
           <button
             onClick={() => setActiveSubTab('history')}
             className={`flex items-center gap-1.5 pb-1 px-1 border-b-2 text-sm font-bold transition cursor-pointer ${
               activeSubTab === 'history'
-                ? 'border-purple-500 text-white'
+                ? 'border-accent-primary text-text-main'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
@@ -225,7 +225,7 @@ export const SyncPanel: React.FC = () => {
             onClick={() => setActiveSubTab('status')}
             className={`flex items-center gap-1.5 pb-1 px-1 border-b-2 text-sm font-bold transition cursor-pointer ${
               activeSubTab === 'status'
-                ? 'border-purple-500 text-white'
+                ? 'border-purple-500 text-text-main'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
@@ -317,7 +317,7 @@ export const SyncPanel: React.FC = () => {
                     const isSuccess = state.last_attempt_status === 'SUCCESS';
                     return (
                       <tr key={idx} className="hover:bg-slate-900/40 transition">
-                        <td className="py-2.5 px-3 font-bold text-white font-mono">{state.symbol.replace('.NS', '')}</td>
+                        <td className="py-2.5 px-3 font-bold text-text-main font-mono">{state.symbol.replace('.NS', '')}</td>
                         <td className="py-2.5 px-3 font-mono text-slate-400 text-xs">{state.last_successful_sync_date}</td>
                         <td className="py-2.5 px-3">
                           <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded ${

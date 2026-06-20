@@ -8,7 +8,7 @@ export const CorporateActionsTimeline: React.FC = () => {
   const sortedActions = [...corporateActions].sort((a, b) => b.action_date.localeCompare(a.action_date));
 
   return (
-    <div className="w-full bg-[#121620]/60 rounded-xl border border-slate-800/80 p-4 h-full flex flex-col">
+    <div className="w-full bg-bg-surface/60 rounded-xl border border-slate-800/80 p-4 h-full flex flex-col">
       <div className="flex items-center gap-2 mb-4 shrink-0">
         <Calendar className="w-5 h-5 text-purple-500" />
         <h3 className="text-md font-bold text-white tracking-wide">Corporate Events</h3>

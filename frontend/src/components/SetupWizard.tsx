@@ -78,7 +78,7 @@ export const SetupWizard: React.FC<{ onComplete: () => void }> = ({ onComplete }
   };
 
   return (
-    <div className="min-h-screen bg-[#07080a] flex items-center justify-center p-6">
+    <div className="min-h-screen bg-bg-base flex items-center justify-center p-6">
       <div className="w-full max-w-lg">
 
         {/* Logo */}
@@ -87,7 +87,7 @@ export const SetupWizard: React.FC<{ onComplete: () => void }> = ({ onComplete }
             <LineChart className="w-6 h-6" />
           </div>
           <div>
-            <h1 className="text-xl font-extrabold text-white tracking-tight">
+            <h1 className="text-xl font-extrabold text-text-main tracking-tight">
               VAJRA <span className="text-xs px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400 font-mono">STOCKS</span>
             </h1>
             <p className="text-[10px] text-slate-400">First-run setup</p>
@@ -114,12 +114,12 @@ export const SetupWizard: React.FC<{ onComplete: () => void }> = ({ onComplete }
         </div>
 
         {/* Step content */}
-        <div className="bg-[#0d0f14] rounded-2xl border border-slate-800 p-6 flex flex-col gap-5">
+        <div className="bg-bg-surface rounded-2xl border border-border-subtle p-6 flex flex-col gap-5">
 
           {/* AI Provider Step */}
           {step === 'ai' && (
             <>
-              <h2 className="text-lg font-bold text-white">Configure AI Provider</h2>
+              <h2 className="text-lg font-bold text-text-main">Configure AI Provider</h2>
               <p className="text-xs text-slate-400">
                 VajraStocks uses a local Ollama instance by default — no cloud account needed.
               </p>
@@ -145,7 +145,7 @@ export const SetupWizard: React.FC<{ onComplete: () => void }> = ({ onComplete }
           {/* Database Step */}
           {step === 'database' && (
             <>
-              <h2 className="text-lg font-bold text-white">Database</h2>
+              <h2 className="text-lg font-bold text-text-main">Database</h2>
               <p className="text-xs text-slate-400">SQLite is recommended for single-user local installs.</p>
               <div className="flex gap-2">
                 {[
@@ -177,14 +177,14 @@ export const SetupWizard: React.FC<{ onComplete: () => void }> = ({ onComplete }
           {/* Symbol Download Step */}
           {step === 'symbols' && (
             <>
-              <h2 className="text-lg font-bold text-white">Download NSE Symbols</h2>
+              <h2 className="text-lg font-bold text-text-main">Download NSE Symbols</h2>
               <p className="text-xs text-slate-400">
                 Downloads 2,300+ NSE equity symbols from NSE India. This runs in the background after setup — you can start using the app immediately.
               </p>
               <label className="flex items-center gap-3 cursor-pointer p-3 rounded-lg border border-slate-800 hover:bg-slate-900/40 transition">
                 <input type="checkbox" checked={downloadSymbols} onChange={e => setDownloadSymbols(e.target.checked)} className="accent-purple-500 w-4 h-4" />
                 <div>
-                  <p className="text-sm font-semibold text-white">Auto-download NSE symbols</p>
+                  <p className="text-sm font-semibold text-text-main">Auto-download NSE symbols</p>
                   <p className="text-[10px] text-slate-500">Recommended — takes 1–2 minutes in the background</p>
                 </div>
               </label>
@@ -206,7 +206,7 @@ export const SetupWizard: React.FC<{ onComplete: () => void }> = ({ onComplete }
           {step === 'done' && (
             <div className="text-center py-4 flex flex-col items-center gap-4">
               <CheckCircle className="w-12 h-12 text-emerald-400" />
-              <h2 className="text-xl font-bold text-white">Setup Complete!</h2>
+              <h2 className="text-xl font-bold text-text-main">Setup Complete!</h2>
               <p className="text-sm text-slate-400">
                 {downloadSymbols
                   ? 'Symbol download is running in the background. The dashboard is ready to use now — symbols will appear as they sync.'
@@ -236,7 +236,7 @@ const Field: React.FC<{ label: string; value: string; onChange: (v: string) => v
       value={value}
       onChange={e => onChange(e.target.value)}
       placeholder={placeholder}
-      className="px-3 py-2 text-sm rounded-lg bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition font-mono"
+      className="px-3 py-2 text-sm rounded-lg bg-bg-base border border-border-subtle text-text-main focus:outline-none focus:border-accent-primary transition font-mono"
     />
   </div>
 );

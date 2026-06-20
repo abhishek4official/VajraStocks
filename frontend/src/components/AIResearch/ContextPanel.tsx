@@ -34,7 +34,7 @@ export function ContextPanel() {
   }, [streamEvents]);
 
   return (
-    <aside className="w-44 shrink-0 border-l border-slate-800 bg-[#0d0f14] p-3 overflow-y-auto">
+    <aside className="w-44 shrink-0 border-l border-border-subtle bg-bg-surface p-3 overflow-y-auto">
       {isStreaming && (
         <div className="mb-4">
           <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2">Pipeline</p>
@@ -53,7 +53,7 @@ export function ContextPanel() {
           {tickers.map(([symbol, { rec }]) => (
             <div
               key={symbol}
-              className="flex items-center gap-1.5 mb-1.5 bg-[#121620] border border-slate-800 rounded px-2 py-1"
+              className="flex items-center gap-1.5 mb-1.5 bg-bg-base border border-border-subtle rounded px-2 py-1"
             >
               <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${REC_DOT[rec ?? 'NEUTRAL'] ?? 'bg-slate-500'}`} />
               <span className="text-[11px] font-semibold text-slate-300">{symbol}</span>

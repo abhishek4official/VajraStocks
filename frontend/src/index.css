@@ -1,17 +1,289 @@
 @import "tailwindcss";
 
+@theme {
+  --color-border-subtle: var(--border-subtle);
+  --color-bg-base: var(--bg-base);
+  --color-bg-surface: var(--bg-surface);
+  --color-text-main: var(--text-main);
+  --color-text-muted: var(--text-muted);
+  --color-accent-primary: var(--accent-primary);
+  --color-accent-secondary: var(--accent-secondary);
+  --color-accent-text: var(--accent-text);
+
+  /* Slate overrides */
+  --color-slate-50: var(--text-main);
+  --color-slate-100: var(--text-main);
+  --color-slate-200: var(--text-main);
+  --color-slate-300: var(--text-muted);
+  --color-slate-350: var(--text-muted);
+  --color-slate-400: var(--text-muted);
+  --color-slate-500: var(--text-muted);
+  --color-slate-600: var(--text-muted);
+  --color-slate-700: var(--border-subtle);
+  --color-slate-800: var(--border-subtle);
+  --color-slate-850: var(--border-subtle);
+  --color-slate-900: var(--bg-base);
+  --color-slate-950: var(--bg-base);
+
+  /* Zinc overrides */
+  --color-zinc-50: var(--text-main);
+  --color-zinc-100: var(--text-main);
+  --color-zinc-200: var(--text-main);
+  --color-zinc-300: var(--text-muted);
+  --color-zinc-400: var(--text-muted);
+  --color-zinc-500: var(--text-muted);
+  --color-zinc-600: var(--text-muted);
+  --color-zinc-700: var(--border-subtle);
+  --color-zinc-800: var(--border-subtle);
+  --color-zinc-900: var(--bg-base);
+  --color-zinc-950: var(--bg-base);
+
+  /* Gray overrides */
+  --color-gray-50: var(--text-main);
+  --color-gray-100: var(--text-main);
+  --color-gray-200: var(--text-main);
+  --color-gray-300: var(--text-muted);
+  --color-gray-400: var(--text-muted);
+  --color-gray-500: var(--text-muted);
+  --color-gray-600: var(--text-muted);
+  --color-gray-700: var(--border-subtle);
+  --color-gray-800: var(--border-subtle);
+  --color-gray-900: var(--bg-base);
+  --color-gray-950: var(--bg-base);
+
+  /* Trend color overrides to be theme-aware */
+  --color-emerald-400: var(--trend-positive);
+  --color-rose-400: var(--trend-negative);
+  --color-amber-400: var(--trend-warning);
+
+  --color-emerald-300: var(--trend-positive-subtle);
+  --color-rose-300: var(--trend-negative-subtle);
+  --color-amber-300: var(--trend-warning-subtle);
+
+  --color-emerald-200: var(--trend-positive-subtle);
+  --color-rose-200: var(--trend-negative-subtle);
+
+  /* Backgrounds for trend badges/highlights */
+  --color-emerald-950: var(--trend-positive-bg);
+  --color-rose-950: var(--trend-negative-bg);
+  --color-amber-950: var(--trend-warning-bg);
+
+  /* Borders for trend badges/highlights */
+  --color-emerald-900: var(--trend-positive-border);
+  --color-emerald-800: var(--trend-positive-border);
+  --color-emerald-700: var(--trend-positive-border);
+  
+  --color-rose-900: var(--trend-negative-border);
+  --color-rose-800: var(--trend-negative-border);
+  --color-rose-700: var(--trend-negative-border);
+  
+  --color-amber-900: var(--trend-warning-border);
+  --color-amber-800: var(--trend-warning-border);
+  --color-amber-700: var(--trend-warning-border);
+
+  /* Purple accent color overrides to be theme-aware */
+  --color-purple-300: var(--accent-purple-light);
+  --color-purple-400: var(--accent-purple-medium);
+}
+
+/* --- THEME VARIANT DEFINITIONS --- */
+
+/* 1. Carbon Midnight (Default Dark) */
 :root {
   color-scheme: dark;
+  --bg-base: #0b0c10;
+  --bg-surface: #121620;
+  --bg-surface-glass: rgba(18, 22, 33, 0.7);
+  --border-subtle: rgba(255, 255, 255, 0.05);
+  --accent-primary: #a855f7; /* purple */
+  --accent-secondary: #ec4899; /* pink */
+  --accent-text: #ffffff;
+  --text-main: #f3f4f6;
+  --text-muted: #94a3b8;
+  --glow-spot-1: rgba(168, 85, 247, 0.15);
+  --glow-spot-2: rgba(59, 130, 246, 0.1);
+
+  /* Trend Colors */
+  --trend-positive: #10b981;
+  --trend-negative: #f87171;
+  --trend-warning: #fbbf24;
+  --trend-positive-subtle: #a7f3d0;
+  --trend-negative-subtle: #fecaca;
+  --trend-warning-subtle: #fde68a;
+
+  /* Trend Backgrounds & Borders */
+  --trend-positive-bg: #064e3b;
+  --trend-negative-bg: #4c0519;
+  --trend-warning-bg: #451a03;
+  --trend-positive-border: #065f46;
+  --trend-negative-border: #9f1239;
+  --trend-warning-border: #78350f;
+
+  /* Purple accents */
+  --accent-purple-light: #d8b4fe;
+  --accent-purple-medium: #c084fc;
 }
+
+/* 2. Aether Light */
+[data-theme="light"] {
+  color-scheme: light;
+  --bg-base: #f9fafb;
+  --bg-surface: #ffffff;
+  --bg-surface-glass: rgba(255, 255, 255, 0.75);
+  --border-subtle: rgba(15, 23, 42, 0.08);
+  --accent-primary: #4f46e5; /* indigo */
+  --accent-secondary: #0ea5e9; /* sky */
+  --accent-text: #ffffff;
+  --text-main: #111827;
+  --text-muted: #4b5563;
+  --glow-spot-1: rgba(79, 70, 229, 0.08);
+  --glow-spot-2: rgba(14, 165, 233, 0.06);
+
+  /* Trend Colors - High contrast for light mode */
+  --trend-positive: #059669;
+  --trend-negative: #dc2626;
+  --trend-warning: #d97706;
+  --trend-positive-subtle: #047857;
+  --trend-negative-subtle: #b91c1c;
+  --trend-warning-subtle: #b45309;
+
+  /* Trend Backgrounds & Borders - Soft pastel fills on white */
+  --trend-positive-bg: #10b981;
+  --trend-negative-bg: #ef4444;
+  --trend-warning-bg: #f59e0b;
+  --trend-positive-border: #34d399;
+  --trend-negative-border: #f87171;
+  --trend-warning-border: #fbbf24;
+
+  /* Purple accents - Dark purple for readability on white */
+  --accent-purple-light: #6d28d9;
+  --accent-purple-medium: #7c3aed;
+}
+
+/* 3. Cyberpunk Neon */
+[data-theme="cyberpunk"] {
+  color-scheme: dark;
+  --bg-base: #000000;
+  --bg-surface: #0a0f1d;
+  --bg-surface-glass: rgba(10, 15, 29, 0.7);
+  --border-subtle: rgba(0, 240, 255, 0.15);
+  --accent-primary: #39ff14; /* Neon Green */
+  --accent-secondary: #ff007f; /* Neon Pink */
+  --accent-text: #000000;
+  --text-main: #00f0ff; /* Neon Cyan */
+  --text-muted: #8b9bb4;
+  --glow-spot-1: rgba(255, 0, 127, 0.25);
+  --glow-spot-2: rgba(0, 240, 255, 0.15);
+
+  /* Trend Colors - Neon vibrant */
+  --trend-positive: #39ff14;
+  --trend-negative: #ff007f;
+  --trend-warning: #ffd700;
+  --trend-positive-subtle: #39ff14;
+  --trend-negative-subtle: #ff007f;
+  --trend-warning-subtle: #ffd700;
+
+  /* Trend Backgrounds & Borders */
+  --trend-positive-bg: #052e16;
+  --trend-negative-bg: #450a0a;
+  --trend-warning-bg: #422006;
+  --trend-positive-border: #39ff14;
+  --trend-negative-border: #ff007f;
+  --trend-warning-border: #ffd700;
+
+  /* Purple accents - Cyberpunk Neon Pink and Cyan map */
+  --accent-purple-light: #00f0ff;
+  --accent-purple-medium: #ff007f;
+}
+
+/* 4. Emerald Forest */
+[data-theme="forest"] {
+  color-scheme: dark;
+  --bg-base: #04160f;
+  --bg-surface: #082c1e;
+  --bg-surface-glass: rgba(8, 44, 30, 0.75);
+  --border-subtle: rgba(16, 185, 129, 0.15);
+  --accent-primary: #10b981;
+  --accent-secondary: #34d399;
+  --accent-text: #ffffff;
+  --text-main: #f0fdf4;
+  --text-muted: #a7f3d0;
+  --glow-spot-1: rgba(16, 185, 129, 0.15);
+  --glow-spot-2: rgba(52, 211, 153, 0.1);
+
+  /* Trend Colors */
+  --trend-positive: #34d399;
+  --trend-negative: #f87171;
+  --trend-warning: #fbbf24;
+  --trend-positive-subtle: #a7f3d0;
+  --trend-negative-subtle: #fecaca;
+  --trend-warning-subtle: #fde68a;
+
+  /* Trend Backgrounds & Borders */
+  --trend-positive-bg: #022c22;
+  --trend-negative-bg: #4c0519;
+  --trend-warning-bg: #451a03;
+  --trend-positive-border: #047857;
+  --trend-negative-border: #9f1239;
+  --trend-warning-border: #78350f;
+
+  /* Purple accents - Green theme mapping */
+  --accent-purple-light: #a7f3d0;
+  --accent-purple-medium: #34d399;
+}
+
+/* 5. Nordic Slate */
+[data-theme="slate"] {
+  color-scheme: dark;
+  --bg-base: #0f172a;
+  --bg-surface: #1e293b;
+  --bg-surface-glass: rgba(30, 41, 59, 0.75);
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --accent-primary: #38bdf8;
+  --accent-secondary: #0ea5e9;
+  --accent-text: #0f172a;
+  --text-main: #f8fafc;
+  --text-muted: #cbd5e1;
+  --glow-spot-1: rgba(56, 189, 248, 0.15);
+  --glow-spot-2: rgba(14, 165, 233, 0.1);
+
+  /* Trend Colors */
+  --trend-positive: #10b981;
+  --trend-negative: #ef4444;
+  --trend-warning: #fbbf24;
+  --trend-positive-subtle: #a7f3d0;
+  --trend-negative-subtle: #fecaca;
+  --trend-warning-subtle: #fde68a;
+
+  /* Trend Backgrounds & Borders */
+  --trend-positive-bg: #064e3b;
+  --trend-negative-bg: #4c0519;
+  --trend-warning-bg: #451a03;
+  --trend-positive-border: #0f766e;
+  --trend-negative-border: #be123c;
+  --trend-warning-border: #b45309;
+
+  /* Purple accents - Blue/Sky theme mapping */
+  --accent-purple-light: #bae6fd;
+  --accent-purple-medium: #38bdf8;
+}
+
+/* --- BASE CUSTOMIZATIONS --- */
 
 body {
   font-family: 'Outfit', 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  background-color: #0b0c10;
-  color: #f3f4f6;
+  background-color: var(--bg-base);
+  color: var(--text-muted);
   margin: 0;
   padding: 0;
   min-height: 100vh;
   overflow-x: hidden;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  color: var(--text-main);
+  transition: color 0.3s ease;
 }
 
 /* Dynamic glow elements for Glassmorphism & vibrant dark aesthetic */
@@ -19,20 +291,22 @@ body {
   position: absolute;
   width: 300px;
   height: 300px;
-  background: radial-gradient(circle, rgba(168, 85, 247, 0.15) 0%, rgba(168, 85, 247, 0) 70%);
+  background: radial-gradient(circle, var(--glow-spot-1) 0%, transparent 70%);
   border-radius: 50%;
   pointer-events: none;
   filter: blur(40px);
+  transition: background 0.3s ease;
 }
 
 .glow-spot-blue {
   position: absolute;
   width: 450px;
   height: 450px;
-  background: radial-gradient(circle, rgba(59, 130, 246, 0.1) 0%, rgba(59, 130, 246, 0) 70%);
+  background: radial-gradient(circle, var(--glow-spot-2) 0%, transparent 70%);
   border-radius: 50%;
   pointer-events: none;
   filter: blur(50px);
+  transition: background 0.3s ease;
 }
 
 /* Custom Scrollbar for trading UI */
@@ -42,34 +316,35 @@ body {
 }
 
 ::-webkit-scrollbar-track {
-  background: #0d0e12;
+  background: var(--bg-base);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #252a34;
+  background: var(--border-subtle);
   border-radius: 8px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #3f4654;
+  background: var(--text-muted);
 }
 
 /* Glassmorphism containers */
 .glass-panel {
-  background: rgba(18, 22, 33, 0.7);
+  background: var(--bg-surface-glass);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-subtle);
+  transition: background-color 0.3s ease, border-color 0.3s ease;
 }
 
 .glass-panel-hover:hover {
-  border-color: rgba(168, 85, 247, 0.2);
-  background: rgba(22, 27, 41, 0.85);
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+  border-color: var(--accent-primary);
+  background: var(--bg-surface);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.15);
 }
 
 /* TradingView Chart Container */
 .chart-card {
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-subtle);
 }

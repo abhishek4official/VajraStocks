@@ -3,6 +3,8 @@ import { useSettings } from './hooks/useSettings';
 import { API_BASE } from './lib/apiBase';
 import { SettingsContext } from './contexts/SettingsContext';
 import { useStockStore } from './store/useStockStore';
+import { ThemeProvider } from './contexts/ThemeProvider';
+import { ThemeToggle } from './components/ThemeToggle';
 import { Sidebar } from './components/Sidebar';
 import { PriceChart } from './components/PriceChart';
 import { MetricsTable } from './components/MetricsTable';
@@ -54,7 +56,7 @@ function App() {
   }, []);
 
   if (setupNeeded === null) return (
-    <div className="min-h-screen bg-[#07080a] flex items-center justify-center text-slate-400 text-sm">
+    <div className="min-h-screen bg-bg-base flex items-center justify-center text-text-muted text-sm">
       Starting VajraStocks…
     </div>
   );
@@ -62,9 +64,11 @@ function App() {
   if (setupNeeded) return <SetupWizard onComplete={() => setSetupNeeded(false)} />;
 
   return (
-    <SettingsContext.Provider value={settingsState}>
-      <Dashboard />
-    </SettingsContext.Provider>
+    <ThemeProvider>
+      <SettingsContext.Provider value={settingsState}>
+        <Dashboard />
+      </SettingsContext.Provider>
+    </ThemeProvider>
   );
 }
 
@@ -179,19 +183,19 @@ function Dashboard() {
   }, []);
 
   return (
-    <div className="flex flex-col h-screen w-screen bg-[#07080a] text-slate-100 overflow-hidden relative pt-16">
+    <div className="flex flex-col h-screen w-screen bg-bg-base text-text-main overflow-hidden relative pt-16 transition-colors duration-300">
       {/* Decorative Glow Spots */}
       <div className="glow-spot top-[-100px] left-[200px]" />
       <div className="glow-spot-blue bottom-[-150px] right-[100px]" />
 
       {/* Top Navbar */}
-      <header className="h-16 border-b border-slate-800 bg-[#0d0f14]/80 backdrop-blur-md flex items-center justify-between px-6 shrink-0 fixed top-0 left-0 right-0 z-50 w-full">
+      <header className="h-16 border-b border-border-subtle bg-bg-surface/80 backdrop-blur-md flex items-center justify-between px-6 shrink-0 fixed top-0 left-0 right-0 z-50 w-full transition-colors duration-300">
         <div className="flex items-center gap-3">
           <div className="p-2 bg-purple-600/10 border border-purple-500/30 rounded-xl text-purple-400">
             <LineChart className="w-5 h-5" />
           </div>
           <div>
-            <h1 className="text-md font-extrabold text-white tracking-tight flex items-center gap-1.5 leading-none">
+            <h1 className="text-md font-extrabold text-text-main tracking-tight flex items-center gap-1.5 leading-none">
               VAJRA <span className="text-xs px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400 font-mono font-semibold">STOCKS</span>
             </h1>
             <p className="text-[10px] text-slate-400 mt-1 font-medium">NSE Quantitative Analysis & Screening Platform</p>
@@ -199,7 +203,7 @@ function Dashboard() {
         </div>
 
         {/* Dynamic Global Navigation Tabs */}
-        <nav className="flex bg-[#121620]/80 p-1 rounded-lg border border-slate-800 flex-wrap gap-0.5">
+        <nav className="flex bg-bg-surface/90 p-1 rounded-lg border border-border-subtle flex-wrap gap-0.5 transition-colors duration-300">
           {([
             { id: 'explorer',    label: 'Explorer',    Icon: Layers      },
             { id: 'screener',    label: 'Screener',    Icon: Search      },
@@ -217,8 +221,8 @@ function Dashboard() {
               onClick={() => setActiveTab(id)}
               className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-md transition duration-150 cursor-pointer ${
                 activeTab === id
-                  ? 'bg-purple-600 text-white shadow-md shadow-purple-900/20'
-                  : 'text-slate-400 hover:text-slate-200'
+                  ? 'bg-accent-primary text-accent-text shadow-md'
+                  : 'text-text-muted hover:text-text-main'
               }`}
             >
               <Icon className="w-3.5 h-3.5" />
@@ -231,8 +235,8 @@ function Dashboard() {
             title="Sync Centre"
             className={`flex items-center gap-1.5 px-2 py-1.5 rounded-md transition duration-150 cursor-pointer ${
               activeTab === 'sync'
-                ? 'bg-slate-700 text-white'
-                : 'text-slate-500 hover:text-slate-300'
+                ? 'bg-border-subtle text-text-main'
+                : 'text-text-muted/65 hover:text-text-muted'
             }`}
           >
             <Settings className="w-3.5 h-3.5" />
@@ -243,7 +247,7 @@ function Dashboard() {
             <button
               onClick={() => setShowAlerts(v => !v)}
               title="Alerts"
-              className="relative flex items-center gap-1.5 px-2 py-1.5 rounded-md transition duration-150 cursor-pointer text-slate-500 hover:text-slate-300"
+              className="relative flex items-center gap-1.5 px-2 py-1.5 rounded-md transition duration-150 cursor-pointer text-text-muted/65 hover:text-text-muted"
             >
               <Bell className="w-3.5 h-3.5" />
               {stockAlerts.length > 0 && (
@@ -254,9 +258,9 @@ function Dashboard() {
             </button>
 
             {showAlerts && (
-              <div className="absolute right-0 top-full mt-1 w-96 max-h-96 overflow-y-auto bg-[#0f1117] border border-slate-700 rounded-xl shadow-2xl z-50">
-                <div className="flex items-center justify-between px-3 py-2 border-b border-slate-700">
-                  <span className="text-xs font-bold text-slate-200">Alerts ({stockAlerts.length})</span>
+              <div className="absolute right-0 top-full mt-1 w-96 max-h-96 overflow-y-auto bg-bg-surface border border-border-subtle rounded-xl shadow-2xl z-50">
+                <div className="flex items-center justify-between px-3 py-2 border-b border-border-subtle">
+                  <span className="text-xs font-bold text-text-main">Alerts ({stockAlerts.length})</span>
                   <div className="flex gap-2">
                     {stockAlerts.length > 0 && (
                       <button
@@ -298,14 +302,15 @@ function Dashboard() {
         </nav>
 
         {/* Global Loading Spinner */}
-        <div className="flex items-center gap-2 text-xs text-slate-400">
+        <div className="flex items-center gap-4 text-xs text-text-muted">
+          <ThemeToggle />
           {isLoading && (
-            <div className="flex items-center gap-1.5 bg-slate-900 px-2 py-1 rounded-md border border-slate-850">
-              <RefreshCw className="w-3.5 h-3.5 animate-spin text-purple-400" />
+            <div className="flex items-center gap-1.5 bg-bg-surface px-2 py-1 rounded-md border border-border-subtle">
+              <RefreshCw className="w-3.5 h-3.5 animate-spin text-accent-primary" />
               <span className="text-[10px]">Processing</span>
             </div>
           )}
-          <span className="text-[10px] text-slate-500 font-mono">Ver {import.meta.env.VITE_APP_VERSION}</span>
+          <span className="text-[10px] text-text-muted/60 font-mono">Ver {import.meta.env.VITE_APP_VERSION}</span>
         </div>
       </header>
 
@@ -323,14 +328,14 @@ function Dashboard() {
               
               {/* ── Active Symbol Header ─────────────────────────────────────── */}
               {activeSymbolDetail ? (
-                <div className="flex flex-col gap-2 p-4 rounded-xl border border-slate-800/80 bg-[#121620]/35">
+                <div className="flex flex-col gap-2 p-4 rounded-xl border border-border-subtle bg-bg-surface/35">
                   {/* Row 1: Name + badges + watchlist */}
                   <div className="flex items-center justify-between flex-wrap gap-2">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-xl font-bold tracking-tight text-white">
+                      <span className="text-xl font-bold tracking-tight text-text-main">
                         {activeSymbolDetail.symbol.replace('.NS', '')}
                       </span>
-                      <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400">
+                      <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-bg-base border border-border-subtle text-text-muted">
                         {activeSymbolDetail.series}
                       </span>
                       {activeSymbolDetail.last_attempt_status === 'SUCCESS' ? (
@@ -597,7 +602,7 @@ function Dashboard() {
       </main>
 
       {/* Sticky footer */}
-      <footer className="h-7 shrink-0 border-t border-slate-800/60 bg-[#0d0f14]/80 backdrop-blur-md flex items-center justify-between px-5 z-40">
+      <footer className="h-7 shrink-0 border-t border-border-subtle bg-bg-surface/85 backdrop-blur-md flex items-center justify-between px-5 z-40">
         <span className="text-[10px] font-bold text-slate-300">VajraStocks v1.5.0 — Data © Yahoo Finance, for personal use only</span>
         <a
           href="https://abhishek4official.github.io/"
@@ -605,7 +610,7 @@ function Dashboard() {
           rel="noopener noreferrer"
           className="text-[10px] font-bold text-slate-300 hover:text-purple-400 transition flex items-center gap-1"
         >
-          Developed by <span className="text-white hover:text-purple-300 transition ml-0.5">Abhishek Kumar</span>
+          Developed by <span className="text-text-main hover:text-accent-primary transition ml-0.5">Abhishek Kumar</span>
         </a>
       </footer>
     </div>

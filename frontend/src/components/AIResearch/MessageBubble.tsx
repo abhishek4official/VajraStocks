@@ -204,7 +204,7 @@ export function MessageBubble({ message }: { message: ConversationMessage }) {
         <Bot size={12} className="text-slate-400" />
       </div>
       <div className="flex-1 min-w-0">
-        <div className="bg-[#121620] border border-slate-800 rounded-2xl rounded-tl-sm px-4 py-3">
+        <div className="bg-bg-surface border border-border-subtle rounded-2xl rounded-tl-sm px-4 py-3">
           {message.recommendation && (
             <div className="mb-2">
               <span className={`inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full border ${REC_COLORS[message.recommendation] ?? REC_COLORS.NEUTRAL}`}>

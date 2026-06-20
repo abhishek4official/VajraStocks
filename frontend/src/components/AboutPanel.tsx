@@ -7,10 +7,10 @@ import {
 } from 'lucide-react';
 
 const Section: React.FC<{ icon: React.ReactNode; title: string; children: React.ReactNode }> = ({ icon, title, children }) => (
-  <div className="rounded-2xl border border-slate-800/80 bg-[#121620]/50 p-6 shadow-lg backdrop-blur-sm shrink-0">
+  <div className="rounded-2xl border border-border-subtle bg-bg-surface/50 p-6 shadow-lg backdrop-blur-sm shrink-0">
     <div className="flex items-center gap-3 mb-4">
       <span className="p-2 rounded-lg bg-purple-600/10 border border-purple-500/20 text-purple-400">{icon}</span>
-      <h3 className="text-base font-bold text-white">{title}</h3>
+      <h3 className="text-base font-bold text-text-main">{title}</h3>
     </div>
     {children}
   </div>
@@ -60,10 +60,10 @@ export const AboutPanel: React.FC = () => {
   };
 
   return (
-    <div className="flex-1 flex flex-col gap-6 p-6 overflow-y-auto max-h-full bg-[#0a0d14]">
+    <div className="flex-1 flex flex-col gap-6 p-6 overflow-y-auto max-h-full bg-bg-base">
 
       {/* ── Hero ────────────────────────────────────────────────────────────── */}
-      <div className="relative overflow-hidden rounded-2xl border border-purple-500/20 bg-gradient-to-br from-[#161224] via-[#10141e] to-[#090b11] px-8 py-8 shadow-xl shrink-0">
+      <div className="relative overflow-hidden rounded-2xl border border-border-subtle bg-gradient-to-br from-bg-surface via-bg-surface/90 to-bg-base/80 px-8 py-8 shadow-xl shrink-0">
         <div className="absolute -top-20 -right-16 w-72 h-72 bg-purple-600/10 blur-3xl rounded-full pointer-events-none" />
         <div className="absolute -bottom-20 -left-16 w-72 h-72 bg-blue-600/5 blur-3xl rounded-full pointer-events-none" />
         <div className="relative">
@@ -73,10 +73,10 @@ export const AboutPanel: React.FC = () => {
                 <Zap className="w-7 h-7" />
               </span>
               <div>
-                <h1 className="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-white via-slate-100 to-purple-300 tracking-tight leading-normal py-0.5">
+                <h1 className="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-text-main via-text-main to-accent-primary tracking-tight leading-normal py-0.5">
                   Vajra Stock
                 </h1>
-                <p className="text-xs text-purple-400 font-bold uppercase tracking-widest mt-0.5">
+                <p className="text-xs text-accent-primary font-bold uppercase tracking-widest mt-0.5">
                   NSE Quantitative Research &amp; Decision-Support — v1.5.0
                 </p>
               </div>
@@ -102,7 +102,7 @@ export const AboutPanel: React.FC = () => {
       </div>
 
       {/* ── Interactive Version Switcher ────────────────────────────────────── */}
-      <div className="flex flex-col gap-4 p-5 rounded-2xl border border-slate-800/80 bg-[#121620]/30 shadow-md shrink-0">
+      <div className="flex flex-col gap-4 p-5 rounded-2xl border border-border-subtle bg-bg-surface/30 shadow-md shrink-0">
         <div className="flex items-center justify-between flex-wrap gap-2 pb-2">
           <div>
             <h2 className="text-sm font-bold text-slate-200 flex items-center gap-2">
@@ -135,7 +135,7 @@ export const AboutPanel: React.FC = () => {
                 <BookOpen className="w-4 h-4" />
                 <span>Standard (Default Portfolio &amp; Swing Analysis)</span>
               </div>
-              <h3 className="text-base font-bold text-white">The Local-First Revolution in Stock Analytics</h3>
+              <h3 className="text-base font-bold text-text-main">The Local-First Revolution in Stock Analytics</h3>
               <p className="text-sm text-slate-300 leading-relaxed">
                 Vajra Stock is a desktop-class research and decision-support workstation built for Indian equity investors. 
                 Unlike cloud-based tools that charge heavy monthly subscriptions, Vajra Stock runs entirely on your own computer. 
@@ -155,7 +155,7 @@ export const AboutPanel: React.FC = () => {
                 <Cpu className="w-4 h-4" />
                 <span>Professional (Quantitative &amp; Institutional)</span>
               </div>
-              <h3 className="text-base font-bold text-white">Quantitative Position Management &amp; Trend Confluence</h3>
+              <h3 className="text-base font-bold text-text-main">Quantitative Position Management &amp; Trend Confluence</h3>
               <p className="text-sm text-slate-300 leading-relaxed">
                 Vajra Stock functions as a local quantitative analytics node. It is designed to perform systematic trend identification, 
                 multi-timeframe relative strength screening, and regime-based risk allocation. The system operates on a historical EOD schema, 
@@ -177,7 +177,7 @@ export const AboutPanel: React.FC = () => {
                 <Heart className="w-4 h-4" />
                 <span>Investor-Friendly (Simplified &amp; Strategic)</span>
               </div>
-              <h3 className="text-base font-bold text-white">Low-Stress Investing: Focus on the Big Picture</h3>
+              <h3 className="text-base font-bold text-text-main">Low-Stress Investing: Focus on the Big Picture</h3>
               <p className="text-sm text-slate-300 leading-relaxed">
                 Vajra Stock helps you make smart, calculated decisions in the stock market without the stress of watching live, fluctuating charts. 
                 We believe that successful trading and wealth generation is about finding strong, established trends rather than reacting to 
@@ -199,7 +199,7 @@ export const AboutPanel: React.FC = () => {
                 <Shield className="w-4 h-4" />
                 <span>Premium Product (Strategic Fintech Copy)</span>
               </div>
-              <h3 className="text-base font-bold text-white">Uncompromising Performance. Absolute Privacy. Zero Subscriptions.</h3>
+              <h3 className="text-base font-bold text-text-main">Uncompromising Performance. Absolute Privacy. Zero Subscriptions.</h3>
               <p className="text-sm text-slate-300 leading-relaxed">
                 Vajra Stock represents a new standard in sovereign investment tools. Named after the legendary <span className="italic text-purple-300 font-semibold">Vajra</span>—the 
                 indestructible weapon of thunder and clarity—this platform is engineered for investors who demand institutional-grade tools 
@@ -408,7 +408,7 @@ export const AboutPanel: React.FC = () => {
       </Section>
 
       {/* ── Collapsible Marketing Summary ───────────────────────────────────── */}
-      <div className="rounded-2xl border border-slate-800/80 bg-[#121620]/30 shadow-md overflow-hidden shrink-0">
+      <div className="rounded-2xl border border-border-subtle bg-bg-surface/30 shadow-md overflow-hidden shrink-0">
         <button
           onClick={() => setShowMarketing(!showMarketing)}
           className="w-full flex items-center justify-between p-5 text-sm font-bold text-slate-200 hover:bg-slate-900/30 transition duration-150"
@@ -421,7 +421,7 @@ export const AboutPanel: React.FC = () => {
         </button>
 
         {showMarketing && (
-          <div className="p-5 border-t border-slate-800/80 bg-[#0c0f17]/50 space-y-4">
+          <div className="p-5 border-t border-border-subtle bg-bg-base/50 space-y-4">
             
             {/* Tagline */}
             <div className="space-y-2">

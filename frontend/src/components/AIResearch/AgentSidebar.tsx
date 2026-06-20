@@ -61,9 +61,9 @@ export function AgentSidebar() {
   const activeColor = currentAgentMeta?.color ?? '#4f46e5';
 
   return (
-    <aside className="w-52 shrink-0 flex flex-col border-r border-slate-800 bg-[#0d0f14] h-full">
+    <aside className="w-52 shrink-0 flex flex-col border-r border-border-subtle bg-bg-surface h-full">
       {/* Agent list */}
-      <div className="p-3 border-b border-slate-800">
+      <div className="p-3 border-b border-border-subtle">
         <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2">Agents</p>
         {AGENT_TYPES.map((agent) => (
           <button
@@ -72,7 +72,7 @@ export function AgentSidebar() {
             className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs font-medium mb-1 transition-colors cursor-pointer ${
               activeAgent === agent.id
                 ? 'text-white'
-                : 'bg-[#121620] border border-slate-800 text-slate-400 hover:border-slate-600 hover:text-slate-200'
+                : 'bg-bg-base border border-border-subtle text-text-muted hover:border-slate-600 hover:text-text-main'
             }`}
             style={activeAgent === agent.id ? { backgroundColor: agent.color } : undefined}
           >

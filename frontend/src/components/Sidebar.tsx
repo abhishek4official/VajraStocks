@@ -52,13 +52,13 @@ export const Sidebar: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col h-full border-r border-slate-800/80 bg-[#0d0f14] w-80 shrink-0">
+    <div className="flex flex-col h-full border-r border-border-subtle bg-bg-surface w-80 shrink-0">
       {/* Sidebar Header */}
-      <div className="p-4 border-b border-slate-800/80 flex flex-col gap-3">
+      <div className="p-4 border-b border-border-subtle flex flex-col gap-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Radio className="w-5 h-5 text-purple-500 animate-pulse" />
-            <h2 className="text-lg font-bold text-white tracking-tight">NSE Tickers</h2>
+            <Radio className="w-5 h-5 text-accent-primary animate-pulse" />
+            <h2 className="text-lg font-bold text-text-main tracking-tight">NSE Tickers</h2>
           </div>
           <button 
             onClick={() => fetchSymbols(activeOnly)}
@@ -77,7 +77,7 @@ export const Sidebar: React.FC = () => {
             placeholder="Search symbol or company..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 text-sm rounded-lg bg-slate-900/80 border border-slate-850 text-white placeholder-slate-500 focus:outline-none focus:border-purple-500 transition"
+            className="w-full pl-9 pr-4 py-2 text-sm rounded-lg bg-bg-base border border-border-subtle text-text-main placeholder-text-muted focus:outline-none focus:border-accent-primary transition"
           />
         </div>
 
@@ -133,14 +133,14 @@ export const Sidebar: React.FC = () => {
                 onClick={() => setSelectedSymbol(sym.symbol)}
                 className={`group p-3 rounded-lg cursor-pointer transition relative border ${
                   isSelected 
-                    ? 'bg-purple-950/20 border-purple-500/80 text-white' 
-                    : 'bg-[#121620]/45 border-transparent text-slate-300 hover:bg-[#161a27] hover:border-slate-800'
+                    ? 'bg-accent-primary/10 border-accent-primary text-text-main font-bold' 
+                    : 'bg-bg-base/40 border-transparent text-text-muted hover:bg-bg-surface hover:border-border-subtle'
                 }`}
               >
                 <div className="flex justify-between items-start mb-1">
                   <div className="flex items-center gap-1.5">
                     <span className="font-bold text-sm tracking-wide">{sym.symbol.replace('.NS', '')}</span>
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400 font-mono">
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-bg-base border border-border-subtle text-text-muted font-mono">
                       {sym.series}
                     </span>
                   </div>
