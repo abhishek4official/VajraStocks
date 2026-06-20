@@ -412,6 +412,14 @@ class SyncEngine:
             except Exception as strat_err:
                 logger.error(f"Failed to materialize strategy signals post-sync: {strat_err}")
 
+            # Post-Sync Hook: Compute programmatic trendlines for all symbols.
+            try:
+                from stocks.services.trendline_service import TrendlineService
+
+                TrendlineService(session).refresh_all()
+            except Exception as tl_err:
+                logger.error(f"Failed to compute trendlines post-sync: {tl_err}")
+
             # Post-Sync Hook: Run VajraML2 (triple-barrier) predictions.
             # V2 is the primary ML signal — writes ml2_* AND the shared ml_label/ml_rank/ml_prediction columns.
             try:

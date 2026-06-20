@@ -40,6 +40,21 @@ export interface ConfluenceLevel {
   components: string;
 }
 
+export interface TrendlineData {
+  id: number;
+  symbol: string;
+  trendline_type: 'SUPPORT' | 'RESISTANCE';
+  anchor1_date: string;
+  anchor1_price: number;
+  anchor2_date: string;
+  anchor2_price: number;
+  touch_count: number;
+  score: number;
+  slope_pct_per_day: number;
+  is_broken: boolean;
+  break_date: string | null;
+}
+
 export interface PortfolioHolding {
   instrument: string;
   qty: number;
@@ -506,6 +521,12 @@ export const apiService = {
   async getConfluenceLevels(symbol: string): Promise<ConfluenceLevel[]> {
     const response = await fetch(`${BASE_URL}/symbols/${encodeURIComponent(symbol)}/confluence-levels`);
     if (!response.ok) throw new Error(`Failed to fetch confluence levels for ${symbol}`);
+    return response.json();
+  },
+
+  async getTrendlines(symbol: string): Promise<TrendlineData[]> {
+    const response = await fetch(`${BASE_URL}/trendlines/${encodeURIComponent(symbol)}`);
+    if (!response.ok) return [];
     return response.json();
   },
 

@@ -13,6 +13,7 @@ import type {
   SymbolSyncStatus,
   PortfolioData,
   ConfluenceLevel,
+  TrendlineData,
   StockAlert,
 } from '../services/api';
 
@@ -51,7 +52,7 @@ interface ScreenerFilters {
   limit?: number;
 }
 
-export type ChartOverlay = 'sma20' | 'sma50' | 'sma200' | 'ema9' | 'ema21' | 'bb' | 'sr' | 'nifty';
+export type ChartOverlay = 'sma20' | 'sma50' | 'sma200' | 'ema9' | 'ema21' | 'bb' | 'sr' | 'nifty' | 'trendlines';
 
 export interface WatchlistItem {
   symbol: string;       // e.g. RELIANCE.NS
@@ -97,6 +98,7 @@ interface StockState {
   corporateActions: CorporateAction[];
   niftyCandles: CandleData[];
   confluenceLevels: ConfluenceLevel[];
+  trendlines: TrendlineData[];
   // Per-symbol custom horizontal price lines (persisted to localStorage)
   customLines: Record<string, number[]>;
 
@@ -285,6 +287,7 @@ export const useStockStore = create<StockState>((set, get) => ({
   corporateActions: [],
   niftyCandles: [],
   confluenceLevels: [],
+  trendlines: [],
   customLines: JSON.parse(localStorage.getItem('vajra_lines') || '{}'),
 
   screenerFilters: loadScreenerFilters(),
@@ -603,7 +606,7 @@ export const useStockStore = create<StockState>((set, get) => ({
     if (!symbol) return;
     set({ isLoading: true, error: null });
     try {
-      const [candles, heikinAshi, renkoBricks, lineBreakLines, indicators, corporateActions, confluenceLevels] = await Promise.all([
+      const [candles, heikinAshi, renkoBricks, lineBreakLines, indicators, corporateActions, confluenceLevels, trendlines] = await Promise.all([
         apiService.getCandles(symbol),
         apiService.getHeikinAshi(symbol),
         apiService.getRenkoBricks(symbol),
@@ -611,8 +614,9 @@ export const useStockStore = create<StockState>((set, get) => ({
         apiService.getIndicators(symbol),
         apiService.getCorporateActions(symbol),
         apiService.getConfluenceLevels(symbol),
+        apiService.getTrendlines(symbol),
       ]);
-      set({ candles, heikinAshi, renkoBricks, lineBreakLines, indicators, corporateActions, confluenceLevels, isLoading: false });
+      set({ candles, heikinAshi, renkoBricks, lineBreakLines, indicators, corporateActions, confluenceLevels, trendlines, isLoading: false });
     } catch (err: unknown) {
       set({ error: (err as Error).message || 'Failed to fetch symbol data', isLoading: false });
     }

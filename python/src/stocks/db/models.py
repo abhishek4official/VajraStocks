@@ -71,6 +71,9 @@ class Symbol(Base):
     strategy_signals: Mapped[list["StrategySignal"]] = relationship(
         "StrategySignal", back_populates="symbol_obj", cascade="all, delete-orphan"
     )
+    trendlines: Mapped[list["SymbolTrendline"]] = relationship(
+        "SymbolTrendline", back_populates="symbol_obj", cascade="all, delete-orphan"
+    )
 
 
 class DailyPrice(Base):
@@ -761,3 +764,30 @@ class ConversationSummary(Base):
     generated_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=func.now())
 
     thread: Mapped["ConversationThread"] = relationship("ConversationThread", back_populates="summaries")
+
+
+class SymbolTrendline(Base):
+    """Backend-computed trendlines for each symbol, refreshed after each EOD sync."""
+
+    __tablename__ = "symbol_trendlines"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    symbol_id: Mapped[int] = mapped_column(Integer, ForeignKey("symbols.id", ondelete="CASCADE"), nullable=False)
+    symbol: Mapped[str] = mapped_column(String(50), nullable=False)
+    trendline_type: Mapped[str] = mapped_column(String(10), nullable=False)  # 'SUPPORT' or 'RESISTANCE'
+    anchor1_date: Mapped[datetime.date] = mapped_column(Date, nullable=False)
+    anchor1_price: Mapped[float] = mapped_column(Float, nullable=False)
+    anchor2_date: Mapped[datetime.date] = mapped_column(Date, nullable=False)
+    anchor2_price: Mapped[float] = mapped_column(Float, nullable=False)
+    touch_count: Mapped[int] = mapped_column(Integer, nullable=False, default=2)
+    score: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    slope_pct_per_day: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    is_broken: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    break_date: Mapped[datetime.date | None] = mapped_column(Date, nullable=True)
+    computed_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=func.now())
+
+    symbol_obj: Mapped["Symbol"] = relationship("Symbol", back_populates="trendlines")
+
+    __table_args__ = (
+        Index("ix_trendlines_symbol_id", "symbol_id"),
+    )

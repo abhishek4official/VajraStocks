@@ -12,7 +12,7 @@ import type {
 import { useStockStore } from '../store/useStockStore';
 
 type ChartTimeframe = '1W' | '1M' | '3M' | '6M' | '1Y' | 'MAX';
-type ChartOverlay = 'sma20' | 'sma50' | 'sma200' | 'ema9' | 'ema21' | 'bb' | 'sr' | 'nifty';
+type ChartOverlay = 'sma20' | 'sma50' | 'sma200' | 'ema9' | 'ema21' | 'bb' | 'sr' | 'nifty' | 'trendlines';
 
 interface PriceChartProps {
   indicatorToShow: 'RSI' | 'MACD' | 'CMF' | 'STOCHRSI' | 'NONE';
@@ -40,14 +40,15 @@ export const PriceChart: React.FC<PriceChartProps> = ({
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const mainChartRef = useRef<any>(null);
 
-  const { 
-    chartType, 
-    candles, 
-    heikinAshi, 
-    renkoBricks, 
-    lineBreakLines, 
+  const {
+    chartType,
+    candles,
+    heikinAshi,
+    renkoBricks,
+    lineBreakLines,
     indicators,
     confluenceLevels,
+    trendlines,
     activeSymbol
   } = useStockStore();
 
@@ -340,7 +341,47 @@ export const PriceChart: React.FC<PriceChartProps> = ({
       }
     }
 
-    // 6e. NIFTY 50 normalised overlay (% change from first visible candle)
+    // 6e. Programmatic trendlines (backend-computed, angled support/resistance)
+    if (overlays.has('trendlines') && trendlines && trendlines.length > 0) {
+      const toOrd = (dateStr: string) => {
+        const [y, m, d] = dateStr.split('-').map(Number);
+        // days since 1970-01-01
+        return Math.floor(Date.UTC(y, m - 1, d) / 86400000);
+      };
+      for (const tl of trendlines) {
+        const o1 = toOrd(tl.anchor1_date);
+        const o2 = toOrd(tl.anchor2_date);
+        if (o2 === o1) continue;
+        const isSupport = tl.trendline_type === 'SUPPORT';
+        const opacity = Math.min(0.3 + tl.score / 25, 0.85);
+        const color = isSupport
+          ? `rgba(16, 185, 129, ${opacity})`
+          : `rgba(239, 68, 68, ${opacity})`;
+
+        const seriesData: LineData[] = [];
+        for (const [dateStr, ts] of timeMap.entries()) {
+          const od = toOrd(dateStr);
+          if (od < o1) continue;
+          const projected = tl.anchor1_price + (tl.anchor2_price - tl.anchor1_price) * (od - o1) / (o2 - o1);
+          seriesData.push({ time: ts as any, value: projected });
+        }
+        if (seriesData.length < 2) continue;
+        seriesData.sort((a, b) => (a.time as unknown as number) - (b.time as unknown as number));
+
+        const trendSeries = mainChart.addSeries(LineSeries, {
+          color,
+          lineWidth: tl.touch_count >= 3 ? 2 : 1,
+          lineStyle: tl.is_broken ? 2 : 0,
+          priceLineVisible: false,
+          lastValueVisible: false,
+          crosshairMarkerVisible: false,
+          title: `${isSupport ? 'S' : 'R'}${tl.touch_count}`,
+        });
+        trendSeries.setData(seriesData);
+      }
+    }
+
+    // 6f. NIFTY 50 normalised overlay (% change from first visible candle)
     if (overlays.has('nifty') && niftyCandles.length > 0 && primaryData.length > 0) {
       // Build a map: date-string → nifty close
       const niftyMap = new Map<string, number>(niftyCandles.map(c => [c.time, c.close]));
@@ -515,6 +556,7 @@ export const PriceChart: React.FC<PriceChartProps> = ({
     drawMode,
     activeSymbol,
     confluenceLevels,
+    trendlines,
   ]);
 
   const { isLoading } = useStockStore();

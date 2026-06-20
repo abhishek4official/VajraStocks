@@ -470,8 +470,9 @@ function Dashboard() {
                         { key: 'ema9'   as const, label: 'EMA 9',   color: 'text-cyan-400'   },
                         { key: 'ema21'  as const, label: 'EMA 21',  color: 'text-orange-400' },
                         { key: 'bb'     as const, label: 'BB',      color: 'text-slate-300'  },
-                        { key: 'sr'     as const, label: 'S/R',     color: 'text-yellow-400' },
-                        { key: 'nifty'  as const, label: 'NIFTY',   color: 'text-yellow-300', disabled: niftyCandles.length === 0 },
+                        { key: 'sr'         as const, label: 'S/R',        color: 'text-yellow-400' },
+                        { key: 'trendlines' as const, label: 'Trendlines', color: 'text-violet-400' },
+                        { key: 'nifty'      as const, label: 'NIFTY',      color: 'text-yellow-300', disabled: niftyCandles.length === 0 },
                       ]).map(({ key, label, color, disabled = false }) => (
                         <button
                           key={key}

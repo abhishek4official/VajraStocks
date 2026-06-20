@@ -19,6 +19,7 @@ from stocks.api.v1.endpoints import (
     strategies,
     symbols,
     sync,
+    trendlines,
     watchlists,
 )
 
@@ -43,3 +44,4 @@ api_router.include_router(watchlists.router)
 api_router.include_router(fundamentals.router)
 api_router.include_router(announcements.router)
 api_router.include_router(news.router)
+api_router.include_router(trendlines.router)
