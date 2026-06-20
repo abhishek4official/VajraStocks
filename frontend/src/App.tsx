@@ -598,7 +598,7 @@ function Dashboard() {
 
       {/* Sticky footer */}
       <footer className="h-7 shrink-0 border-t border-slate-800/60 bg-[#0d0f14]/80 backdrop-blur-md flex items-center justify-between px-5 z-40">
-        <span className="text-[10px] font-bold text-slate-300">VajraStocks v1.4.0 — Data © Yahoo Finance, for personal use only</span>
+        <span className="text-[10px] font-bold text-slate-300">VajraStocks v1.5.0 — Data © Yahoo Finance, for personal use only</span>
         <a
           href="https://abhishek4official.github.io/"
           target="_blank"
