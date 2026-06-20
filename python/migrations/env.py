@@ -23,13 +23,28 @@ if config.config_file_name is not None:
 # target_metadata is set to our declarative model base
 target_metadata = Base.metadata
 
-# Load application config — prefer AppData/Roaming/VajraStocks, fall back to local config/config.yaml
+# Load application config — prefer per-user VajraStocks dir, fall back to local config/config.yaml
 import os as _os
-_appdata = _os.environ.get("APPDATA", "")
-_appdata_config = Path(_appdata) / "VajraStocks" / "config.yaml" if _appdata else None
+import sys as _sys
 
-if _appdata_config and _appdata_config.exists():
-    app_config = Config.load(_appdata_config)
+def _alembic_user_config_path() -> "Path | None":
+    """Returns the platform-appropriate user config.yaml path for Alembic to use."""
+    # Explicit override (frozen launcher / Docker)
+    env = _os.environ.get("VAJRA_CONFIG_YAML")
+    if env:
+        return Path(env)
+    if _sys.platform == "win32":
+        _appdata = _os.environ.get("APPDATA", "")
+        return Path(_appdata) / "VajraStocks" / "config.yaml" if _appdata else None
+    if _sys.platform == "darwin":
+        return Path.home() / "Library" / "Application Support" / "VajraStocks" / "config.yaml"
+    _xdg = _os.environ.get("XDG_DATA_HOME", "")
+    _base = Path(_xdg) if _xdg else Path.home() / ".local" / "share"
+    return _base / "VajraStocks" / "config.yaml"
+
+_user_cfg = _alembic_user_config_path()
+if _user_cfg and _user_cfg.exists():
+    app_config = Config.load(_user_cfg)
 else:
     app_config = Config.load()
 

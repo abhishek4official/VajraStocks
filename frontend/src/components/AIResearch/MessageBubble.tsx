@@ -13,20 +13,33 @@ const REC_COLORS: Record<string, string> = {
 function ReportContent({ markdown }: { markdown: string }) {
   const lines = markdown.split('\n');
   const elements: React.ReactNode[] = [];
-  let inTable = false;
-  let tableRows: string[][] = [];
-  let tableKey = 0;
+  
+  let currentTable: string[][] = [];
+  let currentCodeLines: string[] = [];
+  let currentListItems: { text: string; ordered: boolean }[] = [];
+  let inCodeBlock = false;
 
-  const flushTable = () => {
-    if (tableRows.length < 2) return;
-    const [header, , ...body] = tableRows;
+  const flushTable = (key: number) => {
+    if (currentTable.length === 0) return;
+    if (currentTable.length < 2) {
+      currentTable.forEach((row, ri) => {
+        elements.push(
+          <p key={`tbl-fallback-${key}-${ri}`} className="text-xs leading-relaxed text-slate-400 mb-2">
+            {row.join(' | ')}
+          </p>
+        );
+      });
+      currentTable = [];
+      return;
+    }
+    const [header, , ...body] = currentTable;
     elements.push(
-      <div key={`tbl-${tableKey++}`} className="overflow-x-auto my-3">
+      <div key={`tbl-${key}`} className="overflow-x-auto my-3">
         <table className="text-[11px] w-full border-collapse">
           <thead>
             <tr>
               {header.map((h, i) => (
-                <th key={i} className="text-left px-2 py-1 bg-slate-800 border border-slate-700 font-semibold text-slate-300">
+                <th key={i} className="text-left px-2 py-1.5 bg-slate-800 border border-slate-700 font-semibold text-slate-300">
                   {h.trim()}
                 </th>
               ))}
@@ -36,7 +49,7 @@ function ReportContent({ markdown }: { markdown: string }) {
             {body.map((row, ri) => (
               <tr key={ri} className="even:bg-slate-800/30">
                 {row.map((cell, ci) => (
-                  <td key={ci} className="px-2 py-1 border border-slate-700 text-slate-300">
+                  <td key={ci} className="px-2 py-1.5 border border-slate-700 text-slate-300">
                     {cell.trim()}
                   </td>
                 ))}
@@ -46,45 +59,123 @@ function ReportContent({ markdown }: { markdown: string }) {
         </table>
       </div>
     );
-    tableRows = [];
-    inTable = false;
+    currentTable = [];
   };
 
-  lines.forEach((line, i) => {
-    if (line.startsWith('|')) {
-      inTable = true;
-      tableRows.push(line.split('|').filter((_, idx, arr) => idx > 0 && idx < arr.length - 1));
-      return;
-    }
-    if (inTable) flushTable();
+  const flushCodeBlock = (key: number) => {
+    if (currentCodeLines.length === 0) return;
+    elements.push(
+      <pre key={`code-${key}`} className="bg-slate-900 border border-slate-800/80 p-3 rounded-lg text-[11px] font-mono text-purple-300 overflow-x-auto my-2.5">
+        <code>{currentCodeLines.join('\n')}</code>
+      </pre>
+    );
+    currentCodeLines = [];
+  };
 
-    if (line.startsWith('### '))
-      elements.push(<h3 key={i} className="text-xs font-semibold mt-3 mb-1 text-slate-200">{line.slice(4)}</h3>);
-    else if (line.startsWith('## '))
-      elements.push(<h2 key={i} className="text-sm font-bold mt-4 mb-1.5 text-slate-100">{line.slice(3)}</h2>);
-    else if (line.startsWith('# '))
-      elements.push(<h1 key={i} className="text-base font-bold mt-4 mb-2 text-purple-400">{line.slice(2)}</h1>);
-    else if (line.startsWith('```'))
-      elements.push(null);
-    else if (line.trim() === '')
-      elements.push(<div key={i} className="h-2" />);
-    else {
-      const html = line
-        .replace(/\*\*(.+?)\*\*/g, '<strong class="text-slate-200 font-semibold">$1</strong>')
-        .replace(/\*(.+?)\*/g, '<em class="text-slate-300">$1</em>')
-        .replace(/`(.+?)`/g, '<code class="bg-slate-800 border border-slate-700 px-1 rounded text-[10px] font-mono text-purple-300">$1</code>');
+  const flushList = (key: number) => {
+    if (currentListItems.length === 0) return;
+    const isOrdered = currentListItems[0].ordered;
+    const listContent = currentListItems.map((item, idx) => {
+      const html = parseInlineStyles(item.text);
+      return (
+        <li key={idx} className="text-xs leading-relaxed text-slate-400 mb-1 ml-4 list-outside" style={{ listStyleType: isOrdered ? 'decimal' : 'disc' }}>
+          <span dangerouslySetInnerHTML={{ __html: html }} />
+        </li>
+      );
+    });
+
+    if (isOrdered) {
+      elements.push(<ol key={`list-${key}`} className="my-2 pl-4 list-decimal">{listContent}</ol>);
+    } else {
+      elements.push(<ul key={`list-${key}`} className="my-2 pl-4 list-disc">{listContent}</ul>);
+    }
+    currentListItems = [];
+  };
+
+  const parseInlineStyles = (text: string) => {
+    return text
+      .replace(/\*\*(.+?)\*\*/g, '<strong class="text-slate-200 font-semibold">$1</strong>')
+      .replace(/\*(.+?)\*/g, '<em class="text-slate-300">$1</em>')
+      .replace(/`(.+?)`/g, '<code class="bg-slate-800 border border-slate-700 px-1.5 py-0.5 rounded text-[10px] font-mono text-purple-300">$1</code>')
+      .replace(/\[(.+?)\]\((.+?)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-purple-400 hover:text-purple-300 hover:underline font-medium">$1</a>');
+  };
+
+  let elementKey = 0;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    
+    // 1. Code block handling
+    if (line.startsWith('```')) {
+      if (inCodeBlock) {
+        inCodeBlock = false;
+        flushCodeBlock(elementKey++);
+      } else {
+        if (currentTable.length > 0) flushTable(elementKey++);
+        if (currentListItems.length > 0) flushList(elementKey++);
+        inCodeBlock = true;
+      }
+      continue;
+    }
+
+    if (inCodeBlock) {
+      currentCodeLines.push(line);
+      continue;
+    }
+
+    // 2. Table handling
+    if (line.startsWith('|')) {
+      if (currentListItems.length > 0) flushList(elementKey++);
+      const row = line.split('|').filter((_, idx, arr) => idx > 0 && idx < arr.length - 1);
+      currentTable.push(row);
+      continue;
+    }
+    if (currentTable.length > 0) {
+      flushTable(elementKey++);
+    }
+
+    // 3. List handling
+    const unorderedMatch = line.match(/^(\s*)[-*+]\s+(.*)$/);
+    const orderedMatch = line.match(/^(\s*)\d+\.\s+(.*)$/);
+
+    if (unorderedMatch) {
+      if (currentTable.length > 0) flushTable(elementKey++);
+      currentListItems.push({ text: unorderedMatch[2], ordered: false });
+      continue;
+    } else if (orderedMatch) {
+      if (currentTable.length > 0) flushTable(elementKey++);
+      currentListItems.push({ text: orderedMatch[2], ordered: true });
+      continue;
+    } else if (currentListItems.length > 0) {
+      flushList(elementKey++);
+    }
+
+    // 4. Headers & empty lines
+    if (line.startsWith('### ')) {
+      elements.push(<h3 key={elementKey++} className="text-xs font-semibold mt-4 mb-1 text-slate-200">{line.slice(4)}</h3>);
+    } else if (line.startsWith('## ')) {
+      elements.push(<h2 key={elementKey++} className="text-sm font-bold mt-5 mb-2 text-slate-100 border-b border-slate-800/40 pb-1">{line.slice(3)}</h2>);
+    } else if (line.startsWith('# ')) {
+      elements.push(<h1 key={elementKey++} className="text-base font-bold mt-6 mb-3 text-purple-400">{line.slice(2)}</h1>);
+    } else if (line.trim() === '') {
+      elements.push(<div key={elementKey++} className="h-2.5" />);
+    } else {
+      const html = parseInlineStyles(line);
       elements.push(
         <p
-          key={i}
-          className="text-xs leading-relaxed text-slate-400"
+          key={elementKey++}
+          className="text-xs leading-relaxed text-slate-400 mb-2"
           dangerouslySetInnerHTML={{ __html: html }}
         />
       );
     }
-  });
+  }
 
-  if (inTable) flushTable();
-  return <div>{elements}</div>;
+  // Flush remaining elements
+  if (currentTable.length > 0) flushTable(elementKey++);
+  if (currentListItems.length > 0) flushList(elementKey++);
+  if (currentCodeLines.length > 0) flushCodeBlock(elementKey++);
+
+  return <div className="space-y-1">{elements}</div>;
 }
 
 export function MessageBubble({ message }: { message: ConversationMessage }) {

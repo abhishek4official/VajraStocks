@@ -24,6 +24,37 @@ def _detect_provider(connection_string: str) -> str:
     return "unknown"
 
 
+# ── MSSQL ODBC driver pre-check ──────────────────────────────────────────────
+
+def _check_mssql_odbc_driver() -> None:
+    """Validates that pyodbc and a Microsoft ODBC driver are installed before
+    attempting any MSSQL connection, so users get a clear actionable message
+    instead of a cryptic traceback.
+    """
+    try:
+        import pyodbc  # noqa: F401
+    except ImportError:
+        raise DatabaseConnectionError(
+            "The 'pyodbc' package is not installed. "
+            "Install it with: pip install pyodbc"
+        )
+
+    try:
+        import pyodbc as _pyodbc
+        drivers = [d for d in _pyodbc.drivers() if "SQL Server" in d or "ODBC Driver" in d]
+        if not drivers:
+            raise DatabaseConnectionError(
+                "No Microsoft ODBC Driver for SQL Server found on this system. "
+                "Download and install it from: "
+                "https://learn.microsoft.com/en-us/sql/connect/odbc/download-odbc-driver-for-sql-server"
+            )
+        logger.debug(f"MSSQL ODBC drivers found: {drivers}")
+    except DatabaseConnectionError:
+        raise
+    except Exception as exc:
+        logger.warning(f"Could not enumerate ODBC drivers: {exc}")
+
+
 # ── MSSQL LocalDB helpers (Windows-only) ────────────────────────────────────
 
 def _localdb_pipe() -> str:
@@ -186,6 +217,7 @@ class DatabaseManager:
         """Bootstraps the database and initialises the SQLAlchemy engine + session pool."""
         # Provider-specific pre-flight
         if self.provider == "mssql":
+            _check_mssql_odbc_driver()
             ensure_localdb_started()
             create_mssql_database_if_not_exists(self.connection_string)
         elif self.provider == "sqlite":

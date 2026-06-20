@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Send, Loader2, Plus, Sparkles } from 'lucide-react';
+import { Send, Loader2, Plus, Sparkles, Bot } from 'lucide-react';
 import { useConversationStore, AGENT_TYPES } from '../../store/useConversationStore';
 import { MessageBubble } from './MessageBubble';
 
@@ -73,8 +73,13 @@ export function ConversationThread() {
             {(SAMPLE_QUERIES[activeAgent] ?? []).map((q) => (
               <button
                 key={q}
-                onClick={() => setInput(q)}
-                className="text-left text-xs px-3 py-2.5 rounded-xl border border-slate-800 hover:border-slate-600 hover:bg-slate-800/60 transition-colors text-slate-400 hover:text-slate-200"
+                onClick={async () => {
+                  setInput(q);
+                  if (!isStreaming) {
+                    await sendMessage(q);
+                  }
+                }}
+                className="text-left text-xs px-3 py-2.5 rounded-xl border border-slate-800 hover:border-slate-600 hover:bg-slate-800/60 transition-colors text-slate-400 hover:text-slate-200 cursor-pointer"
               >
                 {q}
               </button>
@@ -116,7 +121,9 @@ export function ConversationThread() {
 
         {isStreaming && (
           <div className="flex gap-2 mb-4">
-            <div className="w-6 h-6 rounded-full bg-slate-800 flex items-center justify-center mt-1 shrink-0" />
+            <div className="shrink-0 w-6 h-6 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center mt-1 shrink-0">
+              <Bot size={12} className="text-purple-400 animate-pulse" />
+            </div>
             <div className="bg-[#121620] border border-slate-800 rounded-2xl rounded-tl-sm px-4 py-3">
               <StreamingIndicator />
             </div>
@@ -148,12 +155,23 @@ function InputBar({
   isStreaming: boolean;
   agentColor?: string;
 }) {
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (el) {
+      el.style.height = 'auto';
+      el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
+    }
+  }, [input]);
+
   return (
     <form
       onSubmit={onSubmit}
       className="shrink-0 border-t border-slate-800 bg-[#0d0f14] px-4 py-3 flex gap-2 items-end"
     >
       <textarea
+        ref={textareaRef}
         rows={1}
         value={input}
         onChange={(e) => setInput(e.target.value)}
@@ -171,7 +189,7 @@ function InputBar({
       <button
         type="submit"
         disabled={isStreaming || !input.trim()}
-        className="shrink-0 flex items-center justify-center w-9 h-9 rounded-xl text-white disabled:opacity-40 transition-opacity"
+        className="shrink-0 flex items-center justify-center w-9 h-9 rounded-xl text-white disabled:opacity-40 transition-opacity cursor-pointer"
         style={{ backgroundColor: agentColor ?? '#7c3aed' }}
       >
         {isStreaming ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
