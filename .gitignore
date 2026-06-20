@@ -279,3 +279,10 @@ data/
 vajra.db
 vajra.db-*
 *.db-journal
+VajraML/results/
+VajraML/models/
+VajraML2/results/
+VajraML2/models/
+VajraML2/*.log
+
+

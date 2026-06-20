@@ -253,7 +253,7 @@ class SyncEngine:
                 range_groups[key].append(item[0])
 
             # 5. Process each date range group in batches
-            batch_size = self.config.downloader.batch_size
+            batch_size = min(50, self.config.downloader.batch_size)
 
             for (start_date, end_date), symbols_list in range_groups.items():
                 logger.info(
@@ -314,6 +314,9 @@ class SyncEngine:
                                         logger.error(
                                             f"[{ticker}] Failed to calculate or save derived data: {derived_err}"
                                         )
+
+                                    # Post-sync hook: Option B conditional news/fundamentals
+                                    self.sync_news_and_fundamentals_if_stale(session, symbol_obj, ticker)
                                 else:
                                     failed_symbols += 1
                                     err_summary_list.append(
@@ -375,6 +378,9 @@ class SyncEngine:
                                         logger.error(
                                             f"[{ticker}] Failed to calculate or save derived data: {derived_err}"
                                         )
+
+                                    # Post-sync hook: Option B conditional news/fundamentals
+                                    self.sync_news_and_fundamentals_if_stale(session, symbol_obj, ticker)
                                 else:
                                     failed_symbols += 1
                                     err_summary_list.append(
@@ -406,8 +412,16 @@ class SyncEngine:
             except Exception as strat_err:
                 logger.error(f"Failed to materialize strategy signals post-sync: {strat_err}")
 
-            # Post-Sync Hook: Run VajraML predictions and write ml_prediction / ml_rank / ml_label
-            # into screening_snapshots for every universe stock.
+            # Post-Sync Hook: Compute programmatic trendlines for all symbols.
+            try:
+                from stocks.services.trendline_service import TrendlineService
+
+                TrendlineService(session).refresh_all()
+            except Exception as tl_err:
+                logger.error(f"Failed to compute trendlines post-sync: {tl_err}")
+
+            # Post-Sync Hook: Run VajraML2 (triple-barrier) predictions.
+            # V2 is the primary ML signal — writes ml2_* AND the shared ml_label/ml_rank/ml_prediction columns.
             try:
                 import sys
                 from pathlib import Path as _Path
@@ -416,11 +430,11 @@ class SyncEngine:
                 if _vajra_root not in sys.path:
                     sys.path.insert(0, _vajra_root)
 
-                from VajraML.predict import run_ml_snapshot_update
+                from VajraML2.predict import run_ml2_snapshot_update
 
-                run_ml_snapshot_update(self.db_manager.engine)
-            except Exception as ml_err:
-                logger.error(f"Failed to run VajraML ML snapshot update post-sync: {ml_err}")
+                run_ml2_snapshot_update(self.db_manager.engine)
+            except Exception as ml2_err:
+                logger.error(f"Failed to run VajraML2 V2 snapshot update post-sync: {ml2_err}")
 
             # 6. Finalize Sync Job status
             final_status = "SUCCESS"
@@ -615,3 +629,44 @@ class SyncEngine:
             return False
 
         return True
+
+    def sync_news_and_fundamentals_if_stale(
+        self, session, symbol_obj: Any, ticker: str
+    ) -> None:
+        """Fetch and store news and fundamentals only if missing or stale (Option B)."""
+        try:
+            import sys
+            if "pytest" in sys.modules:
+                return
+
+            from sqlalchemy import select
+            from sqlalchemy.orm import Session
+            from stocks.db.models import NewsItem
+            from stocks.services.fundamentals_service import FundamentalsService
+            from stocks.services.news_service import NewsService
+
+            clean_symbol = ticker.replace(".NS", "").upper()
+
+            # 1. Fundamentals (get_or_fetch automatically caches for 7 days)
+            fundamentals_svc = FundamentalsService(session)
+            fundamentals_svc.get_or_fetch(symbol_obj.id, clean_symbol)
+
+            # 2. News (fetch if missing or if the latest fetch is older than 24 hours)
+            latest_news = session.scalar(
+                select(NewsItem)
+                .where(NewsItem.symbol == clean_symbol)
+                .order_by(NewsItem.fetched_at.desc())
+                .limit(1)
+            )
+
+            should_fetch_news = True
+            if latest_news:
+                age_hours = (datetime.datetime.now() - latest_news.fetched_at).total_seconds() / 3600.0
+                if age_hours < 24.0:
+                    should_fetch_news = False
+
+            if should_fetch_news:
+                NewsService(session).fetch_and_store(clean_symbol)
+
+        except Exception as info_err:
+            logger.error(f"[{ticker}] Failed to sync news/fundamentals: {info_err}")

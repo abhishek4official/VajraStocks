@@ -3,6 +3,7 @@ from typing import Optional
 
 from sqlalchemy import (
     BIGINT,
+    JSON,
     Boolean,
     Date,
     DateTime,
@@ -69,6 +70,9 @@ class Symbol(Base):
     )
     strategy_signals: Mapped[list["StrategySignal"]] = relationship(
         "StrategySignal", back_populates="symbol_obj", cascade="all, delete-orphan"
+    )
+    trendlines: Mapped[list["SymbolTrendline"]] = relationship(
+        "SymbolTrendline", back_populates="symbol_obj", cascade="all, delete-orphan"
     )
 
 
@@ -338,7 +342,7 @@ class ScreeningSnapshot(Base):
     stoch_state: Mapped[str | None] = mapped_column(String(15), nullable=True)           # OVERBOUGHT / OVERSOLD / NEUTRAL
 
     # Volume profile
-    weekly_avg_volume: Mapped[float | None] = mapped_column(Float, nullable=True)
+    avg_traded_value: Mapped[float | None] = mapped_column(Float, nullable=True)
     volume_breakout_ratio: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     # Composite scoring (0-100 per component + weighted total)
@@ -362,10 +366,30 @@ class ScreeningSnapshot(Base):
     stochrsi_bullish_xover_days_ago: Mapped[int | None] = mapped_column(Integer, nullable=True)
     stochrsi_bearish_xover_days_ago: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
-    # ML Prediction (written by VajraML post-sync hook, not by the per-symbol screening refresh)
-    ml_prediction: Mapped[float | None] = mapped_column(Float, nullable=True)
-    ml_rank: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    ml_label: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # VajraML2 Prediction (triple-barrier classifier, written by V2 post-sync hook)
+    ml2_p_tp: Mapped[float | None] = mapped_column(Float, nullable=True)
+    ml2_p_sl: Mapped[float | None] = mapped_column(Float, nullable=True)
+    ml2_ev_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    ml2_rank: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    ml2_signal: Mapped[str | None] = mapped_column(String(20), nullable=True)
+
+    # Crossover recency — trading days since last crossover event (None = not seen within 20-day window)
+    days_since_price_sma20_bull: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    days_since_price_sma50_bull: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    days_since_price_ema20_bull: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    days_since_ema9_ema20_bull:  Mapped[int | None] = mapped_column(Integer, nullable=True)
+    days_since_ema9_ema20_bear:  Mapped[int | None] = mapped_column(Integer, nullable=True)
+    days_since_sma20_sma50_bull: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    days_since_macd_bull:        Mapped[int | None] = mapped_column(Integer, nullable=True)
+    days_since_macd_bear:        Mapped[int | None] = mapped_column(Integer, nullable=True)
+    days_since_cmf_bull:         Mapped[int | None] = mapped_column(Integer, nullable=True)
+    days_since_cmf_bear:         Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    # Continuous crossover distance / momentum
+    ema9_ema20_spread:    Mapped[float | None] = mapped_column(Float, nullable=True)   # (EMA9-EMA20)/close*100
+    macd_histogram_slope: Mapped[float | None] = mapped_column(Float, nullable=True)   # 3-day macd_hist slope
+    macd_above_zero:      Mapped[bool | None]  = mapped_column(Boolean, nullable=True) # macd_line > 0
+    cmf_slope_5d:         Mapped[float | None] = mapped_column(Float, nullable=True)   # CMF 5-day change
 
     updated_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now())
 
@@ -395,6 +419,25 @@ class MLTrainingRun(Base):
     date_range_start: Mapped[datetime.date | None] = mapped_column(Date, nullable=True)
     date_range_end:   Mapped[datetime.date | None] = mapped_column(Date, nullable=True)
     mean_ic:          Mapped[float | None]         = mapped_column(Float, nullable=True)
+    fold_metrics:     Mapped[str | None]           = mapped_column(Text, nullable=True)   # JSON array
+    error_message:    Mapped[str | None]           = mapped_column(Text, nullable=True)
+    started_at:       Mapped[datetime.datetime]    = mapped_column(DateTime, default=func.now())
+    completed_at:     Mapped[datetime.datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class ML2TrainingRun(Base):
+    """Persists each VajraML2 (triple-barrier classifier) training run."""
+
+    __tablename__ = "ml2_training_runs"
+
+    id:               Mapped[int]                  = mapped_column(Integer, primary_key=True, autoincrement=True)
+    version:          Mapped[str]                  = mapped_column(String(30), nullable=False)
+    status:           Mapped[str]                  = mapped_column(String(20), nullable=False, default="RUNNING")
+    num_folds:        Mapped[int | None]           = mapped_column(Integer, nullable=True)
+    dataset_rows:     Mapped[int | None]           = mapped_column(Integer, nullable=True)
+    date_range_start: Mapped[datetime.date | None] = mapped_column(Date, nullable=True)
+    date_range_end:   Mapped[datetime.date | None] = mapped_column(Date, nullable=True)
+    mean_ic_ptp:      Mapped[float | None]         = mapped_column(Float, nullable=True)
     fold_metrics:     Mapped[str | None]           = mapped_column(Text, nullable=True)   # JSON array
     error_message:    Mapped[str | None]           = mapped_column(Text, nullable=True)
     started_at:       Mapped[datetime.datetime]    = mapped_column(DateTime, default=func.now())
@@ -536,4 +579,215 @@ class StrategySignal(Base):
     __table_args__ = (
         UniqueConstraint("symbol_id", "strategy_id", name="UQ_StrategySignal_Symbol_Strategy"),
         Index("ix_strategy_signals_strategy_signal_score", "strategy_id", "signal", "score"),
+    )
+
+
+class Watchlist(Base):
+    """User-named watchlist (persisted to DB so it survives browser cache clears)."""
+
+    __tablename__ = "watchlists"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=func.now())
+
+    items: Mapped[list["WatchlistItem"]] = relationship(
+        "WatchlistItem", back_populates="watchlist_obj", cascade="all, delete-orphan"
+    )
+
+
+class WatchlistItem(Base):
+    """Single symbol entry within a Watchlist."""
+
+    __tablename__ = "watchlist_items"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    watchlist_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("watchlists.id", ondelete="CASCADE"), nullable=False
+    )
+    symbol: Mapped[str] = mapped_column(String(50), nullable=False)
+    added_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=func.now())
+
+    watchlist_obj: Mapped["Watchlist"] = relationship("Watchlist", back_populates="items")
+
+    __table_args__ = (
+        UniqueConstraint("watchlist_id", "symbol", name="UQ_WatchlistItem_WatchlistSymbol"),
+    )
+
+
+class SymbolFundamentals(Base):
+    """Fundamental data fetched weekly via yfinance for each symbol."""
+
+    __tablename__ = "symbol_fundamentals"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    symbol_id: Mapped[int] = mapped_column(Integer, ForeignKey("symbols.id", ondelete="CASCADE"), nullable=False, unique=True)
+    symbol: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+
+    # Valuation
+    market_cap: Mapped[float | None] = mapped_column(Float, nullable=True)
+    enterprise_value: Mapped[float | None] = mapped_column(Float, nullable=True)
+    pe_ratio: Mapped[float | None] = mapped_column(Float, nullable=True)
+    forward_pe: Mapped[float | None] = mapped_column(Float, nullable=True)
+    pb_ratio: Mapped[float | None] = mapped_column(Float, nullable=True)
+    ev_ebitda: Mapped[float | None] = mapped_column(Float, nullable=True)
+    price_to_sales: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    # Income
+    revenue_ttm: Mapped[float | None] = mapped_column(Float, nullable=True)
+    net_profit_ttm: Mapped[float | None] = mapped_column(Float, nullable=True)
+    ebitda: Mapped[float | None] = mapped_column(Float, nullable=True)
+    gross_margin: Mapped[float | None] = mapped_column(Float, nullable=True)
+    profit_margin: Mapped[float | None] = mapped_column(Float, nullable=True)
+    operating_margin: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    # Per share
+    eps_ttm: Mapped[float | None] = mapped_column(Float, nullable=True)
+    book_value: Mapped[float | None] = mapped_column(Float, nullable=True)
+    dividend_yield: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    # Quality
+    roe: Mapped[float | None] = mapped_column(Float, nullable=True)
+    roa: Mapped[float | None] = mapped_column(Float, nullable=True)
+    debt_to_equity: Mapped[float | None] = mapped_column(Float, nullable=True)
+    current_ratio: Mapped[float | None] = mapped_column(Float, nullable=True)
+    free_cashflow: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    # Classification
+    sector: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    industry: Mapped[str | None] = mapped_column(String(200), nullable=True)
+
+    fetched_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now())
+
+
+class NSEAnnouncement(Base):
+    """Corporate announcements fetched from NSE's official public API."""
+
+    __tablename__ = "nse_announcements"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    symbol_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("symbols.id", ondelete="CASCADE"), nullable=True)
+    symbol: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    seq_id: Mapped[str] = mapped_column(String(50), nullable=False, unique=True)
+    announcement_date: Mapped[datetime.datetime] = mapped_column(DateTime, nullable=False)
+    subject: Mapped[str] = mapped_column(String(500), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    file_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    fetched_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=func.now())
+
+    __table_args__ = (
+        Index("ix_nse_announcements_symbol_date", "symbol", "announcement_date"),
+    )
+
+
+class NewsItem(Base):
+    """Financial news fetched from yfinance per symbol."""
+
+    __tablename__ = "news_items"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    symbol: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    article_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    title: Mapped[str] = mapped_column(String(500), nullable=False)
+    publisher: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    link: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    published_at: Mapped[datetime.datetime | None] = mapped_column(DateTime, nullable=True)
+    fetched_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("symbol", "article_id", name="UQ_NewsItem_Symbol_ArticleId"),
+        Index("ix_news_items_symbol_published", "symbol", "published_at"),
+    )
+
+
+# ─── AI Conversation Models ───────────────────────────────────────────────────
+
+class ConversationThread(Base):
+    """One persistent chat thread per agent type. Backed by LangGraph MemorySaver thread_id."""
+
+    __tablename__ = "conversation_threads"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)  # UUID
+    agent_type: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String(200), nullable=False, default="New conversation")
+    message_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=func.now())
+    last_active_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now())
+    is_archived: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+    messages: Mapped[list["ConversationMessage"]] = relationship(
+        "ConversationMessage", back_populates="thread", cascade="all, delete-orphan",
+        order_by="ConversationMessage.created_at",
+    )
+    summaries: Mapped[list["ConversationSummary"]] = relationship(
+        "ConversationSummary", back_populates="thread", cascade="all, delete-orphan",
+    )
+
+    __table_args__ = (
+        Index("ix_conv_threads_agent_active", "agent_type", "last_active_at"),
+    )
+
+
+class ConversationMessage(Base):
+    """Individual message (user turn or agent response) inside a conversation thread."""
+
+    __tablename__ = "conversation_messages"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    thread_id: Mapped[str] = mapped_column(String(36), ForeignKey("conversation_threads.id", ondelete="CASCADE"), nullable=False)
+    role: Mapped[str] = mapped_column(String(10), nullable=False)  # 'user' | 'agent'
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    recommendation: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    confidence: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    annotation: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_summarized: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=func.now())
+
+    thread: Mapped["ConversationThread"] = relationship("ConversationThread", back_populates="messages")
+
+    __table_args__ = (
+        Index("ix_conv_messages_thread_created", "thread_id", "created_at"),
+    )
+
+
+class ConversationSummary(Base):
+    """Rolling condensed summary of older messages in a thread."""
+
+    __tablename__ = "conversation_summaries"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    thread_id: Mapped[str] = mapped_column(String(36), ForeignKey("conversation_threads.id", ondelete="CASCADE"), nullable=False)
+    summary_text: Mapped[str] = mapped_column(Text, nullable=False)
+    covers_message_ids: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    key_tickers: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    key_decisions: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    generated_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=func.now())
+
+    thread: Mapped["ConversationThread"] = relationship("ConversationThread", back_populates="summaries")
+
+
+class SymbolTrendline(Base):
+    """Backend-computed trendlines for each symbol, refreshed after each EOD sync."""
+
+    __tablename__ = "symbol_trendlines"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    symbol_id: Mapped[int] = mapped_column(Integer, ForeignKey("symbols.id", ondelete="CASCADE"), nullable=False)
+    symbol: Mapped[str] = mapped_column(String(50), nullable=False)
+    trendline_type: Mapped[str] = mapped_column(String(10), nullable=False)  # 'SUPPORT' or 'RESISTANCE'
+    anchor1_date: Mapped[datetime.date] = mapped_column(Date, nullable=False)
+    anchor1_price: Mapped[float] = mapped_column(Float, nullable=False)
+    anchor2_date: Mapped[datetime.date] = mapped_column(Date, nullable=False)
+    anchor2_price: Mapped[float] = mapped_column(Float, nullable=False)
+    touch_count: Mapped[int] = mapped_column(Integer, nullable=False, default=2)
+    score: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    slope_pct_per_day: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    is_broken: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    break_date: Mapped[datetime.date | None] = mapped_column(Date, nullable=True)
+    computed_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=func.now())
+
+    symbol_obj: Mapped["Symbol"] = relationship("Symbol", back_populates="trendlines")
+
+    __table_args__ = (
+        Index("ix_trendlines_symbol_id", "symbol_id"),
     )

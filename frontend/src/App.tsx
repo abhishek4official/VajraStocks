@@ -10,7 +10,7 @@ import { CorporateActionsTimeline } from './components/CorporateActionsTimeline'
 import { ScreenerPanel } from './components/ScreenerPanel';
 import { StrategyPanel } from './components/StrategyPanel';
 import { SyncPanel } from './components/SyncPanel';
-import { AgentTerminal } from './components/AgentTerminal';
+import { AIResearch } from './components/AIResearch';
 import { PortfolioPanel } from './components/PortfolioPanel';
 import { WatchlistPanel } from './components/WatchlistPanel';
 import { TradePlanCard } from './components/TradePlanCard';
@@ -18,7 +18,10 @@ import { ComparePanel } from './components/ComparePanel';
 import { SettingsPanel } from './components/SettingsPanel';
 import { SetupWizard } from './components/SetupWizard';
 import { AboutPanel } from './components/AboutPanel';
-import { MLTrainingPanel } from './components/MLTrainingPanel';
+import { ML2TrainingPanel } from './components/ML2TrainingPanel';
+import { FundamentalsCard } from './components/FundamentalsCard';
+import { AnnouncementsPanel } from './components/AnnouncementsPanel';
+import { NewsPanel } from './components/NewsPanel';
 import {
   LineChart,
   Search,
@@ -98,6 +101,7 @@ function Dashboard() {
 
   const [indicatorToShow, setIndicatorToShow] = useState<'RSI' | 'MACD' | 'CMF' | 'STOCHRSI' | 'NONE'>('RSI');
   const [drawMode, setDrawMode] = useState(false);
+  const [researchTab, setResearchTab] = useState<'fundamentals' | 'news' | 'announcements'>('fundamentals');
 
   // Compute 52W High/Low from candles in the store (last 252 trading days ≈ 1 year)
   const stats52w = useMemo(() => {
@@ -144,7 +148,7 @@ function Dashboard() {
 
     const handlePopState = () => {
       const path = window.location.pathname.replace(/^\/+/, '').split('/')[0];
-      const valid = ['explorer', 'screener', 'strategy', 'sync', 'ai-research', 'portfolio', 'watchlist', 'about', 'ml-training'];
+      const valid = ['explorer', 'screener', 'strategy', 'sync', 'ai-research', 'portfolio', 'watchlist', 'about', 'ml2-training'];
       const tab = valid.includes(path) ? path : 'explorer';
       useStockStore.setState({ activeTab: tab as any });
     };
@@ -204,7 +208,7 @@ function Dashboard() {
             { id: 'watchlist',   label: 'Watchlist',   Icon: Bookmark    },
             { id: 'compare',     label: 'Compare',     Icon: TrendingUp  },
             { id: 'ai-research', label: 'AI Research', Icon: Cpu         },
-            { id: 'ml-training', label: 'ML Model',    Icon: Brain       },
+            { id: 'ml2-training', label: 'ML Model',    Icon: Brain       },
             { id: 'about',       label: 'About',       Icon: BookOpen    },
             { id: 'settings',    label: 'Settings',    Icon: Settings    },
           ] as const).map(({ id, label, Icon }) => (
@@ -466,8 +470,9 @@ function Dashboard() {
                         { key: 'ema9'   as const, label: 'EMA 9',   color: 'text-cyan-400'   },
                         { key: 'ema21'  as const, label: 'EMA 21',  color: 'text-orange-400' },
                         { key: 'bb'     as const, label: 'BB',      color: 'text-slate-300'  },
-                        { key: 'sr'     as const, label: 'S/R',     color: 'text-yellow-400' },
-                        { key: 'nifty'  as const, label: 'NIFTY',   color: 'text-yellow-300', disabled: niftyCandles.length === 0 },
+                        { key: 'sr'         as const, label: 'S/R',        color: 'text-yellow-400' },
+                        { key: 'trendlines' as const, label: 'Trendlines', color: 'text-violet-400' },
+                        { key: 'nifty'      as const, label: 'NIFTY',      color: 'text-yellow-300', disabled: niftyCandles.length === 0 },
                       ]).map(({ key, label, color, disabled = false }) => (
                         <button
                           key={key}
@@ -508,9 +513,40 @@ function Dashboard() {
                   
                   {/* Multi-Pane Grid details */}
                   <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 min-h-[350px]">
-                    <div className="xl:col-span-2">
+                    <div className="xl:col-span-2 flex flex-col gap-4">
                       <MetricsTable />
+                      
+                      {/* Research panel — Fundamentals / News / NSE Announcements */}
+                      <div className="w-full rounded-xl border border-slate-800/80 bg-[#121620]/60 overflow-hidden shrink-0">
+                        {/* Tab bar */}
+                        <div className="flex items-center border-b border-slate-800 px-2 pt-1">
+                          {([
+                            { id: 'fundamentals'  as const, label: 'Fundamentals' },
+                            { id: 'news'          as const, label: 'News'         },
+                            { id: 'announcements' as const, label: 'NSE Filings'  },
+                          ]).map(({ id, label }) => (
+                            <button
+                              key={id}
+                              onClick={() => setResearchTab(id)}
+                              className={`px-4 py-2 text-xs font-bold border-b-2 transition-colors cursor-pointer ${
+                                researchTab === id
+                                  ? 'border-purple-500 text-purple-300'
+                                  : 'border-transparent text-slate-500 hover:text-slate-300'
+                              }`}
+                            >
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                        {/* Tab content — no extra card wrapper inside since each component is self-contained */}
+                        <div className="p-4">
+                          {researchTab === 'fundamentals'  && <FundamentalsCard  symbol={activeSymbol} />}
+                          {researchTab === 'news'          && <NewsPanel         symbol={activeSymbol} />}
+                          {researchTab === 'announcements' && <AnnouncementsPanel symbol={activeSymbol} />}
+                        </div>
+                      </div>
                     </div>
+
                     <div className="xl:col-span-1 flex flex-col gap-4">
                       <TradePlanCard />
                       <CorporateActionsTimeline />
@@ -538,7 +574,7 @@ function Dashboard() {
         {activeTab === 'sync' && <SyncPanel />}
 
         {/* TAB 4: AI Research Workspace */}
-        {activeTab === 'ai-research' && <AgentTerminal />}
+        {activeTab === 'ai-research' && <AIResearch />}
 
         {/* TAB 5: Portfolio */}
         {activeTab === 'portfolio' && <PortfolioPanel />}
@@ -553,7 +589,7 @@ function Dashboard() {
         {activeTab === 'about' && <AboutPanel />}
 
         {/* ML Training */}
-        {activeTab === 'ml-training' && <MLTrainingPanel />}
+        {activeTab === 'ml2-training' && <ML2TrainingPanel />}
 
         {/* TAB 6: Watchlist */}
         {activeTab === 'watchlist' && <WatchlistPanel />}
@@ -562,7 +598,7 @@ function Dashboard() {
 
       {/* Sticky footer */}
       <footer className="h-7 shrink-0 border-t border-slate-800/60 bg-[#0d0f14]/80 backdrop-blur-md flex items-center justify-between px-5 z-40">
-        <span className="text-[10px] font-bold text-slate-300">VajraStocks v1.4.0 — Data © Yahoo Finance, for personal use only</span>
+        <span className="text-[10px] font-bold text-slate-300">VajraStocks v1.5.0 — Data © Yahoo Finance, for personal use only</span>
         <a
           href="https://abhishek4official.github.io/"
           target="_blank"

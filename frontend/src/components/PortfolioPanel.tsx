@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { useStockStore } from '../store/useStockStore';
 import {
   Upload, Trash2, TrendingUp, TrendingDown, Minus, BarChart2, ShieldAlert,
@@ -9,23 +9,13 @@ import type { PortfolioHolding } from '../services/api';
 export const PortfolioPanel: React.FC = () => {
   const {
     portfolio, portfolioLoading, fetchPortfolio, importPortfolioFile, clearPortfolio,
-    setSelectedSymbol, setActiveTab, niftyCandles,
+    setSelectedSymbol, setActiveTab,
   } = useStockStore();
 
   useEffect(() => { fetchPortfolio(); }, [fetchPortfolio]);
 
   const holdings = portfolio?.holdings ?? [];
   const agg = portfolio?.aggregates ?? null;
-
-  const niftyReturn = useMemo(() => {
-    if (!niftyCandles.length) return null;
-    const cutoff = new Date(); cutoff.setFullYear(cutoff.getFullYear() - 1);
-    const cutStr = cutoff.toISOString().split('T')[0];
-    const old = niftyCandles.find(c => c.time >= cutStr);
-    const latest = niftyCandles[niftyCandles.length - 1];
-    if (!old || old.close === 0) return null;
-    return (latest.close - old.close) / old.close * 100;
-  }, [niftyCandles]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -146,7 +136,6 @@ export const PortfolioPanel: React.FC = () => {
 
   const pnl = agg.include_charges ? agg.net_pnl : agg.total_pnl;
   const pnlUp = pnl >= 0;
-  const alpha = niftyReturn !== null ? agg.total_return_pct - niftyReturn : null;
   const openRiskPct = agg.total_current > 0 ? (agg.open_risk / agg.total_current) * 100 : 0;
 
   // Heat gauge scale (limit sits at ~62% of the track so the danger zone is visible)
@@ -203,15 +192,10 @@ export const PortfolioPanel: React.FC = () => {
             </div>
 
             {/* Inline stats */}
-            <div className="flex items-center gap-6 sm:gap-8">
+            <div className="flex items-center gap-6 sm:gap-8 flex-wrap">
               {[
                 { label: 'Invested', value: `₹${fmtINR0(agg.total_invested)}`, color: 'text-slate-200' },
                 { label: agg.include_charges ? 'Net P&L' : 'P&L', value: `${pnlUp ? '+' : ''}₹${fmtINR0(pnl)}`, sub: `${signed(agg.total_return_pct)}%`, color: pnlText(pnl) },
-                {
-                  label: 'Alpha vs NIFTY',
-                  value: alpha !== null ? `${signed(alpha)}%` : '—',
-                  color: alpha === null ? 'text-slate-500' : alpha >= 0 ? 'text-purple-300' : 'text-amber-400',
-                },
                 { label: 'Positions', value: String(agg.positions), color: 'text-slate-200' },
               ].map(({ label, value, color, sub }) => (
                 <div key={label}>
@@ -220,6 +204,27 @@ export const PortfolioPanel: React.FC = () => {
                   {sub && <p className={`text-[10px] font-mono ${color} opacity-70`}>{sub}</p>}
                 </div>
               ))}
+              {/* Rolling alpha chips */}
+              <div>
+                <p className="text-[10px] uppercase tracking-wide text-slate-500 mb-1">Alpha vs NIFTY</p>
+                <div className="flex items-center gap-1.5">
+                  {([['1W', agg.alpha_1w], ['4W', agg.alpha_4w], ['3M', agg.alpha_3m]] as [string, number | null | undefined][]).map(([lbl, val]) => (
+                    <span
+                      key={lbl}
+                      title={`${lbl} portfolio alpha vs NIFTY (portfolio return − benchmark return)`}
+                      className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${
+                        val == null
+                          ? 'text-slate-500 bg-slate-800/30 border-slate-700/30'
+                          : val >= 0
+                          ? 'text-purple-300 bg-purple-900/15 border-purple-500/25'
+                          : 'text-amber-400 bg-amber-900/15 border-amber-500/25'
+                      }`}
+                    >
+                      {lbl} {val != null ? `${signed(val)}%` : '—'}
+                    </span>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -316,6 +321,7 @@ export const PortfolioPanel: React.FC = () => {
                 <th className="py-2.5 px-3 text-right font-semibold" title="ATR-based first target (close + 1.5×ATR) and % upside">Target 1</th>
                 <th className="py-2.5 px-3 text-right font-semibold">R:R</th>
                 <th className="py-2.5 px-3 text-right font-semibold">RS</th>
+                <th className="py-2.5 px-3 text-right font-semibold" title="Composite score (trend + volume + RS + momentum + CMF + breakout, 0–100)">Score</th>
                 <th className="py-2.5 pr-5 pl-3 text-center font-semibold"></th>
               </tr>
             </thead>
@@ -376,7 +382,13 @@ export const PortfolioPanel: React.FC = () => {
                     </td>
                     <td className="py-3 px-3 text-right font-mono text-slate-300 whitespace-nowrap">
                       {h.open_risk !== null
-                        ? <>₹{fmtINR0(h.open_risk)}<span className="text-slate-600 text-[10px]"> @{fmtINR0(h.stop ?? 0)}</span></>
+                        ? <>
+                            ₹{fmtINR0(h.open_risk)}
+                            <span className="text-slate-600 text-[10px]"> @{fmtINR0(h.stop ?? 0)}</span>
+                            {h.stop_type === 'supertrend' && (
+                              <span className="ml-1 text-[8px] font-bold text-purple-400/80" title="Supertrend trailing stop">ST</span>
+                            )}
+                          </>
                         : '—'}
                     </td>
                     <td className="py-3 px-3 text-right font-mono text-slate-300 whitespace-nowrap">
@@ -404,6 +416,17 @@ export const PortfolioPanel: React.FC = () => {
                     </td>
                     <td className={`py-3 px-3 text-right font-mono ${h.rs_score_1m !== null && h.rs_score_1m >= 1 ? 'text-emerald-400' : 'text-slate-400'}`}>
                       {h.rs_score_1m !== null ? fmt(h.rs_score_1m) : '—'}
+                    </td>
+                    <td className="py-3 px-3 text-right">
+                      {h.composite_score != null ? (
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                          h.composite_score >= 65 ? 'text-emerald-400 bg-emerald-950/20'
+                          : h.composite_score >= 40 ? 'text-amber-400 bg-amber-950/20'
+                          : 'text-rose-400 bg-rose-950/20'
+                        }`}>
+                          {h.composite_score.toFixed(0)}
+                        </span>
+                      ) : <span className="text-slate-600 text-xs">—</span>}
                     </td>
                     <td className="py-3 pr-5 pl-3 text-center">
                       <button

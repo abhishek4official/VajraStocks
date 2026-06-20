@@ -59,6 +59,7 @@ class AIConfig(BaseModel):
     provider: str = "ollama"
     base_url: str = "http://localhost:11434"
     model: str = "qwen2.5-coder:7b"
+    api_key: str = ""
 
 
 class Config(BaseModel):

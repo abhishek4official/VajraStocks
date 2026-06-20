@@ -276,7 +276,37 @@ def train_with_progress(engine, cancel_event: threading.Event,
 
             test_start += TEST_DAYS
 
-        # ── 5. Finalise ────────────────────────────────────────────────────────
+        # ── 5. Final production model on ALL available data ────────────────────
+        # The walk-forward folds give honest out-of-sample evaluation.
+        # This step retrains on everything with a valid target so the deployed
+        # model has learned the most recent patterns, not just data from 3+ months ago.
+        emit({"type": "stage",
+              "message": "Training final production model on all available data...",
+              "pct": 96})
+        final_df = df.dropna(subset=["fwd_ret_vol_adj", "fwd_ret_5d"])
+        if len(final_df) >= 1_000 and not cancel_event.is_set():
+            X_ft = final_df[feature_cols]
+            y_ft = final_df["fwd_ret_vol_adj"]
+            y_ft_win = pd.Series(
+                mstats.winsorize(y_ft.values, limits=[0.01, 0.01]),
+                index=y_ft.index,
+            )
+            cb_ft = _make_lgbm_callback(cancel_event, progress_q, 0, 96, 99)
+            lgbm_final = lgb.LGBMRegressor(**params)
+            lgbm_final.fit(X_ft, y_ft_win, callbacks=[cb_ft])
+
+            sc_ft = RobustScaler()
+            X_ft_s = sc_ft.fit_transform(X_ft.fillna(0))
+            ridge_final = Ridge(alpha=RIDGE_ALPHA)
+            ridge_final.fit(X_ft_s, y_ft_win)
+
+            final_dir = MODELS_DIR / "fold_final"
+            final_dir.mkdir(exist_ok=True)
+            lgbm_final.booster_.save_model(str(final_dir / "lgbm.txt"))
+            with open(final_dir / "ridge.pkl", "wb") as fh:
+                pickle.dump({"model": ridge_final, "scaler": sc_ft}, fh)
+
+        # ── 6. Finalise ────────────────────────────────────────────────────────
         mean_ic = float(np.mean([r.get("lgbm_ic", 0) for r in results]))
         fold_metrics = json.dumps([
             {

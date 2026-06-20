@@ -13,6 +13,7 @@ import type {
   SymbolSyncStatus,
   PortfolioData,
   ConfluenceLevel,
+  TrendlineData,
   StockAlert,
 } from '../services/api';
 
@@ -30,7 +31,7 @@ interface ScreenerFilters {
   ha_dir?: 'UP' | 'DOWN';
   renko_dir?: 'UP' | 'DOWN';
   lb_dir?: 'UP' | 'DOWN';
-  min_weekly_avg_volume?: number;
+  min_avg_traded_value?: number;
   volume_breakout?: 'ANY' | '1.5X' | '2.0X' | '3.0X';
   only_nr7?: boolean;
   only_inside_bar?: boolean;
@@ -44,10 +45,14 @@ interface ScreenerFilters {
   min_stochrsi_k?: number;
   max_stochrsi_k?: number;
   stochrsi_bullish_xover_max_days?: number;
+  ema_ribbon_bull_max_days?: number;
+  golden_cross_max_days?: number;
+  macd_bull_xover_max_days?: number;
+  cmf_bull_xover_max_days?: number;
   limit?: number;
 }
 
-export type ChartOverlay = 'sma20' | 'sma50' | 'sma200' | 'ema9' | 'ema21' | 'bb' | 'sr' | 'nifty';
+export type ChartOverlay = 'sma20' | 'sma50' | 'sma200' | 'ema9' | 'ema21' | 'bb' | 'sr' | 'nifty' | 'trendlines';
 
 export interface WatchlistItem {
   symbol: string;       // e.g. RELIANCE.NS
@@ -71,7 +76,7 @@ export interface WatchlistAlert {
   createdAt: string;
 }
 
-type TabId = 'explorer' | 'screener' | 'strategy' | 'sync' | 'ai-research' | 'portfolio' | 'watchlist' | 'compare' | 'settings' | 'about' | 'ml-training';
+type TabId = 'explorer' | 'screener' | 'strategy' | 'sync' | 'ai-research' | 'portfolio' | 'watchlist' | 'compare' | 'settings' | 'about' | 'ml2-training';
 type ChartTimeframe = '1W' | '1M' | '3M' | '6M' | '1Y' | 'MAX';
 
 // ─── Store shape ──────────────────────────────────────────────────────────────
@@ -93,6 +98,7 @@ interface StockState {
   corporateActions: CorporateAction[];
   niftyCandles: CandleData[];
   confluenceLevels: ConfluenceLevel[];
+  trendlines: TrendlineData[];
   // Per-symbol custom horizontal price lines (persisted to localStorage)
   customLines: Record<string, number[]>;
 
@@ -101,15 +107,6 @@ interface StockState {
 
   syncJobs: SyncJob[];
   syncStatuses: SymbolSyncStatus[];
-
-  // AI
-  aiQuery: string;
-  aiIsLoading: boolean;
-  aiEvents: { agent?: string; status: string; data?: Record<string, unknown> }[];
-  aiReport: string | null;
-  aiRecommendation: string | null;
-  aiConfidence: string | null;
-  _activeEventSource: EventSource | null;
 
   fetchNiftyCandles: () => Promise<void>;
   addCustomLine: (symbol: string, price: number) => void;
@@ -122,6 +119,8 @@ interface StockState {
   // Stock alerts (backend-evaluated post-sync)
   stockAlerts: StockAlert[];
   stockAlertsLoading: boolean;
+  _seenAlertIds: Set<number>;
+  _alertsInitialized: boolean;
 
   // Watchlists
   watchlists: Watchlist[];
@@ -138,9 +137,6 @@ interface StockState {
   setChartTimeframe: (tf: ChartTimeframe) => void;
   toggleChartOverlay: (overlay: ChartOverlay) => void;
   setScreenerFilters: (filters: Partial<ScreenerFilters>) => void;
-  setAiQuery: (query: string) => void;
-  clearAiConsole: () => void;
-
   // Portfolio actions (backend-driven)
   fetchPortfolio: () => Promise<void>;
   importPortfolioFile: (file: File) => Promise<void>;
@@ -152,6 +148,7 @@ interface StockState {
   dismissAllStockAlerts: () => Promise<void>;
 
   // Watchlist actions
+  fetchWatchlists: () => Promise<void>;
   createWatchlist: (name: string) => void;
   deleteWatchlist: (id: string) => void;
   renameWatchlist: (id: string, name: string) => void;
@@ -174,7 +171,6 @@ interface StockState {
   triggerSymbolSync: (symbol: string) => Promise<void>;
   triggerRecalculate: (symbol?: string) => Promise<void>;
   cancelSync: () => Promise<void>;
-  runAiWorkflow: (prompt: string) => Promise<void>;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -212,7 +208,7 @@ function saveAlerts(a: WatchlistAlert[]) {
 
 function getInitialTab(): TabId {
   const path = window.location.pathname.replace(/^\/+/, '').split('/')[0];
-  const valid: TabId[] = ['explorer', 'screener', 'strategy', 'sync', 'ai-research', 'portfolio', 'watchlist', 'compare', 'settings', 'about', 'ml-training'];
+  const valid: TabId[] = ['explorer', 'screener', 'strategy', 'sync', 'ai-research', 'portfolio', 'watchlist', 'compare', 'settings', 'about', 'ml2-training'];
   return valid.includes(path as TabId) ? (path as TabId) : 'explorer';
 }
 
@@ -235,7 +231,7 @@ function loadScreenerFilters(): ScreenerFilters {
     ha_dir: undefined,
     renko_dir: undefined,
     lb_dir: undefined,
-    min_weekly_avg_volume: undefined,
+    min_avg_traded_value: undefined,
     volume_breakout: undefined,
     only_nr7: undefined,
     only_inside_bar: undefined,
@@ -291,6 +287,7 @@ export const useStockStore = create<StockState>((set, get) => ({
   corporateActions: [],
   niftyCandles: [],
   confluenceLevels: [],
+  trendlines: [],
   customLines: JSON.parse(localStorage.getItem('vajra_lines') || '{}'),
 
   screenerFilters: loadScreenerFilters(),
@@ -299,18 +296,12 @@ export const useStockStore = create<StockState>((set, get) => ({
   syncJobs: [],
   syncStatuses: [],
 
-  aiQuery: '',
-  aiIsLoading: false,
-  aiEvents: [],
-  aiReport: null,
-  aiRecommendation: null,
-  aiConfidence: null,
-  _activeEventSource: null,
-
   portfolio: null,
   portfolioLoading: false,
   stockAlerts: [],
   stockAlertsLoading: false,
+  _seenAlertIds: new Set<number>(),
+  _alertsInitialized: false,
   watchlists: loadWatchlists(),
   activeWatchlistId: null,
   alerts: loadAlerts(),
@@ -340,9 +331,6 @@ export const useStockStore = create<StockState>((set, get) => ({
     saveScreenerFilters(nextFilters);
     set({ screenerFilters: nextFilters });
   },
-  setAiQuery: (aiQuery) => set({ aiQuery }),
-  clearAiConsole: () => set({ aiEvents: [], aiReport: null, aiRecommendation: null, aiConfidence: null }),
-
   // ── Portfolio ──────────────────────────────────────────────────────────────
 
   fetchPortfolio: async () => {
@@ -381,7 +369,36 @@ export const useStockStore = create<StockState>((set, get) => ({
     set({ stockAlertsLoading: true });
     try {
       const stockAlerts = await apiService.getAlerts('TRIGGERED');
-      set({ stockAlerts, stockAlertsLoading: false });
+      const { _seenAlertIds, _alertsInitialized } = get();
+
+      if (!_alertsInitialized) {
+        // First load: seed seen IDs without firing notifications (user already knows)
+        set({
+          stockAlerts,
+          stockAlertsLoading: false,
+          _seenAlertIds: new Set(stockAlerts.map(a => a.id)),
+          _alertsInitialized: true,
+        });
+      } else {
+        // Subsequent polls: fire browser notification for any genuinely new alerts
+        const newAlerts = stockAlerts.filter(a => !_seenAlertIds.has(a.id));
+        if (newAlerts.length > 0 && 'Notification' in window && Notification.permission === 'granted') {
+          for (const alert of newAlerts.slice(0, 5)) {
+            new Notification(`VAJRA: ${alert.symbol.replace('.NS', '')}`, {
+              body: alert.message,
+              tag: `vajra-alert-${alert.id}`,
+            });
+          }
+          if (newAlerts.length > 5) {
+            new Notification(`VAJRA: ${newAlerts.length - 5} more alerts fired`, {
+              body: 'Open VajraStocks to review all alerts.',
+              tag: 'vajra-alerts-overflow',
+            });
+          }
+        }
+        const updatedSeen = new Set([..._seenAlertIds, ...stockAlerts.map(a => a.id)]);
+        set({ stockAlerts, stockAlertsLoading: false, _seenAlertIds: updatedSeen });
+      }
     } catch {
       set({ stockAlertsLoading: false });
     }
@@ -407,11 +424,50 @@ export const useStockStore = create<StockState>((set, get) => ({
 
   // ── Watchlists ─────────────────────────────────────────────────────────────
 
+  fetchWatchlists: async () => {
+    try {
+      const wls = await apiService.fetchWatchlists();
+      if (wls.length === 0) {
+        // Migration: push any non-empty localStorage lists to DB
+        const local = loadWatchlists();
+        const hasRealData = local.some(w => w.name !== 'My Watchlist' || w.items.length > 0);
+        if (hasRealData) {
+          for (const wl of local) {
+            try {
+              const created = await apiService.createWatchlistApi(wl.name);
+              for (const item of wl.items) {
+                await apiService.addToWatchlistApi(created.id, item.symbol).catch(() => {});
+              }
+            } catch { /* skip failed watchlists */ }
+          }
+          const refreshed = await apiService.fetchWatchlists();
+          saveWatchlists(refreshed);
+          set({ watchlists: refreshed });
+          return;
+        }
+        // Seed a default list
+        try {
+          const def = await apiService.createWatchlistApi('My Watchlist');
+          saveWatchlists([def]);
+          set({ watchlists: [def] });
+        } catch { /* API unavailable */ }
+      } else {
+        saveWatchlists(wls);
+        set({ watchlists: wls });
+      }
+    } catch {
+      // API unavailable — keep current localStorage state
+    }
+  },
+
   createWatchlist: (name) => {
     const currentLists = loadWatchlists();
     const wl = [...currentLists, { id: crypto.randomUUID(), name, items: [] }];
     saveWatchlists(wl);
     set({ watchlists: wl });
+    apiService.createWatchlistApi(name)
+      .then(() => get().fetchWatchlists())
+      .catch(() => {});
   },
 
   deleteWatchlist: (id) => {
@@ -419,6 +475,7 @@ export const useStockStore = create<StockState>((set, get) => ({
     const wl = currentLists.filter(w => w.id !== id);
     saveWatchlists(wl);
     set({ watchlists: wl, activeWatchlistId: get().activeWatchlistId === id ? null : get().activeWatchlistId });
+    apiService.deleteWatchlistApi(id).catch(() => {});
   },
 
   renameWatchlist: (id, name) => {
@@ -426,6 +483,7 @@ export const useStockStore = create<StockState>((set, get) => ({
     const wl = currentLists.map(w => w.id === id ? { ...w, name } : w);
     saveWatchlists(wl);
     set({ watchlists: wl });
+    apiService.renameWatchlistApi(id, name).catch(() => {});
   },
 
   setActiveWatchlist: (id) => set({ activeWatchlistId: id }),
@@ -439,6 +497,7 @@ export const useStockStore = create<StockState>((set, get) => ({
     });
     saveWatchlists(wl);
     set({ watchlists: wl });
+    apiService.addToWatchlistApi(watchlistId, symbol).catch(() => {});
   },
 
   // ── Alerts ─────────────────────────────────────────────────────────────────
@@ -499,6 +558,7 @@ export const useStockStore = create<StockState>((set, get) => ({
     );
     saveWatchlists(wl);
     set({ watchlists: wl });
+    apiService.removeFromWatchlistApi(watchlistId, symbol).catch(() => {});
   },
 
   // ── Async operations ───────────────────────────────────────────────────────
@@ -546,7 +606,7 @@ export const useStockStore = create<StockState>((set, get) => ({
     if (!symbol) return;
     set({ isLoading: true, error: null });
     try {
-      const [candles, heikinAshi, renkoBricks, lineBreakLines, indicators, corporateActions, confluenceLevels] = await Promise.all([
+      const [candles, heikinAshi, renkoBricks, lineBreakLines, indicators, corporateActions, confluenceLevels, trendlines] = await Promise.all([
         apiService.getCandles(symbol),
         apiService.getHeikinAshi(symbol),
         apiService.getRenkoBricks(symbol),
@@ -554,8 +614,9 @@ export const useStockStore = create<StockState>((set, get) => ({
         apiService.getIndicators(symbol),
         apiService.getCorporateActions(symbol),
         apiService.getConfluenceLevels(symbol),
+        apiService.getTrendlines(symbol),
       ]);
-      set({ candles, heikinAshi, renkoBricks, lineBreakLines, indicators, corporateActions, confluenceLevels, isLoading: false });
+      set({ candles, heikinAshi, renkoBricks, lineBreakLines, indicators, corporateActions, confluenceLevels, trendlines, isLoading: false });
     } catch (err: unknown) {
       set({ error: (err as Error).message || 'Failed to fetch symbol data', isLoading: false });
     }
@@ -669,82 +730,17 @@ export const useStockStore = create<StockState>((set, get) => ({
     }
   },
 
-  runAiWorkflow: async (prompt: string) => {
-    // Close any previous connection before starting a new one
-    get()._activeEventSource?.close();
-
-    set({
-      aiIsLoading: true,
-      aiQuery: prompt,
-      aiEvents: [],
-      aiReport: null,
-      aiRecommendation: null,
-      aiConfidence: null,
-      _activeEventSource: null,
-    });
-
-    try {
-      const url = `${API_BASE}/agents/chat-stream?prompt=${encodeURIComponent(prompt)}`;
-      const eventSource = new EventSource(url);
-      set({ _activeEventSource: eventSource });
-
-      eventSource.onmessage = (event) => {
-        try {
-          const payload = JSON.parse(event.data);
-          const { event: eventType, data } = payload;
-
-          if (eventType === 'started') {
-            set((state) => ({ aiEvents: [...state.aiEvents, { status: data }] }));
-          } else if (eventType === 'intent_detected') {
-            set((state) => ({
-              aiEvents: [...state.aiEvents, {
-                status: `Intent Detected: ${data.intent.toUpperCase()}${data.symbol ? ` for ${data.symbol}` : ''}`,
-                data,
-              }],
-            }));
-          } else if (eventType === 'agent_active') {
-            set((state) => ({
-              aiEvents: [...state.aiEvents, { agent: data.agent, status: data.status, data }],
-            }));
-          } else if (eventType === 'complete') {
-            set({
-              aiReport: data.report || null,
-              aiRecommendation: data.recommendation || null,
-              aiConfidence: data.confidence || null,
-              screenerResults: data.screener_results || get().screenerResults,
-              aiIsLoading: false,
-            });
-            if (data.screener_results && data.screener_results.length > 0) {
-              get().setActiveTab('screener');
-            }
-            eventSource.close();
-          } else if (eventType === 'error') {
-            set((state) => ({
-              aiEvents: [...state.aiEvents, { status: `Error: ${data}` }],
-              aiIsLoading: false,
-            }));
-            eventSource.close();
-          }
-        } catch (err) {
-          console.error('Failed to parse SSE event data', err);
-        }
-      };
-
-      eventSource.onerror = () => {
-        set((state) => ({
-          aiEvents: [...state.aiEvents, { status: 'Connection error in AI Quant pipeline.' }],
-          aiIsLoading: false,
-        }));
-        eventSource.close();
-      };
-    } catch (err: unknown) {
-      set({
-        aiEvents: [{ status: `Failed to initiate AI stream: ${(err as Error).message}` }],
-        aiIsLoading: false,
-      });
-    }
-  },
 }));
 
 // Load DB-backed screener limit once the store is created (non-blocking)
 loadScreenerLimitFromDB();
+
+// Request notification permission and start polling for new alerts every 5 min
+(function initAlertPolling() {
+  if ('Notification' in window && Notification.permission === 'default') {
+    Notification.requestPermission();
+  }
+  setInterval(() => {
+    useStockStore.getState().fetchStockAlerts();
+  }, 5 * 60 * 1000);
+})();

@@ -74,6 +74,7 @@ def get_config(request: Request):
                 provider=s.get_str("AI", "ai_provider", "ollama"),
                 base_url=s.get_str("AI", "ai_base_url", "http://localhost:11434"),
                 model=s.get_str("AI", "ai_model", "qwen2.5-coder:7b"),
+                api_key=s.get_str("AI", "ai_api_key", ""),
             ),
         )
     finally:

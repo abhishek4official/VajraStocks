@@ -70,6 +70,9 @@ async def check_and_run_sync(db_manager) -> None:
                         session.close()
                 except Exception as ae:
                     logger.warning(f"Scheduler: Alert evaluation failed (non-fatal): {ae}")
+                # Weekly ML retraining on Sunday
+                if datetime.datetime.now().weekday() == 6:
+                    _maybe_retrain_ml(db_manager)
 
             future = loop.run_in_executor(None, run)
             _active_sync_future = asyncio.ensure_future(future)
@@ -98,6 +101,62 @@ async def shutdown_scheduler() -> None:
         except (asyncio.TimeoutError, asyncio.CancelledError, Exception):
             pass
         _active_sync_future = None
+
+
+def _maybe_retrain_ml(db_manager) -> None:
+    """Triggers ML walk-forward retraining once per week. Non-fatal on any error."""
+    try:
+        import sys
+        from datetime import datetime, timedelta, timezone
+        from pathlib import Path
+        from sqlalchemy import desc, select
+        from stocks.db.models import MLTrainingRun
+
+        week_ago = datetime.now(timezone.utc) - timedelta(days=7)
+        session = db_manager.get_session()
+        try:
+            recent = session.scalar(
+                select(MLTrainingRun)
+                .where(MLTrainingRun.status == "COMPLETED", MLTrainingRun.completed_at >= week_ago)
+                .limit(1)
+            )
+            running = session.scalar(
+                select(MLTrainingRun).where(MLTrainingRun.status == "RUNNING").limit(1)
+            )
+        finally:
+            session.close()
+
+        if recent:
+            logger.info(f"Scheduler: Weekly ML retraining skipped — last run completed {recent.completed_at}")
+            return
+        if running:
+            logger.info("Scheduler: Weekly ML retraining skipped — a job is already running")
+            return
+
+        logger.info("Scheduler: Triggering weekly ML retraining...")
+        _root = str(Path(__file__).resolve().parents[4])
+        if _root not in sys.path:
+            sys.path.insert(0, _root)
+
+        version = f"v{datetime.now(timezone.utc).strftime('%Y.%m.%d')}.weekly"
+        session = db_manager.get_session()
+        try:
+            run = MLTrainingRun(
+                version=version,
+                status="RUNNING",
+                started_at=datetime.now(timezone.utc),
+            )
+            session.add(run)
+            session.commit()
+            run_id = run.id
+        finally:
+            session.close()
+
+        from VajraML.train_service import TrainingJobManager
+        TrainingJobManager().start(db_manager.engine, run_id)
+        logger.info(f"Scheduler: Weekly ML retraining started — run_id={run_id}, version={version}")
+    except Exception as exc:
+        logger.warning(f"Scheduler: Weekly ML retraining failed (non-fatal): {exc}")
 
 
 async def run_scheduler(db_manager) -> None:

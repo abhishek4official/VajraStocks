@@ -1,12 +1,41 @@
-# VajraStocks v1.0.0
+# VajraStocks v1.5.0
 
 **Release Date:** June 2026
 
-NSE Stock Analysis Platform — first stable release.
+---
+
+## What's New in v1.5.0
+
+### VajraML2 — New ML Engine
+- Replaced VajraML V1 with VajraML2: triple-barrier classifier with walk-forward validation
+- Inference filters to suppress low-confidence signals
+- Final production model retrained on full history after walk-forward evaluation
+- Weekly automated ML retraining via the scheduler
+- Prediction dataset limited to last 400 days for faster rebuilds
+
+### Charting
+- Interactive **Trend Lines** — draw, drag, and persist trendlines directly on price charts
+
+### Analytics
+- **Rolling Alpha** (1W / 4W / 3M) calculated for every symbol in the database
+- Watchlist persistence in the database — survives app restarts
+
+### AI & Agents
+- Fixed agent workflow and agent panel stability issues
+- Fixed AI Screener screen
+
+### Screeners & Strategies
+- 14 new MA / MACD / CMF crossover features added to the screener engine
+- Fixed screener result rendering and filter state
+
+### Bug Fixes
+- Clamp `inf`/`NaN` fundamentals to `None` before MSSQL insert (prevents type errors on SQL Server)
+- Remove stale `ml-training` tab from initial tab list
+- Various workflow and sync stability fixes
 
 ---
 
-## What's New
+## What's New in v1.0.0 – v1.4.0
 
 ### Installer & Distribution
 - One-click installer for Windows (`VajraStocks-Setup.exe`), Linux (`.deb`, `.rpm`, `.AppImage`), and macOS (`.dmg`)

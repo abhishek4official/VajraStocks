@@ -124,11 +124,19 @@ class TradePlannerService:
 
         risk_reward = round((target_1 - mid_entry) / risk_distance, 2) if risk_distance > 0 else 1.5
 
+        # A trade is only worth taking if reward >= risk (R/R >= 1.0)
+        if latest_price < support:
+            action = "HOLD"
+        elif risk_reward < 1.0:
+            action = "AVOID"
+        else:
+            action = "BUY"
+
         return {
             "symbol": symbol,
             "setup_name": "Deterministic ATR Breakout Plan",
             "execution": {
-                "action": "BUY" if latest_price >= support else "HOLD",
+                "action": action,
                 "entry_zone": entry_zone,
                 "stop_loss": round(stop_loss, 2),
                 "targets": [target_1, target_2],

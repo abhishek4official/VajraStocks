@@ -24,6 +24,37 @@ def _detect_provider(connection_string: str) -> str:
     return "unknown"
 
 
+# ── MSSQL ODBC driver pre-check ──────────────────────────────────────────────
+
+def _check_mssql_odbc_driver() -> None:
+    """Validates that pyodbc and a Microsoft ODBC driver are installed before
+    attempting any MSSQL connection, so users get a clear actionable message
+    instead of a cryptic traceback.
+    """
+    try:
+        import pyodbc  # noqa: F401
+    except ImportError:
+        raise DatabaseConnectionError(
+            "The 'pyodbc' package is not installed. "
+            "Install it with: pip install pyodbc"
+        )
+
+    try:
+        import pyodbc as _pyodbc
+        drivers = [d for d in _pyodbc.drivers() if "SQL Server" in d or "ODBC Driver" in d]
+        if not drivers:
+            raise DatabaseConnectionError(
+                "No Microsoft ODBC Driver for SQL Server found on this system. "
+                "Download and install it from: "
+                "https://learn.microsoft.com/en-us/sql/connect/odbc/download-odbc-driver-for-sql-server"
+            )
+        logger.debug(f"MSSQL ODBC drivers found: {drivers}")
+    except DatabaseConnectionError:
+        raise
+    except Exception as exc:
+        logger.warning(f"Could not enumerate ODBC drivers: {exc}")
+
+
 # ── MSSQL LocalDB helpers (Windows-only) ────────────────────────────────────
 
 def _localdb_pipe() -> str:
@@ -186,6 +217,7 @@ class DatabaseManager:
         """Bootstraps the database and initialises the SQLAlchemy engine + session pool."""
         # Provider-specific pre-flight
         if self.provider == "mssql":
+            _check_mssql_odbc_driver()
             ensure_localdb_started()
             create_mssql_database_if_not_exists(self.connection_string)
         elif self.provider == "sqlite":
@@ -263,7 +295,7 @@ class DatabaseManager:
             ("screening_snapshots", "supertrend_dir",       "VARCHAR(10)",  "VARCHAR(10)"),
             ("screening_snapshots", "stoch_state",          "VARCHAR(15)",  "VARCHAR(15)"),
             # Volume profile
-            ("screening_snapshots", "weekly_avg_volume",    "FLOAT",        "FLOAT"),
+            ("screening_snapshots", "avg_traded_value",     "FLOAT",        "FLOAT"),
             ("screening_snapshots", "volume_breakout_ratio","FLOAT",        "FLOAT"),
             # Composite score columns
             ("screening_snapshots", "composite_score",      "FLOAT",        "FLOAT"),
@@ -271,11 +303,40 @@ class DatabaseManager:
             ("screening_snapshots", "volume_score_val",     "FLOAT",        "FLOAT"),
             ("screening_snapshots", "rs_score_val",         "FLOAT",        "FLOAT"),
             ("screening_snapshots", "momentum_score_val",   "FLOAT",        "FLOAT"),
-            # ML Prediction columns (written by VajraML post-sync hook)
-            ("screening_snapshots", "ml_prediction",        "FLOAT",        "FLOAT"),
-            ("screening_snapshots", "ml_rank",              "INTEGER",      "INT"),
-            ("screening_snapshots", "ml_label",             "VARCHAR(20)",  "VARCHAR(20)"),
+            # StochRSI snapshot columns
+            ("screening_snapshots", "cmf_20",                       "FLOAT",        "FLOAT"),
+            ("screening_snapshots", "cmf_20_prev",                  "FLOAT",        "FLOAT"),
+            ("screening_snapshots", "cmf_crossed_above_zero",       "BOOLEAN",      "BIT"),
+            ("screening_snapshots", "cmf_score_val",                "FLOAT",        "FLOAT"),
+            ("screening_snapshots", "breakout_score_val",           "FLOAT",        "FLOAT"),
+            ("screening_snapshots", "stochrsi_k",                   "FLOAT",        "FLOAT"),
+            ("screening_snapshots", "stochrsi_d",                   "FLOAT",        "FLOAT"),
+            ("screening_snapshots", "stochrsi_zone",                "VARCHAR(15)",  "VARCHAR(15)"),
+            ("screening_snapshots", "stochrsi_bullish_xover_days_ago", "INTEGER",   "INT"),
+            ("screening_snapshots", "stochrsi_bearish_xover_days_ago", "INTEGER",   "INT"),
+            # VajraML2 prediction columns (triple-barrier classifier)
+            ("screening_snapshots", "ml2_p_tp",             "FLOAT",        "FLOAT"),
+            ("screening_snapshots", "ml2_p_sl",             "FLOAT",        "FLOAT"),
+            ("screening_snapshots", "ml2_ev_score",         "FLOAT",        "FLOAT"),
+            ("screening_snapshots", "ml2_rank",             "INTEGER",      "INT"),
+            ("screening_snapshots", "ml2_signal",           "VARCHAR(20)",  "VARCHAR(20)"),
+            # Crossover recency columns
+            ("screening_snapshots", "days_since_price_sma20_bull", "INTEGER", "INT"),
+            ("screening_snapshots", "days_since_price_sma50_bull", "INTEGER", "INT"),
+            ("screening_snapshots", "days_since_price_ema20_bull", "INTEGER", "INT"),
+            ("screening_snapshots", "days_since_ema9_ema20_bull",  "INTEGER", "INT"),
+            ("screening_snapshots", "days_since_ema9_ema20_bear",  "INTEGER", "INT"),
+            ("screening_snapshots", "days_since_sma20_sma50_bull", "INTEGER", "INT"),
+            ("screening_snapshots", "days_since_macd_bull",        "INTEGER", "INT"),
+            ("screening_snapshots", "days_since_macd_bear",        "INTEGER", "INT"),
+            ("screening_snapshots", "days_since_cmf_bull",         "INTEGER", "INT"),
+            ("screening_snapshots", "days_since_cmf_bear",         "INTEGER", "INT"),
+            ("screening_snapshots", "ema9_ema20_spread",    "FLOAT",   "FLOAT"),
+            ("screening_snapshots", "macd_histogram_slope", "FLOAT",   "FLOAT"),
+            ("screening_snapshots", "macd_above_zero",      "BOOLEAN", "BIT"),
+            ("screening_snapshots", "cmf_slope_5d",         "FLOAT",   "FLOAT"),
             # New DailyIndicator columns
+            ("daily_indicators",    "ema_9",                "FLOAT",        "FLOAT"),
             ("daily_indicators",    "ema_20",               "FLOAT",        "FLOAT"),
             ("daily_indicators",    "adx_14",               "FLOAT",        "FLOAT"),
             ("daily_indicators",    "plus_di",              "FLOAT",        "FLOAT"),
@@ -285,6 +346,11 @@ class DatabaseManager:
             ("daily_indicators",    "supertrend_dir",       "VARCHAR(10)",  "VARCHAR(10)"),
             ("daily_indicators",    "stoch_k",              "FLOAT",        "FLOAT"),
             ("daily_indicators",    "stoch_d",              "FLOAT",        "FLOAT"),
+            ("daily_indicators",    "cmf_20",               "FLOAT",        "FLOAT"),
+            ("daily_indicators",    "stochrsi_k",           "FLOAT",        "FLOAT"),
+            ("daily_indicators",    "stochrsi_d",           "FLOAT",        "FLOAT"),
+            ("daily_indicators",    "stochrsi_bullish_xover", "BOOLEAN",    "BIT"),
+            ("daily_indicators",    "stochrsi_bearish_xover", "BOOLEAN",    "BIT"),
         ]
         insp = sa_inspect(self.engine)
         existing_by_table: dict[str, set[str]] = {}

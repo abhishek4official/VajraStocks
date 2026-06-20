@@ -11,6 +11,7 @@ Usage
 """
 
 import argparse
+import datetime
 import pickle
 from pathlib import Path
 
@@ -32,8 +33,9 @@ def predict_latest(use_ensemble: bool = False) -> pd.DataFrame:
     """
     engine = get_engine()
 
-    print("Building feature matrix...")
-    df, feature_cols = build_dataset(engine)
+    since_date = datetime.date.today() - datetime.timedelta(days=400)
+    print(f"Building feature matrix (since {since_date})...")
+    df, feature_cols = build_dataset(engine, since_date=since_date)
 
     latest_date = df["trading_date"].max()
     latest      = df[df["trading_date"] == latest_date].copy()
@@ -104,8 +106,14 @@ def run_ml_snapshot_update(engine) -> int:
     """
     from sqlalchemy import text
 
-    print("VajraML: building feature matrix for post-sync ML update...")
-    df, feature_cols = build_dataset(engine)
+    # For inference we only need the last ~280 trading days (~400 calendar days).
+    # The longest lookback in price features is HIGH_LOOKBACK=252 trading days
+    # (52-week high). Loading 400 calendar days always covers that window with
+    # a safe buffer, avoiding the full 3-year / 489K-row rebuild on every sync.
+    since_date = datetime.date.today() - datetime.timedelta(days=400)
+
+    print(f"VajraML: building feature matrix for post-sync ML update (since {since_date})...")
+    df, feature_cols = build_dataset(engine, since_date=since_date)
 
     latest_date = df["trading_date"].max()
     latest = df[df["trading_date"] == latest_date].copy()

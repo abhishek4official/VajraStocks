@@ -67,6 +67,22 @@ def update_setting(category: str, key: str, body: SettingUpdate, db: Session = D
     if not exists:
         raise HTTPException(status_code=404, detail=f"Setting '{category}/{key}' not found.")
 
+    # Pre-flight connectivity check when changing the database connection string.
+    if (category.upper(), key) == ("DATABASE", "db_connection_string"):
+        try:
+            from sqlalchemy import create_engine
+            from sqlalchemy import text as _text
+            _extra = {"check_same_thread": False} if body.value.lower().startswith("sqlite") else {}
+            _test_engine = create_engine(body.value, connect_args=_extra)
+            with _test_engine.connect() as _conn:
+                _conn.execute(_text("SELECT 1"))
+            _test_engine.dispose()
+        except Exception as _exc:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot connect to the new database — please check the connection string. Error: {_exc}",
+            )
+
     svc.set(category.upper(), key, body.value)
 
     needs_restart = (category.upper(), key) in RESTART_REQUIRED_KEYS
@@ -192,7 +208,12 @@ async def restart_server(request: Request):
     if "--port" not in uvicorn_args:
         uvicorn_args += ["--port", "8000"]
 
-    cmd = [sys.executable, "-m", "uvicorn"] + uvicorn_args
+    if getattr(sys, "frozen", False):
+        # PyInstaller build: sys.executable is the packaged binary; it must be
+        # launched directly without "-m uvicorn" arguments.
+        cmd = [sys.executable]
+    else:
+        cmd = [sys.executable, "-m", "uvicorn"] + uvicorn_args
 
     async def _do_restart():
         await asyncio.sleep(0.5)

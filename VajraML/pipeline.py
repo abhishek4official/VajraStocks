@@ -14,6 +14,8 @@ Phase sequence
   T  Target attachment         (joined last, by key only — no value leakage)
 """
 
+import datetime
+
 import pandas as pd
 from sqlalchemy import BigInteger, Float, Integer, cast, select
 from sqlalchemy.engine import Engine
@@ -55,9 +57,19 @@ _NON_FEATURE = {
 }
 
 
-def build_dataset(engine: Engine) -> tuple[pd.DataFrame, list[str]]:
+def build_dataset(
+    engine: Engine,
+    since_date: datetime.date | None = None,
+) -> tuple[pd.DataFrame, list[str]]:
     """
     Build the complete feature matrix + target for the top-700 universe.
+
+    Parameters
+    ----------
+    since_date : If given, load only rows on or after this date.
+                 Use for inference (prediction) to avoid reloading 3 years of
+                 history when only the latest date is needed.
+                 Leave as None for training (needs full history).
 
     Returns
     -------
@@ -86,6 +98,7 @@ def build_dataset(engine: Engine) -> tuple[pd.DataFrame, list[str]]:
         .where(
             DailyPrice.symbol_id.in_(symbol_ids),
             DailyPrice.granularity == "1d",
+            *([DailyPrice.trading_date >= since_date] if since_date else []),
         )
         .order_by(DailyPrice.symbol_id, DailyPrice.trading_date)
     )
@@ -127,6 +140,7 @@ def build_dataset(engine: Engine) -> tuple[pd.DataFrame, list[str]]:
         .where(
             DailyIndicator.symbol_id.in_(symbol_ids),
             DailyIndicator.granularity == "1d",
+            *([DailyIndicator.trading_date >= since_date] if since_date else []),
         )
     )
     indicators = pd.read_sql(indicators_stmt, engine, parse_dates=["trading_date"])

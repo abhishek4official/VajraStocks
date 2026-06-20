@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useStockStore } from '../store/useStockStore';
-import { Play, Eye, Filter, RefreshCw, BarChart2, Download, Bookmark, Zap } from 'lucide-react';
+import { Eye, Filter, RefreshCw, BarChart2, Download, Bookmark, Zap } from 'lucide-react';
 import type { ScreenerRow, StrategyMeta } from '../services/api';
 import { apiService } from '../services/api';
 
@@ -21,11 +21,16 @@ const DEFAULT_COL_FILTERS = {
   symbol: '', company_name: '', close_price: '', price_pct_change: '', regime_bias: '',
   ret_1w: '', ret_2w: '', ret_3w: '', ret_4w: '', stop_loss: '', target_1: '', target_2: '',
   target_3: '', potential_gain_pct: '', rr_ratio: '', trade_quality_score: '',
-  position_size_shares: '', weekly_avg_volume: '', volume_breakout_ratio: '', rsi_14: '',
+  position_size_shares: '', avg_traded_value: '', volume_breakout_ratio: '', rsi_14: '',
   cmf_20: '', stochrsi_k: '', stochrsi_d: '',
   sma_20_cross_direction: '', sma_50_cross_direction: '', sma_200_cross_direction: '',
   macd_trend: '', ha_direction: '', renko_direction: '', line_break_direction: '',
-  rs_score_1m: '', patterns: '', ml_label: '',
+  rs_score_1m: '', patterns: '', ml2_signal: '',
+  days_since_ema9_ema20_bull: '', days_since_sma20_sma50_bull: '',
+  days_since_macd_bull: '', days_since_cmf_bull: '',
+  // Fundamentals
+  market_cap: '', pe_ratio: '', pb_ratio: '', ev_ebitda: '',
+  roe: '', debt_to_equity: '', profit_margin: '', eps_ttm: '', sector: '',
 };
 type ColFilters = typeof DEFAULT_COL_FILTERS;
 
@@ -126,8 +131,8 @@ const matchNumericFilter = (val: number | null | undefined, filterStr: string): 
   
   const trimmed = filterStr.trim().toLowerCase();
   
-  // check comparative prefix: >, <, >=, <=, =
-  const match = trimmed.match(/^([><]=?|=)?\s*([0-9.-]+)\s*([km])?$/);
+  // check comparative prefix: >, <, >=, <=, = and optional suffixes
+  const match = trimmed.match(/^([><]=?|=)?\s*([0-9.-]+)\s*(k|m|cr|crore|crores|l|la|lakh|lakhs)?$/);
   if (!match) {
     return String(val).toLowerCase().includes(trimmed);
   }
@@ -141,6 +146,10 @@ const matchNumericFilter = (val: number | null | undefined, filterStr: string): 
     num *= 1000;
   } else if (multiplier === 'm') {
     num *= 1000000;
+  } else if (multiplier === 'l' || multiplier === 'la' || multiplier === 'lakh' || multiplier === 'lakhs') {
+    num *= 100000;
+  } else if (multiplier === 'cr' || multiplier === 'crore' || multiplier === 'crores') {
+    num *= 10000000;
   }
   
   switch (op) {
@@ -250,7 +259,6 @@ const MultiSelectFilter: React.FC<MultiSelectFilterProps> = ({
 
 export const ScreenerPanel: React.FC = () => {
   const {
-    screenerFilters,
     screenerResults,
     setScreenerFilters,
     runScreener,
@@ -268,7 +276,6 @@ export const ScreenerPanel: React.FC = () => {
   const [visibleCount, setVisibleCount] = useState(50);
   const PAGE_SIZE = 50;
   const [searchQuery, setSearchQuery] = useState('');
-  const [showFilters, setShowFilters] = useState(false);
   const [strategies, setStrategies] = useState<StrategyMeta[]>([]);
 
   // Column-level filters state (cached in localStorage so they persist across reloads).
@@ -299,10 +306,7 @@ export const ScreenerPanel: React.FC = () => {
   // Reset to first page whenever results, search query, or column filters update
   useEffect(() => { setVisibleCount(PAGE_SIZE); }, [screenerResults, searchQuery, colFilters]);
 
-  const handleRunScreener = () => {
-    runScreener();
-    setShowFilters(false);
-  };
+
 
   // Navigate in-place to the Explorer Dashboard for the selected symbol
   const handleSelectScreenerMatch = async (symbol: string) => {
@@ -321,11 +325,13 @@ export const ScreenerPanel: React.FC = () => {
     return Number(val).toFixed(decimals);
   };
 
-  const formatVolume = (vol: number | null | undefined) => {
-    if (vol === null || vol === undefined) return '-';
-    if (vol >= 1000000) return `${(vol / 1000000).toFixed(2)}M`;
-    if (vol >= 1000) return `${(vol / 1000).toFixed(1)}K`;
-    return vol.toString();
+  const formatTradedValue = (val: number | null | undefined) => {
+    if (val === null || val === undefined) return '-';
+    const cr = val / 1e7;
+    if (cr >= 100) return `${cr.toFixed(0)} Cr`;
+    if (cr >= 1) return `${cr.toFixed(2)} Cr`;
+    const lakh = val / 1e5;
+    return `${lakh.toFixed(1)} L`;
   };
 
   // Sorting Handler
@@ -403,7 +409,7 @@ export const ScreenerPanel: React.FC = () => {
         if (!matchNumericFilter(row.rr_ratio, colFilters.rr_ratio)) return false;
         if (!matchNumericFilter(row.trade_quality_score, colFilters.trade_quality_score)) return false;
         if (!matchNumericFilter(row.position_size_shares, colFilters.position_size_shares)) return false;
-        if (!matchNumericFilter(row.weekly_avg_volume, colFilters.weekly_avg_volume)) return false;
+        if (!matchNumericFilter(row.avg_traded_value, colFilters.avg_traded_value)) return false;
         if (!matchNumericFilter(row.volume_breakout_ratio, colFilters.volume_breakout_ratio)) return false;
         if (!matchNumericFilter(row.rsi_14, colFilters.rsi_14)) return false;
         if (!matchNumericFilter(row.cmf_20, colFilters.cmf_20)) return false;
@@ -451,10 +457,24 @@ export const ScreenerPanel: React.FC = () => {
           }
         }
 
-        if (colFilters.ml_label) {
-          const selected = colFilters.ml_label.split(',').filter(Boolean);
-          if (selected.length > 0 && !selected.includes(row.ml_label || '')) return false;
+        if (colFilters.ml2_signal) {
+          const selected = colFilters.ml2_signal.split(',').filter(Boolean);
+          if (selected.length > 0 && !selected.includes((row as any).ml2_signal || '')) return false;
         }
+        if (!matchNumericFilter(row.days_since_ema9_ema20_bull, colFilters.days_since_ema9_ema20_bull)) return false;
+        if (!matchNumericFilter(row.days_since_sma20_sma50_bull, colFilters.days_since_sma20_sma50_bull)) return false;
+        if (!matchNumericFilter(row.days_since_macd_bull, colFilters.days_since_macd_bull)) return false;
+        if (!matchNumericFilter(row.days_since_cmf_bull, colFilters.days_since_cmf_bull)) return false;
+        // Fundamentals (ratio fields converted to % for intuitive ">15" style filtering)
+        if (!matchNumericFilter(row.market_cap, colFilters.market_cap)) return false;
+        if (!matchNumericFilter(row.pe_ratio, colFilters.pe_ratio)) return false;
+        if (!matchNumericFilter(row.pb_ratio, colFilters.pb_ratio)) return false;
+        if (!matchNumericFilter(row.ev_ebitda, colFilters.ev_ebitda)) return false;
+        if (!matchNumericFilter(row.roe != null ? row.roe * 100 : undefined, colFilters.roe)) return false;
+        if (!matchNumericFilter(row.debt_to_equity, colFilters.debt_to_equity)) return false;
+        if (!matchNumericFilter(row.profit_margin != null ? row.profit_margin * 100 : undefined, colFilters.profit_margin)) return false;
+        if (!matchNumericFilter(row.eps_ttm, colFilters.eps_ttm)) return false;
+        if (!matchTextFilter(row.sector, colFilters.sector)) return false;
 
         return true;
       });
@@ -469,36 +489,75 @@ export const ScreenerPanel: React.FC = () => {
 
     const headers = [
       'Ticker', 'Company Name', 'Last EOD Price', 'Change %',
-      'Weekly Avg Vol', 'Vol Breakout', 'RSI (14)', 'SMA 20',
-      'SMA 50', 'SMA 200', 'MACD Trend', 'Heikin Ashi', 'Renko', 'Three Line Break', 'RS 1M',
-      'Stop', 'T1', 'T2', 'T3', 'Upside %', 'R:R', 'TQS', 'Shares'
+      'Avg Val', 'Bias', '1W Return %', '2W Return %', '3W Return %', '4W Return %',
+      'Stop Loss', 'Target 1', 'Target 2', 'Target 3', 'Upside %', 'R:R', 'TQS', 'Suggested Shares',
+      'Vol Breakout Ratio', 'RSI (14)', 'CMF (20)', 'StochRSI K', 'StochRSI D',
+      'SMA 20 Position', 'SMA 50 Position', 'SMA 200 Position', 'MACD Trend',
+      'Heikin Ashi', 'Renko', 'Three Line Break', 'RS 1M', 'Patterns',
+      'ML Signal', 'ML EV Score', 'ML Rank',
+      'Days since EMA9/20 Bull', 'Days since SMA20/50 Bull', 'Days since MACD Bull', 'Days since CMF Bull',
+      'Mkt Cap', 'P/E', 'P/B', 'EV/EBITDA', 'ROE %', 'D/E', 'Net Margin %', 'EPS TTM', 'Sector'
     ];
 
-    const rows = filteredResults.map(row => [
-      row.symbol.replace('.NS', ''),
-      `"${row.company_name.replace(/"/g, '""')}"`,
-      row.close_price,
-      row.price_pct_change ?? '',
-      row.weekly_avg_volume ?? '',
-      row.volume_breakout_ratio ?? '',
-      row.rsi_14 ?? '',
-      row.sma_20_cross_direction ?? '',
-      row.sma_50_cross_direction ?? '',
-      row.sma_200_cross_direction ?? '',
-      row.macd_trend ?? '',
-      row.ha_direction ?? '',
-      row.renko_direction ?? '',
-      row.line_break_direction ?? '',
-      (row as any).rs_score_1m ?? '',
-      row.stop_loss ?? '',
-      row.target_1 ?? '',
-      row.target_2 ?? '',
-      row.target_3 ?? '',
-      row.potential_gain_pct ?? '',
-      row.rr_ratio ?? '',
-      row.trade_quality_score ?? '',
-      row.position_size_shares ?? ''
-    ]);
+    const rows = filteredResults.map(row => {
+      const patterns = [
+        row.is_nr7 && 'NR7',
+        row.is_inside_bar && 'Inside',
+        row.is_gap_up && 'GapUp',
+        row.is_gap_down && 'GapDown'
+      ].filter(Boolean).join('; ');
+
+      return [
+        row.symbol.replace('.NS', ''),
+        `"${row.company_name.replace(/"/g, '""')}"`,
+        row.close_price,
+        row.price_pct_change ?? '',
+        row.avg_traded_value ?? '',
+        (row as any).regime_bias ?? '',
+        row.ret_1w ?? '',
+        row.ret_2w ?? '',
+        row.ret_3w ?? '',
+        row.ret_4w ?? '',
+        row.stop_loss ?? '',
+        row.target_1 ?? '',
+        row.target_2 ?? '',
+        row.target_3 ?? '',
+        row.potential_gain_pct ?? '',
+        row.rr_ratio ?? '',
+        row.trade_quality_score ?? '',
+        row.position_size_shares ?? '',
+        row.volume_breakout_ratio ?? '',
+        row.rsi_14 ?? '',
+        row.cmf_20 ?? '',
+        row.stochrsi_k ?? '',
+        row.stochrsi_d ?? '',
+        row.sma_20_cross_direction ?? '',
+        row.sma_50_cross_direction ?? '',
+        row.sma_200_cross_direction ?? '',
+        row.macd_trend ?? '',
+        row.ha_direction ?? '',
+        row.renko_direction ?? '',
+        row.line_break_direction ?? '',
+        (row as any).rs_score_1m ?? '',
+        patterns,
+        (row as any).ml2_signal ?? '',
+        (row as any).ml2_ev_score ?? '',
+        (row as any).ml2_rank ?? '',
+        row.days_since_ema9_ema20_bull ?? '',
+        row.days_since_sma20_sma50_bull ?? '',
+        row.days_since_macd_bull ?? '',
+        row.days_since_cmf_bull ?? '',
+        row.market_cap ?? '',
+        row.pe_ratio ?? '',
+        row.pb_ratio ?? '',
+        row.ev_ebitda ?? '',
+        row.roe != null ? (row.roe * 100).toFixed(2) : '',
+        row.debt_to_equity ?? '',
+        row.profit_margin != null ? (row.profit_margin * 100).toFixed(2) : '',
+        row.eps_ttm ?? '',
+        row.sector ? `"${row.sector.replace(/"/g, '""')}"` : ''
+      ];
+    });
 
     const csvContent = [
       headers.join(','),
@@ -530,32 +589,13 @@ export const ScreenerPanel: React.FC = () => {
         </div>
         <div className="flex items-center gap-3">
           <button
-            onClick={() => setShowFilters(!showFilters)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition cursor-pointer border ${
-              showFilters 
-                ? 'bg-purple-950/40 border-purple-500 text-purple-200' 
-                : 'bg-slate-800 border-slate-700 text-slate-300 hover:text-white hover:bg-slate-700'
-            }`}
-          >
-            <Filter className="w-4 h-4" />
-            {showFilters ? 'Hide Filters' : 'Show Filters'}
-          </button>
-          <button
             onClick={exportToCSV}
             disabled={screenerResults.length === 0}
-            className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed text-slate-300 hover:text-white border border-slate-700 rounded-lg text-sm font-bold transition cursor-pointer"
+            className="flex items-center gap-2 px-4 py-2 bg-[#121620]/80 hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed text-slate-350 hover:text-white border border-slate-800 rounded-lg text-sm font-bold transition cursor-pointer"
             title="Export filtered results to CSV file"
           >
             <Download className="w-4 h-4" />
             Export CSV
-          </button>
-          <button
-            onClick={handleRunScreener}
-            disabled={isLoading}
-            className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-500 disabled:bg-purple-800 text-white rounded-lg text-sm font-bold shadow-lg shadow-purple-900/25 hover:shadow-purple-500/25 transition cursor-pointer"
-          >
-            <Play className="w-4 h-4 fill-white" />
-            Run Filter Sweep
           </button>
         </div>
       </div>
@@ -572,16 +612,17 @@ export const ScreenerPanel: React.FC = () => {
                 min_price: undefined, max_price: undefined,
                 sma_20_cross: undefined, sma_50_cross: undefined, sma_200_cross: undefined,
                 macd_trend: undefined, ha_dir: undefined, renko_dir: undefined, lb_dir: undefined,
-                volume_breakout: undefined, min_weekly_avg_volume: undefined,
+                volume_breakout: undefined, min_avg_traded_value: undefined,
                 only_nr7: undefined, only_inside_bar: undefined,
                 only_gap_up: undefined, only_gap_down: undefined,
                 min_rs_1m: undefined,
                 min_cmf: undefined, max_cmf: undefined, cmf_rising: undefined, cmf_crossed_zero: undefined,
                 min_stochrsi_k: undefined, max_stochrsi_k: undefined, stochrsi_bullish_xover_max_days: undefined,
+                ema_ribbon_bull_max_days: undefined, golden_cross_max_days: undefined,
+                macd_bull_xover_max_days: undefined, cmf_bull_xover_max_days: undefined,
                 ...p.filters,
               });
               runScreener();
-              setShowFilters(false);
             }}
             disabled={isLoading}
             className="flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-800/80 bg-[#121620]/30 hover:bg-[#121620]/70 hover:border-purple-500/40 disabled:opacity-40 transition cursor-pointer text-left"
@@ -597,350 +638,6 @@ export const ScreenerPanel: React.FC = () => {
           </button>
         ))}
       </div>
-
-      {/* Organized Filter Grid (Toggleable) */}
-      {showFilters && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 p-5 rounded-xl border border-slate-800/80 bg-[#121620]/30 shadow-inner">
-          
-          {/* Column 1: Price & Volume */}
-          <div className="flex flex-col gap-4 lg:border-r border-slate-850 lg:pr-4">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-purple-400 flex items-center gap-1.5 mb-1 select-none">
-              <BarChart2 className="w-3.5 h-3.5 text-purple-500" /> Price & Volume
-            </h4>
-            
-            <div className="flex flex-col gap-1.5">
-              <label className="text-[11px] font-semibold text-slate-400">Min Weekly Avg Vol</label>
-              <input
-                type="number"
-                placeholder="No Limit"
-                value={screenerFilters.min_weekly_avg_volume !== undefined ? screenerFilters.min_weekly_avg_volume : ''}
-                onChange={(e) => setScreenerFilters({ 
-                  min_weekly_avg_volume: e.target.value === '' ? undefined : Number(e.target.value) 
-                })}
-                className="w-full px-3 py-1.5 text-xs rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
-              />
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <label className="text-[11px] font-semibold text-slate-400">Volume Breakout</label>
-              <select
-                value={screenerFilters.volume_breakout || 'ANY'}
-                onChange={(e) => setScreenerFilters({ 
-                  volume_breakout: e.target.value === 'ANY' ? undefined : e.target.value as any 
-                })}
-                className="w-full px-3 py-1.5 text-xs rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
-              >
-                <option value="ANY">Any Volume</option>
-                <option value="1.5X">1.5x Breakout</option>
-                <option value="2.0X">2.0x Breakout</option>
-                <option value="3.0X">3.0x Breakout</option>
-              </select>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[11px] font-semibold text-slate-400">Min Price (₹)</label>
-                <input
-                  type="number"
-                  placeholder="No Limit"
-                  value={screenerFilters.min_price !== undefined ? screenerFilters.min_price : ''}
-                  onChange={(e) => setScreenerFilters({ min_price: e.target.value === '' ? undefined : Number(e.target.value) })}
-                  className="w-full px-3 py-1.5 text-xs rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
-                />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[11px] font-semibold text-slate-400">Max Price (₹)</label>
-                <input
-                  type="number"
-                  placeholder="No Limit"
-                  value={screenerFilters.max_price !== undefined ? screenerFilters.max_price : ''}
-                  onChange={(e) => setScreenerFilters({ max_price: e.target.value === '' ? undefined : Number(e.target.value) })}
-                  className="w-full px-3 py-1.5 text-xs rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Column 2: Moving Averages & RSI */}
-          <div className="flex flex-col gap-4 lg:border-r border-slate-850 lg:pr-4">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-purple-400 flex items-center gap-1.5 mb-1 select-none">
-              <Zap className="w-3.5 h-3.5 text-purple-500" /> Averages & RSI
-            </h4>
-
-            <div className="grid grid-cols-2 gap-2">
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[11px] font-semibold text-slate-400">Min RSI (14)</label>
-                <input
-                  type="number"
-                  placeholder="No Limit"
-                  value={screenerFilters.min_rsi !== undefined ? screenerFilters.min_rsi : ''}
-                  onChange={(e) => setScreenerFilters({ 
-                    min_rsi: e.target.value === '' ? undefined : Number(e.target.value) 
-                  })}
-                  className="w-full px-3 py-1.5 text-xs rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
-                />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[11px] font-semibold text-slate-400">Max RSI (14)</label>
-                <input
-                  type="number"
-                  placeholder="No Limit"
-                  value={screenerFilters.max_rsi !== undefined ? screenerFilters.max_rsi : ''}
-                  onChange={(e) => setScreenerFilters({ 
-                    max_rsi: e.target.value === '' ? undefined : Number(e.target.value) 
-                  })}
-                  className="w-full px-3 py-1.5 text-xs rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
-                />
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <label className="text-[11px] font-semibold text-slate-400">SMA 20 Cross</label>
-              <select
-                value={screenerFilters.sma_20_cross || 'ANY'}
-                onChange={(e) => setScreenerFilters({ 
-                  sma_20_cross: e.target.value === 'ANY' ? undefined : e.target.value as any 
-                })}
-                className="w-full px-3 py-1.5 text-xs rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
-              >
-                <option value="ANY">Any Position</option>
-                <option value="ABOVE">Above SMA 20</option>
-                <option value="BELOW">Below SMA 20</option>
-              </select>
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <label className="text-[11px] font-semibold text-slate-400">SMA 50 Cross</label>
-              <select
-                value={screenerFilters.sma_50_cross || 'ANY'}
-                onChange={(e) => setScreenerFilters({ 
-                  sma_50_cross: e.target.value === 'ANY' ? undefined : e.target.value as any 
-                })}
-                className="w-full px-3 py-1.5 text-xs rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
-              >
-                <option value="ANY">Any Position</option>
-                <option value="ABOVE">Above SMA 50</option>
-                <option value="BELOW">Below SMA 50</option>
-              </select>
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <label className="text-[11px] font-semibold text-slate-400">SMA 200 Cross</label>
-              <select
-                value={screenerFilters.sma_200_cross || 'ANY'}
-                onChange={(e) => setScreenerFilters({ 
-                  sma_200_cross: e.target.value === 'ANY' ? undefined : e.target.value as any 
-                })}
-                className="w-full px-3 py-1.5 text-xs rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
-              >
-                <option value="ANY">Any Position</option>
-                <option value="ABOVE">Above SMA 200</option>
-                <option value="BELOW">Below SMA 200</option>
-              </select>
-            </div>
-          </div>
-
-          {/* Column 3: Trend Signals */}
-          <div className="flex flex-col gap-4 lg:border-r border-slate-850 lg:pr-4">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-purple-400 flex items-center gap-1.5 mb-1 select-none">
-              <Eye className="w-3.5 h-3.5 text-purple-500" /> Trend Signals
-            </h4>
-
-            <div className="flex flex-col gap-1.5">
-              <label className="text-[11px] font-semibold text-slate-400">MACD Trend</label>
-              <select
-                value={screenerFilters.macd_trend || 'ANY'}
-                onChange={(e) => setScreenerFilters({ 
-                  macd_trend: e.target.value === 'ANY' ? undefined : e.target.value as any 
-                })}
-                className="w-full px-3 py-1.5 text-xs rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
-              >
-                <option value="ANY">Any Trend</option>
-                <option value="BULLISH">Bullish (MACD &gt; Sig)</option>
-                <option value="BEARISH">Bearish (MACD &lt; Sig)</option>
-              </select>
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <label className="text-[11px] font-semibold text-slate-400">Heikin Ashi Trend</label>
-              <select
-                value={screenerFilters.ha_dir || 'ANY'}
-                onChange={(e) => setScreenerFilters({ 
-                  ha_dir: e.target.value === 'ANY' ? undefined : e.target.value as any 
-                })}
-                className="w-full px-3 py-1.5 text-xs rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
-              >
-                <option value="ANY">Any Trend</option>
-                <option value="UP">Bullish (UP)</option>
-                <option value="DOWN">Bearish (DOWN)</option>
-              </select>
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <label className="text-[11px] font-semibold text-slate-400">Renko Brick</label>
-              <select
-                value={screenerFilters.renko_dir || 'ANY'}
-                onChange={(e) => setScreenerFilters({ 
-                  renko_dir: e.target.value === 'ANY' ? undefined : e.target.value as any 
-                })}
-                className="w-full px-3 py-1.5 text-xs rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
-              >
-                <option value="ANY">Any Direction</option>
-                <option value="UP">Bullish (UP)</option>
-                <option value="DOWN">Bearish (DOWN)</option>
-              </select>
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <label className="text-[11px] font-semibold text-slate-400">Three Line Break</label>
-              <select
-                value={screenerFilters.lb_dir || 'ANY'}
-                onChange={(e) => setScreenerFilters({
-                  lb_dir: e.target.value === 'ANY' ? undefined : e.target.value as any
-                })}
-                className="w-full px-3 py-1.5 text-xs rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
-              >
-                <option value="ANY">Any Direction</option>
-                <option value="UP">Bullish (UP)</option>
-                <option value="DOWN">Bearish (DOWN)</option>
-              </select>
-            </div>
-          </div>
-
-          {/* Column 4: Strength & Patterns */}
-          <div className="flex flex-col gap-4 lg:border-r border-slate-850 lg:pr-4">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-purple-400 flex items-center gap-1.5 mb-1 select-none">
-              <Filter className="w-3.5 h-3.5 text-purple-500" /> Patterns & RS
-            </h4>
-
-            <div className="flex flex-col gap-1.5">
-              <label className="text-[11px] font-semibold text-slate-400">Min RS vs NIFTY</label>
-              <input
-                type="number"
-                step="0.1"
-                placeholder="e.g. 1.2"
-                value={screenerFilters.min_rs_1m !== undefined ? screenerFilters.min_rs_1m : ''}
-                onChange={(e) => setScreenerFilters({ min_rs_1m: e.target.value === '' ? undefined : Number(e.target.value) })}
-                className="w-full px-3 py-1.5 text-xs rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
-              />
-              <span className="text-[10px] text-slate-500">1.0 = matches NIFTY · &gt;1.2 = outperforming</span>
-            </div>
-
-            <div className="flex flex-col gap-1.5 mt-1.5">
-              <label className="text-[11px] font-semibold text-slate-400">Patterns</label>
-              <div className="grid grid-cols-2 gap-x-2 gap-y-3 mt-1">
-                {([
-                  { key: 'only_nr7' as const,       label: 'NR7 only'       },
-                  { key: 'only_inside_bar' as const, label: 'Inside Bar'     },
-                  { key: 'only_gap_up' as const,     label: 'Gap Up (>1%)'   },
-                  { key: 'only_gap_down' as const,   label: 'Gap Down (>1%)' },
-                ]).map(({ key, label }) => (
-                  <label key={key} className="flex items-center gap-2 cursor-pointer select-none group">
-                    <input
-                      type="checkbox"
-                      checked={!!screenerFilters[key]}
-                      onChange={(e) => setScreenerFilters({ [key]: e.target.checked || undefined })}
-                      className="accent-purple-500 w-3.5 h-3.5 cursor-pointer rounded"
-                    />
-                    <span className="text-xs text-slate-300 group-hover:text-white transition">{label}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Column 5: Money Flow & StochRSI */}
-          <div className="flex flex-col gap-4">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-purple-400 flex items-center gap-1.5 mb-1 select-none">
-              <BarChart2 className="w-3.5 h-3.5 text-purple-500" /> Money Flow
-            </h4>
-
-            <div className="grid grid-cols-2 gap-2">
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[11px] font-semibold text-slate-400">Min CMF</label>
-                <input
-                  type="number"
-                  step="0.05"
-                  placeholder="-1 to 1"
-                  value={screenerFilters.min_cmf !== undefined ? screenerFilters.min_cmf : ''}
-                  onChange={(e) => setScreenerFilters({ min_cmf: e.target.value === '' ? undefined : Number(e.target.value) })}
-                  className="w-full px-3 py-1.5 text-xs rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
-                />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[11px] font-semibold text-slate-400">Max CMF</label>
-                <input
-                  type="number"
-                  step="0.05"
-                  placeholder="-1 to 1"
-                  value={screenerFilters.max_cmf !== undefined ? screenerFilters.max_cmf : ''}
-                  onChange={(e) => setScreenerFilters({ max_cmf: e.target.value === '' ? undefined : Number(e.target.value) })}
-                  className="w-full px-3 py-1.5 text-xs rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
-                />
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-2 mt-0.5">
-              <label className="flex items-center gap-2 cursor-pointer select-none group">
-                <input
-                  type="checkbox"
-                  checked={!!screenerFilters.cmf_rising}
-                  onChange={(e) => setScreenerFilters({ cmf_rising: e.target.checked || undefined })}
-                  className="accent-purple-500 w-3.5 h-3.5 cursor-pointer rounded"
-                />
-                <span className="text-xs text-slate-300 group-hover:text-white transition">CMF Rising</span>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer select-none group">
-                <input
-                  type="checkbox"
-                  checked={!!screenerFilters.cmf_crossed_zero}
-                  onChange={(e) => setScreenerFilters({ cmf_crossed_zero: e.target.checked || undefined })}
-                  className="accent-purple-500 w-3.5 h-3.5 cursor-pointer rounded"
-                />
-                <span className="text-xs text-slate-300 group-hover:text-white transition">CMF Crossed Zero</span>
-              </label>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[11px] font-semibold text-slate-400">Min StochRSI K</label>
-                <input
-                  type="number"
-                  step="5"
-                  placeholder="0–100"
-                  value={screenerFilters.min_stochrsi_k !== undefined ? screenerFilters.min_stochrsi_k : ''}
-                  onChange={(e) => setScreenerFilters({ min_stochrsi_k: e.target.value === '' ? undefined : Number(e.target.value) })}
-                  className="w-full px-3 py-1.5 text-xs rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
-                />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[11px] font-semibold text-slate-400">Max StochRSI K</label>
-                <input
-                  type="number"
-                  step="5"
-                  placeholder="0–100"
-                  value={screenerFilters.max_stochrsi_k !== undefined ? screenerFilters.max_stochrsi_k : ''}
-                  onChange={(e) => setScreenerFilters({ max_stochrsi_k: e.target.value === '' ? undefined : Number(e.target.value) })}
-                  className="w-full px-3 py-1.5 text-xs rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
-                />
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <label className="text-[11px] font-semibold text-slate-400">Bullish Xover Within (days)</label>
-              <input
-                type="number"
-                step="1"
-                placeholder="e.g. 3"
-                value={screenerFilters.stochrsi_bullish_xover_max_days !== undefined ? screenerFilters.stochrsi_bullish_xover_max_days : ''}
-                onChange={(e) => setScreenerFilters({ stochrsi_bullish_xover_max_days: e.target.value === '' ? undefined : Number(e.target.value) })}
-                className="w-full px-3 py-1.5 text-xs rounded bg-slate-900 border border-slate-800 text-white focus:outline-none focus:border-purple-500 transition"
-              />
-              <span className="text-[10px] text-slate-500">StochRSI %K crossed above %D within N days</span>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Results Grid Table */}
       <div className="flex-1 bg-[#121620]/60 rounded-xl border border-slate-800/80 p-4 overflow-hidden flex flex-col min-h-[300px]">
@@ -1048,10 +745,10 @@ export const ScreenerPanel: React.FC = () => {
             /* Sticky overrides for headers of pinned columns */
             .screener-grid thead th:nth-child(1) { z-index: 25; background-color: #0c0f17 !important; }
             .screener-grid thead th:nth-child(2) { z-index: 25; background-color: #0c0f17 !important; }
-            .screener-grid thead th:nth-child(34) { z-index: 25; background-color: #0c0f17 !important; }
+            .screener-grid thead th:nth-child(47) { z-index: 25; background-color: #0c0f17 !important; }
             .screener-grid thead tr:nth-child(2) td:nth-child(1) { z-index: 25; background-color: #0c0f17 !important; }
             .screener-grid thead tr:nth-child(2) td:nth-child(2) { z-index: 25; background-color: #0c0f17 !important; }
-            .screener-grid thead tr:nth-child(2) td:nth-child(34) { z-index: 25; background-color: #0c0f17 !important; }
+            .screener-grid thead tr:nth-child(2) td:nth-child(47) { z-index: 25; background-color: #0c0f17 !important; }
 
             /* Zebra striping backgrounds for scrollable cells */
             .screener-grid tbody tr:nth-child(odd) td {
@@ -1072,10 +769,10 @@ export const ScreenerPanel: React.FC = () => {
             }
 
             /* Pinned cell backgrounds (right Actions column) */
-            .screener-grid tbody tr:nth-child(odd) td:nth-child(34) {
+            .screener-grid tbody tr:nth-child(odd) td:nth-child(47) {
               background-color: #090b10 !important;
             }
-            .screener-grid tbody tr:nth-child(even) td:nth-child(34) {
+            .screener-grid tbody tr:nth-child(even) td:nth-child(47) {
               background-color: #0f121a !important;
             }
 
@@ -1116,10 +813,24 @@ export const ScreenerPanel: React.FC = () => {
             .screener-grid th:nth-child(31), .screener-grid td:nth-child(31) { width: 90px; min-width: 90px; } /* RS 1M */
             .screener-grid th:nth-child(32), .screener-grid td:nth-child(32) { width: 150px; min-width: 150px; } /* Patterns */
             .screener-grid th:nth-child(33), .screener-grid td:nth-child(33) { width: 120px; min-width: 120px; } /* ML Signal */
+            .screener-grid th:nth-child(34), .screener-grid td:nth-child(34) { width: 72px; min-width: 72px; } /* EMA Ribbon */
+            .screener-grid th:nth-child(35), .screener-grid td:nth-child(35) { width: 68px; min-width: 68px; } /* Golden-X */
+            .screener-grid th:nth-child(36), .screener-grid td:nth-child(36) { width: 72px; min-width: 72px; } /* MACD-X */
+            .screener-grid th:nth-child(37), .screener-grid td:nth-child(37) { width: 68px; min-width: 68px; } /* CMF-X */
+            /* Fundamental columns */
+            .screener-grid th:nth-child(38), .screener-grid td:nth-child(38) { width: 110px; min-width: 110px; } /* Mkt Cap */
+            .screener-grid th:nth-child(39), .screener-grid td:nth-child(39) { width: 70px; min-width: 70px; }  /* P/E */
+            .screener-grid th:nth-child(40), .screener-grid td:nth-child(40) { width: 70px; min-width: 70px; }  /* P/B */
+            .screener-grid th:nth-child(41), .screener-grid td:nth-child(41) { width: 90px; min-width: 90px; }  /* EV/EBITDA */
+            .screener-grid th:nth-child(42), .screener-grid td:nth-child(42) { width: 75px; min-width: 75px; }  /* ROE */
+            .screener-grid th:nth-child(43), .screener-grid td:nth-child(43) { width: 70px; min-width: 70px; }  /* D/E */
+            .screener-grid th:nth-child(44), .screener-grid td:nth-child(44) { width: 85px; min-width: 85px; }  /* Net Mgn */
+            .screener-grid th:nth-child(45), .screener-grid td:nth-child(45) { width: 75px; min-width: 75px; }  /* EPS */
+            .screener-grid th:nth-child(46), .screener-grid td:nth-child(46) { width: 140px; min-width: 140px; } /* Sector */
 
-            /* Pin Actions column (34th column) to the right */
-            .screener-grid th:nth-child(34),
-            .screener-grid td:nth-child(34) {
+            /* Pin Actions column (47th column) to the right */
+            .screener-grid th:nth-child(47),
+            .screener-grid td:nth-child(47) {
               position: sticky;
               right: 0;
               z-index: 5;
@@ -1160,8 +871,8 @@ export const ScreenerPanel: React.FC = () => {
                 <th className="py-2 px-1.5 cursor-pointer hover:text-white transition" title="Price Percentage Change" onClick={() => handleSort('price_pct_change')}>
                   Chg% {renderSortIcon('price_pct_change')}
                 </th>
-                <th className="py-2 px-1.5 text-right cursor-pointer hover:text-white transition" title="Weekly Average Volume" onClick={() => handleSort('weekly_avg_volume')}>
-                  Avg Vol {renderSortIcon('weekly_avg_volume')}
+                <th className="py-2 px-1.5 text-right cursor-pointer hover:text-white transition" title="Average Daily Traded Value (price × volume)" onClick={() => handleSort('avg_traded_value')}>
+                  Avg Val {renderSortIcon('avg_traded_value')}
                 </th>
                 <th className="py-2 px-1.5 cursor-pointer hover:text-white transition" title="Composite Bias (5-tier: VERY_BULLISH / BULLISH / NEUTRAL / BEARISH / VERY_BEARISH) — sort by composite score" onClick={() => handleSort('composite_score' as any)}>
                   Bias {renderSortIcon('composite_score' as any)}
@@ -1242,8 +953,47 @@ export const ScreenerPanel: React.FC = () => {
                   RS 1M {renderSortIcon('rs_score_1m' as any)}
                 </th>
                 <th className="py-2 px-1.5 text-center" title="Pattern triggers">Patterns</th>
-                <th className="py-2 px-1.5 text-center cursor-pointer hover:text-white transition" title="VajraML 5-day return prediction rank" onClick={() => handleSort('ml_rank')}>
-                  ML Signal {renderSortIcon('ml_rank')}
+                <th className="py-2 px-1.5 text-center cursor-pointer hover:text-white transition" title="VajraML2 triple-barrier signal (EV rank)" onClick={() => handleSort('ml2_rank' as any)}>
+                  ML Signal {renderSortIcon('ml2_rank' as any)}
+                </th>
+                <th className="py-2 px-1.5 text-center cursor-pointer hover:text-white transition" title="Days since EMA9 crossed above EMA20 (golden ribbon)" onClick={() => handleSort('days_since_ema9_ema20_bull')}>
+                  EMA Rbbn {renderSortIcon('days_since_ema9_ema20_bull')}
+                </th>
+                <th className="py-2 px-1.5 text-center cursor-pointer hover:text-white transition" title="Days since SMA20 crossed above SMA50 (golden cross)" onClick={() => handleSort('days_since_sma20_sma50_bull')}>
+                  Gold-X {renderSortIcon('days_since_sma20_sma50_bull')}
+                </th>
+                <th className="py-2 px-1.5 text-center cursor-pointer hover:text-white transition" title="Days since MACD crossed above signal line" onClick={() => handleSort('days_since_macd_bull')}>
+                  MACD-X {renderSortIcon('days_since_macd_bull')}
+                </th>
+                <th className="py-2 px-1.5 text-center cursor-pointer hover:text-white transition" title="Days since CMF crossed above zero" onClick={() => handleSort('days_since_cmf_bull')}>
+                  CMF-X {renderSortIcon('days_since_cmf_bull')}
+                </th>
+                <th className="py-2 px-1.5 text-right cursor-pointer hover:text-white transition" title="Market Capitalisation" onClick={() => handleSort('market_cap' as any)}>
+                  Mkt Cap {renderSortIcon('market_cap' as any)}
+                </th>
+                <th className="py-2 px-1.5 text-right cursor-pointer hover:text-white transition" title="Price-to-Earnings Ratio (TTM)" onClick={() => handleSort('pe_ratio' as any)}>
+                  P/E {renderSortIcon('pe_ratio' as any)}
+                </th>
+                <th className="py-2 px-1.5 text-right cursor-pointer hover:text-white transition" title="Price-to-Book Ratio" onClick={() => handleSort('pb_ratio' as any)}>
+                  P/B {renderSortIcon('pb_ratio' as any)}
+                </th>
+                <th className="py-2 px-1.5 text-right cursor-pointer hover:text-white transition" title="EV / EBITDA" onClick={() => handleSort('ev_ebitda' as any)}>
+                  EV/EB {renderSortIcon('ev_ebitda' as any)}
+                </th>
+                <th className="py-2 px-1.5 text-right cursor-pointer hover:text-white transition" title="Return on Equity (%)" onClick={() => handleSort('roe' as any)}>
+                  ROE {renderSortIcon('roe' as any)}
+                </th>
+                <th className="py-2 px-1.5 text-right cursor-pointer hover:text-white transition" title="Debt to Equity Ratio" onClick={() => handleSort('debt_to_equity' as any)}>
+                  D/E {renderSortIcon('debt_to_equity' as any)}
+                </th>
+                <th className="py-2 px-1.5 text-right cursor-pointer hover:text-white transition" title="Net Profit Margin (%)" onClick={() => handleSort('profit_margin' as any)}>
+                  Net Mgn {renderSortIcon('profit_margin' as any)}
+                </th>
+                <th className="py-2 px-1.5 text-right cursor-pointer hover:text-white transition" title="Earnings Per Share (TTM)" onClick={() => handleSort('eps_ttm' as any)}>
+                  EPS {renderSortIcon('eps_ttm' as any)}
+                </th>
+                <th className="py-2 px-1.5 cursor-pointer hover:text-white transition" title="Sector" onClick={() => handleSort('sector' as any)}>
+                  Sector {renderSortIcon('sector' as any)}
                 </th>
                 <th className="py-2 px-1.5 text-right">Actions</th>
               </tr>
@@ -1298,8 +1048,8 @@ export const ScreenerPanel: React.FC = () => {
                     <input
                       type="text"
                       placeholder=">100k"
-                      value={colFilters.weekly_avg_volume}
-                      onChange={(e) => setColFilters({ ...colFilters, weekly_avg_volume: e.target.value })}
+                      value={colFilters.avg_traded_value}
+                      onChange={(e) => setColFilters({ ...colFilters, avg_traded_value: e.target.value })}
                       className="w-full min-w-[60px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-purple-500 focus:text-white text-right transition font-mono"
                     />
                   </td>
@@ -1622,17 +1372,160 @@ export const ScreenerPanel: React.FC = () => {
                   {/* ML Signal */}
                   <td className="py-1 px-1.5 text-center">
                     <MultiSelectFilter
-                      value={colFilters.ml_label}
-                      onChange={(val) => setColFilters({ ...colFilters, ml_label: val })}
+                      value={colFilters.ml2_signal}
+                      onChange={(val) => setColFilters({ ...colFilters, ml2_signal: val })}
                       placeholder="All"
                       minWidth="80px"
                       options={[
-                        { value: 'Very Bullish', label: 'Very Bullish', className: 'text-emerald-400 font-bold' },
-                        { value: 'Bullish', label: 'Bullish', className: 'text-emerald-500' },
-                        { value: 'Neutral', label: 'Neutral', className: 'text-slate-400' },
-                        { value: 'Bearish', label: 'Bearish', className: 'text-rose-500' },
-                        { value: 'Very Bearish', label: 'Very Bearish', className: 'text-rose-400 font-bold' },
+                        { value: 'Strong Buy',   label: 'Strong Buy',   className: 'text-emerald-300 font-bold' },
+                        { value: 'Buy',          label: 'Buy',          className: 'text-emerald-500' },
+                        { value: 'Watch',        label: 'Watch',        className: 'text-amber-400' },
+                        { value: 'Avoid',        label: 'Avoid',        className: 'text-slate-500' },
+                        { value: 'Market Risk',  label: 'Market Risk',  className: 'text-rose-400 font-bold' },
                       ]}
+                    />
+                  </td>
+
+                  {/* EMA Ribbon */}
+                  <td className="py-1 px-1.5 text-center">
+                    <input
+                      type="text"
+                      placeholder="<5"
+                      value={colFilters.days_since_ema9_ema20_bull}
+                      onChange={(e) => setColFilters({ ...colFilters, days_since_ema9_ema20_bull: e.target.value })}
+                      className="w-full min-w-[40px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-purple-500 focus:text-white text-center transition font-mono"
+                    />
+                  </td>
+
+                  {/* Golden Cross */}
+                  <td className="py-1 px-1.5 text-center">
+                    <input
+                      type="text"
+                      placeholder="<10"
+                      value={colFilters.days_since_sma20_sma50_bull}
+                      onChange={(e) => setColFilters({ ...colFilters, days_since_sma20_sma50_bull: e.target.value })}
+                      className="w-full min-w-[40px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-purple-500 focus:text-white text-center transition font-mono"
+                    />
+                  </td>
+
+                  {/* MACD Xover */}
+                  <td className="py-1 px-1.5 text-center">
+                    <input
+                      type="text"
+                      placeholder="<5"
+                      value={colFilters.days_since_macd_bull}
+                      onChange={(e) => setColFilters({ ...colFilters, days_since_macd_bull: e.target.value })}
+                      className="w-full min-w-[40px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-purple-500 focus:text-white text-center transition font-mono"
+                    />
+                  </td>
+
+                  {/* CMF Xover */}
+                  <td className="py-1 px-1.5 text-center">
+                    <input
+                      type="text"
+                      placeholder="<5"
+                      value={colFilters.days_since_cmf_bull}
+                      onChange={(e) => setColFilters({ ...colFilters, days_since_cmf_bull: e.target.value })}
+                      className="w-full min-w-[40px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-purple-500 focus:text-white text-center transition font-mono"
+                    />
+                  </td>
+
+                  {/* Mkt Cap */}
+                  <td className="py-1 px-1.5 text-right">
+                    <input
+                      type="text"
+                      placeholder=">1000cr"
+                      value={colFilters.market_cap}
+                      onChange={(e) => setColFilters({ ...colFilters, market_cap: e.target.value })}
+                      className="w-full min-w-[65px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-blue-500 focus:text-white text-right transition font-mono"
+                    />
+                  </td>
+
+                  {/* P/E */}
+                  <td className="py-1 px-1.5 text-right">
+                    <input
+                      type="text"
+                      placeholder="<30"
+                      value={colFilters.pe_ratio}
+                      onChange={(e) => setColFilters({ ...colFilters, pe_ratio: e.target.value })}
+                      className="w-full min-w-[40px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-blue-500 focus:text-white text-right transition font-mono"
+                    />
+                  </td>
+
+                  {/* P/B */}
+                  <td className="py-1 px-1.5 text-right">
+                    <input
+                      type="text"
+                      placeholder="<5"
+                      value={colFilters.pb_ratio}
+                      onChange={(e) => setColFilters({ ...colFilters, pb_ratio: e.target.value })}
+                      className="w-full min-w-[40px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-blue-500 focus:text-white text-right transition font-mono"
+                    />
+                  </td>
+
+                  {/* EV/EBITDA */}
+                  <td className="py-1 px-1.5 text-right">
+                    <input
+                      type="text"
+                      placeholder="<20"
+                      value={colFilters.ev_ebitda}
+                      onChange={(e) => setColFilters({ ...colFilters, ev_ebitda: e.target.value })}
+                      className="w-full min-w-[50px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-blue-500 focus:text-white text-right transition font-mono"
+                    />
+                  </td>
+
+                  {/* ROE */}
+                  <td className="py-1 px-1.5 text-right">
+                    <input
+                      type="text"
+                      placeholder=">15"
+                      value={colFilters.roe}
+                      onChange={(e) => setColFilters({ ...colFilters, roe: e.target.value })}
+                      className="w-full min-w-[40px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-blue-500 focus:text-white text-right transition font-mono"
+                    />
+                  </td>
+
+                  {/* D/E */}
+                  <td className="py-1 px-1.5 text-right">
+                    <input
+                      type="text"
+                      placeholder="<1"
+                      value={colFilters.debt_to_equity}
+                      onChange={(e) => setColFilters({ ...colFilters, debt_to_equity: e.target.value })}
+                      className="w-full min-w-[40px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-blue-500 focus:text-white text-right transition font-mono"
+                    />
+                  </td>
+
+                  {/* Net Margin */}
+                  <td className="py-1 px-1.5 text-right">
+                    <input
+                      type="text"
+                      placeholder=">10"
+                      value={colFilters.profit_margin}
+                      onChange={(e) => setColFilters({ ...colFilters, profit_margin: e.target.value })}
+                      className="w-full min-w-[40px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-blue-500 focus:text-white text-right transition font-mono"
+                    />
+                  </td>
+
+                  {/* EPS */}
+                  <td className="py-1 px-1.5 text-right">
+                    <input
+                      type="text"
+                      placeholder=">10"
+                      value={colFilters.eps_ttm}
+                      onChange={(e) => setColFilters({ ...colFilters, eps_ttm: e.target.value })}
+                      className="w-full min-w-[40px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-blue-500 focus:text-white text-right transition font-mono"
+                    />
+                  </td>
+
+                  {/* Sector */}
+                  <td className="py-1 px-1.5">
+                    <input
+                      type="text"
+                      placeholder="Filter..."
+                      value={colFilters.sector}
+                      onChange={(e) => setColFilters({ ...colFilters, sector: e.target.value })}
+                      className="w-full min-w-[70px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-blue-500 focus:text-white transition"
                     />
                   </td>
 
@@ -1646,7 +1539,7 @@ export const ScreenerPanel: React.FC = () => {
             <tbody className="divide-y divide-slate-850">
               {filteredResults.length === 0 ? (
                 <tr>
-                  <td colSpan={34} className="py-10 text-center text-slate-500 text-xs">
+                  <td colSpan={47} className="py-10 text-center text-slate-500 text-xs">
                     {isLoading 
                       ? 'Executing database snapshot sweep...' 
                       : 'No stock matches found for the current criteria.'}
@@ -1681,9 +1574,9 @@ export const ScreenerPanel: React.FC = () => {
                         {isChangeBullish ? '+' : ''}{formatNumber(row.price_pct_change)}%
                       </td>
 
-                      {/* Weekly Avg Vol */}
+                      {/* Avg Traded Value */}
                       <td className="py-2 px-1.5 text-right font-mono text-slate-350">
-                        {formatVolume(row.weekly_avg_volume)}
+                        {formatTradedValue(row.avg_traded_value)}
                       </td>
 
                       {/* Bias chip */}
@@ -1986,33 +1879,166 @@ export const ScreenerPanel: React.FC = () => {
                         )}
                       </td>
 
-                      {/* ML Signal */}
+                      {/* ML Signal (VajraML2) */}
                       <td className="py-2 px-1.5 text-center">
                         {(() => {
-                          const label = row.ml_label;
-                          const rank  = row.ml_rank;
-                          const pred  = row.ml_prediction;
-                          if (!label) return <span className="text-slate-600 text-xs">—</span>;
+                          const sig  = (row as any).ml2_signal as string | null | undefined;
+                          const rank = (row as any).ml2_rank as number | null | undefined;
+                          const ptp  = (row as any).ml2_p_tp as number | null | undefined;
+                          if (!sig) return <span className="text-slate-600 text-xs">—</span>;
                           const cfg: Record<string, { bg: string; text: string }> = {
-                            'Very Bullish': { bg: 'bg-emerald-500/20 border-emerald-400/50', text: 'text-emerald-200' },
-                            'Bullish':      { bg: 'bg-teal-500/15 border-teal-400/40',        text: 'text-teal-300'   },
-                            'Neutral':      { bg: 'bg-slate-700/40 border-slate-600/40',      text: 'text-slate-400'  },
-                            'Bearish':      { bg: 'bg-orange-500/15 border-orange-500/40',    text: 'text-orange-300' },
-                            'Very Bearish': { bg: 'bg-rose-500/20 border-rose-400/50',        text: 'text-rose-200'   },
+                            'Strong Buy':  { bg: 'bg-emerald-500/20 border-emerald-400/50', text: 'text-emerald-200' },
+                            'Buy':         { bg: 'bg-teal-500/15 border-teal-400/40',       text: 'text-teal-300'   },
+                            'Watch':       { bg: 'bg-amber-500/15 border-amber-400/40',     text: 'text-amber-300'  },
+                            'Avoid':       { bg: 'bg-slate-700/40 border-slate-600/40',     text: 'text-slate-400'  },
+                            'Market Risk': { bg: 'bg-rose-500/20 border-rose-400/50',       text: 'text-rose-200'   },
                           };
-                          const c = cfg[label] ?? cfg['Neutral'];
+                          const c = cfg[sig] ?? cfg['Avoid'];
                           return (
                             <span
-                              title={`ML Rank: ${rank ?? '—'} | Score: ${pred != null ? pred.toFixed(4) : '—'}`}
+                              title={`ML2 EV Rank: ${rank ?? '—'} | P(TP): ${ptp != null ? (ptp * 100).toFixed(1) + '%' : '—'}`}
                               className={`inline-flex flex-col items-center gap-0 px-1.5 py-0.5 rounded border text-[10px] font-bold whitespace-nowrap ${c.bg} ${c.text}`}
                             >
-                              {label}
+                              {sig}
                               {rank != null && (
                                 <span className="opacity-60 font-mono text-[9px] font-normal">#{rank}</span>
                               )}
                             </span>
                           );
                         })()}
+                      </td>
+
+                      {/* EMA Ribbon crossover */}
+                      <td className="py-2 px-1.5 text-center">
+                        {row.days_since_ema9_ema20_bull != null ? (
+                          <span className={`font-mono text-xs px-1 py-0.5 rounded border ${
+                            row.days_since_ema9_ema20_bull <= 3
+                              ? 'text-emerald-300 bg-emerald-950/30 border-emerald-700/40 font-bold'
+                              : row.days_since_ema9_ema20_bull <= 7
+                              ? 'text-teal-400 bg-teal-950/20 border-teal-800/30'
+                              : 'text-slate-500 bg-slate-900/30 border-slate-800/30'
+                          }`} title={`EMA9 crossed above EMA20: ${row.days_since_ema9_ema20_bull}d ago${row.ema9_ema20_spread != null ? ` · spread ${row.ema9_ema20_spread.toFixed(2)}%` : ''}`}>
+                            {row.days_since_ema9_ema20_bull}d
+                          </span>
+                        ) : <span className="text-slate-700">—</span>}
+                      </td>
+
+                      {/* Golden Cross */}
+                      <td className="py-2 px-1.5 text-center">
+                        {row.days_since_sma20_sma50_bull != null ? (
+                          <span className={`font-mono text-xs px-1 py-0.5 rounded border ${
+                            row.days_since_sma20_sma50_bull <= 5
+                              ? 'text-amber-300 bg-amber-950/30 border-amber-700/40 font-bold'
+                              : row.days_since_sma20_sma50_bull <= 10
+                              ? 'text-amber-500 bg-amber-950/15 border-amber-800/25'
+                              : 'text-slate-500 bg-slate-900/30 border-slate-800/30'
+                          }`} title={`SMA20 crossed above SMA50: ${row.days_since_sma20_sma50_bull}d ago`}>
+                            {row.days_since_sma20_sma50_bull}d
+                          </span>
+                        ) : <span className="text-slate-700">—</span>}
+                      </td>
+
+                      {/* MACD crossover */}
+                      <td className="py-2 px-1.5 text-center">
+                        {row.days_since_macd_bull != null ? (
+                          <span className={`font-mono text-xs px-1 py-0.5 rounded border ${
+                            row.days_since_macd_bull <= 3
+                              ? 'text-emerald-300 bg-emerald-950/30 border-emerald-700/40 font-bold'
+                              : row.days_since_macd_bull <= 7
+                              ? 'text-teal-400 bg-teal-950/20 border-teal-800/30'
+                              : 'text-slate-500 bg-slate-900/30 border-slate-800/30'
+                          }`} title={`MACD crossed above signal: ${row.days_since_macd_bull}d ago${row.macd_above_zero ? ' · MACD above zero ✓' : ''}${row.macd_histogram_slope != null ? ` · hist slope ${row.macd_histogram_slope > 0 ? '+' : ''}${row.macd_histogram_slope.toFixed(4)}` : ''}`}>
+                            {row.days_since_macd_bull}d{row.macd_above_zero ? '↑' : ''}
+                          </span>
+                        ) : <span className="text-slate-700">—</span>}
+                      </td>
+
+                      {/* CMF crossover */}
+                      <td className="py-2 px-1.5 text-center">
+                        {row.days_since_cmf_bull != null ? (
+                          <span className={`font-mono text-xs px-1 py-0.5 rounded border ${
+                            row.days_since_cmf_bull <= 3
+                              ? 'text-cyan-300 bg-cyan-950/30 border-cyan-700/40 font-bold'
+                              : row.days_since_cmf_bull <= 7
+                              ? 'text-cyan-500 bg-cyan-950/15 border-cyan-800/25'
+                              : 'text-slate-500 bg-slate-900/30 border-slate-800/30'
+                          }`} title={`CMF crossed above zero: ${row.days_since_cmf_bull}d ago${row.cmf_slope_5d != null ? ` · 5d slope ${row.cmf_slope_5d > 0 ? '+' : ''}${row.cmf_slope_5d.toFixed(3)}` : ''}`}>
+                            {row.days_since_cmf_bull}d
+                          </span>
+                        ) : <span className="text-slate-700">—</span>}
+                      </td>
+
+                      {/* Mkt Cap */}
+                      <td className="py-2 px-1.5 text-right font-mono text-xs text-slate-350">
+                        {row.market_cap != null ? formatTradedValue(row.market_cap) : <span className="text-slate-700">—</span>}
+                      </td>
+
+                      {/* P/E */}
+                      <td className="py-2 px-1.5 text-right font-mono text-xs">
+                        {row.pe_ratio != null ? (
+                          <span className={row.pe_ratio > 50 ? 'text-amber-400' : row.pe_ratio < 15 ? 'text-emerald-400' : 'text-slate-300'}>
+                            {row.pe_ratio.toFixed(1)}
+                          </span>
+                        ) : <span className="text-slate-700">—</span>}
+                      </td>
+
+                      {/* P/B */}
+                      <td className="py-2 px-1.5 text-right font-mono text-xs">
+                        {row.pb_ratio != null ? (
+                          <span className={row.pb_ratio > 5 ? 'text-amber-400' : 'text-slate-300'}>
+                            {row.pb_ratio.toFixed(1)}
+                          </span>
+                        ) : <span className="text-slate-700">—</span>}
+                      </td>
+
+                      {/* EV/EBITDA */}
+                      <td className="py-2 px-1.5 text-right font-mono text-xs">
+                        {row.ev_ebitda != null ? (
+                          <span className={row.ev_ebitda > 20 ? 'text-amber-400' : 'text-slate-300'}>
+                            {row.ev_ebitda.toFixed(1)}x
+                          </span>
+                        ) : <span className="text-slate-700">—</span>}
+                      </td>
+
+                      {/* ROE */}
+                      <td className="py-2 px-1.5 text-right font-mono text-xs">
+                        {row.roe != null ? (
+                          <span className={row.roe >= 0.20 ? 'text-emerald-400' : row.roe >= 0.10 ? 'text-slate-300' : 'text-rose-400'}>
+                            {(row.roe * 100).toFixed(1)}%
+                          </span>
+                        ) : <span className="text-slate-700">—</span>}
+                      </td>
+
+                      {/* D/E */}
+                      <td className="py-2 px-1.5 text-right font-mono text-xs">
+                        {row.debt_to_equity != null ? (
+                          <span className={row.debt_to_equity > 1 ? 'text-amber-400' : row.debt_to_equity > 0.5 ? 'text-slate-300' : 'text-emerald-400'}>
+                            {row.debt_to_equity.toFixed(2)}
+                          </span>
+                        ) : <span className="text-slate-700">—</span>}
+                      </td>
+
+                      {/* Net Margin */}
+                      <td className="py-2 px-1.5 text-right font-mono text-xs">
+                        {row.profit_margin != null ? (
+                          <span className={row.profit_margin >= 0.15 ? 'text-emerald-400' : row.profit_margin >= 0.05 ? 'text-slate-300' : row.profit_margin < 0 ? 'text-rose-400' : 'text-slate-400'}>
+                            {(row.profit_margin * 100).toFixed(1)}%
+                          </span>
+                        ) : <span className="text-slate-700">—</span>}
+                      </td>
+
+                      {/* EPS */}
+                      <td className="py-2 px-1.5 text-right font-mono text-xs">
+                        {row.eps_ttm != null ? (
+                          <span className={row.eps_ttm > 0 ? 'text-slate-300' : 'text-rose-400'}>
+                            ₹{row.eps_ttm.toFixed(1)}
+                          </span>
+                        ) : <span className="text-slate-700">—</span>}
+                      </td>
+
+                      {/* Sector */}
+                      <td className="py-2 px-1.5 text-xs text-slate-400 truncate max-w-[140px]" title={row.sector ?? undefined}>
+                        {row.sector ?? <span className="text-slate-700">—</span>}
                       </td>
 
                       {/* Actions */}

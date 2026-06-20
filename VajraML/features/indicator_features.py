@@ -78,6 +78,79 @@ def compute_indicator_features(df: pd.DataFrame) -> pd.DataFrame:
         "stochrsi_bearish_xover"
     ].transform(lambda s: _days_since_event(s, cap=XOVER_CAP_DAYS))
 
+    # ── MA / Price crossover recency features ─────────────────────────────────
+    # Each _bull_xover_days call: O(n) vectorised, no Python loops.
+    # Only bull direction kept for price-vs-MA (bear = existing close_vs_sma20 < 0).
+    df = _bull_xover_days(df, "symbol_id", "close", "sma_20",
+                          "days_since_price_sma20_bull", XOVER_CAP_DAYS)
+    df = _bull_xover_days(df, "symbol_id", "close", "sma_50",
+                          "days_since_price_sma50_bull", XOVER_CAP_DAYS)
+    df = _bull_xover_days(df, "symbol_id", "close", "ema_20",
+                          "days_since_price_ema20_bull", XOVER_CAP_DAYS)
+
+    # EMA ribbon and MA golden/death cross — both directions useful
+    df = _xover_days(df, "symbol_id", "ema_9", "ema_20",
+                     "days_since_ema9_ema20_bull", "days_since_ema9_ema20_bear", XOVER_CAP_DAYS)
+    df = _bull_xover_days(df, "symbol_id", "sma_20", "sma_50",
+                          "days_since_sma20_sma50_bull", XOVER_CAP_DAYS)
+    df = _xover_days(df, "symbol_id", "macd_line", "macd_signal",
+                     "days_since_macd_bull", "days_since_macd_bear", XOVER_CAP_DAYS)
+
+    # CMF vs zero — add zero column temporarily for generic helper
+    df["_zero"] = 0.0
+    df = _xover_days(df, "symbol_id", "cmf_20", "_zero",
+                     "days_since_cmf_bull", "days_since_cmf_bear", XOVER_CAP_DAYS)
+    df.drop(columns=["_zero"], inplace=True)
+
+    # ── Continuous crossover distance / momentum ──────────────────────────────
+    # EMA9-EMA20 spread as % of close: positive = ribbon bullish, negative = bearish
+    df["ema9_ema20_spread"] = (
+        (df["ema_9"] - df["ema_20"]) / df["close"].replace(0, np.nan) * 100
+    )
+
+    # MACD histogram 3-day slope: momentum-of-momentum, early reversal signal
+    df["macd_histogram_slope"] = df.groupby("symbol_id")["macd_histogram"].transform(
+        lambda x: (x - x.shift(3)) / 3
+    )
+
+    # Is MACD line above zero? Separates trending-up vs trending-down market context
+    df["macd_above_zero"] = (df["macd_line"] > 0).astype(float)
+
+    # CMF 5-day momentum: is money flow accelerating or decelerating?
+    df["cmf_slope_5d"] = df.groupby("symbol_id")["cmf_20"].transform(
+        lambda x: x - x.shift(5)
+    )
+
+    return df
+
+
+def _bull_xover_days(df: pd.DataFrame, symbol_col: str, fast_col: str, slow_col: str,
+                     out_name: str, cap: int) -> pd.DataFrame:
+    """Add a single bull days-since-crossover column (fast crossed above slow)."""
+    df["_xa"] = (df[fast_col] > df[slow_col]).astype(float)
+    prev = df.groupby(symbol_col)["_xa"].shift(1)
+    df["_xb"] = ((df["_xa"] == 1) & (prev == 0)).astype(float)
+    df[out_name] = df.groupby(symbol_col)["_xb"].transform(
+        lambda s: _days_since_event(s, cap=cap)
+    )
+    df.drop(columns=["_xa", "_xb"], inplace=True)
+    return df
+
+
+def _xover_days(df: pd.DataFrame, symbol_col: str, fast_col: str, slow_col: str,
+                bull_name: str, bear_name: str, cap: int) -> pd.DataFrame:
+    """Add bull and bear days-since-crossover columns (fast crosses above/below slow)."""
+    df["_xa"] = (df[fast_col] > df[slow_col]).astype(float)
+    prev = df.groupby(symbol_col)["_xa"].shift(1)
+    df["_xb"] = ((df["_xa"] == 1) & (prev == 0)).astype(float)
+    df["_xc"] = ((df["_xa"] == 0) & (prev == 1)).astype(float)
+    df[bull_name] = df.groupby(symbol_col)["_xb"].transform(
+        lambda s: _days_since_event(s, cap=cap)
+    )
+    df[bear_name] = df.groupby(symbol_col)["_xc"].transform(
+        lambda s: _days_since_event(s, cap=cap)
+    )
+    df.drop(columns=["_xa", "_xb", "_xc"], inplace=True)
     return df
 
 

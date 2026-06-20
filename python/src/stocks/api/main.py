@@ -1,6 +1,7 @@
 """FastAPI application entry point with lifespan-managed database and settings bootstrap."""
 
 import os
+import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -12,20 +13,33 @@ from loguru import logger
 
 
 # ── config.yaml location ─────────────────────────────────────────────────────
-# In a frozen (PyInstaller) build the source-relative parents[] chain resolves
-# outside the bundle.  The launcher injects VAJRA_CONFIG_YAML so we use that
-# when available; otherwise fall back to the source-tree path for dev mode.
+
+def _get_user_appdata_dir() -> Path | None:
+    """Returns the platform-appropriate per-user data directory for VajraStocks."""
+    if sys.platform == "win32":
+        appdata = os.environ.get("APPDATA", "")
+        return Path(appdata) / "VajraStocks" if appdata else None
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Application Support" / "VajraStocks"
+    # Linux / BSD — respect XDG_DATA_HOME
+    xdg = os.environ.get("XDG_DATA_HOME", "")
+    base = Path(xdg) if xdg else Path.home() / ".local" / "share"
+    return base / "VajraStocks"
+
+
 def _resolve_config_yaml() -> Path:
+    # 1. Explicit env var — always wins (set by frozen launcher or Docker).
     env = os.environ.get("VAJRA_CONFIG_YAML")
     if env:
         return Path(env)
-    # Installed build: %APPDATA%\VajraStocks\config.yaml (takes priority over dev tree)
-    appdata = os.environ.get("APPDATA", "")
-    if appdata:
-        appdata_cfg = Path(appdata) / "VajraStocks" / "config.yaml"
-        if appdata_cfg.exists():
-            return appdata_cfg
-    # Dev / source mode: python/src/stocks/api/main.py → parents[3] = python/
+    # 2. Platform-appropriate per-user directory (installed build).
+    user_dir = _get_user_appdata_dir()
+    if user_dir:
+        user_cfg = user_dir / "config.yaml"
+        if user_cfg.exists():
+            return user_cfg
+    # 3. Source-tree fallback for dev mode.
+    # python/src/stocks/api/main.py → parents[3] = python/
     return Path(__file__).resolve().parents[3] / "config" / "config.yaml"
 
 _CONFIG_YAML = _resolve_config_yaml()
@@ -350,8 +364,8 @@ async def lifespan(app: FastAPI):
     _vajra_root = str(_Path(__file__).parents[4])
     if _vajra_root not in _sys.path:
         _sys.path.insert(0, _vajra_root)
-    from VajraML.train_service import TrainingJobManager
-    app.state.training_manager = TrainingJobManager()
+    from VajraML2.train_service import TrainingJobManagerV2
+    app.state.training_manager_v2 = TrainingJobManagerV2()
 
     logger.info("Application startup complete.")
 
@@ -381,7 +395,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="VajraStocks — NSE Quantitative Analysis Platform",
     description="Local-first stock analysis, screening, portfolio tracking, and AI-powered research.",
-    version="1.4.0",
+    version="1.5.0",
     lifespan=lifespan,
 )
 
@@ -404,7 +418,7 @@ app.add_middleware(GZipMiddleware, minimum_size=1000)
 @app.get("/health")
 def health_check():
     """API liveness probe."""
-    return {"status": "HEALTHY", "version": "1.4.0"}
+    return {"status": "HEALTHY", "version": "1.5.0"}
 
 
 # ── Routes ─────────────────────────────────────────────────────────────────────

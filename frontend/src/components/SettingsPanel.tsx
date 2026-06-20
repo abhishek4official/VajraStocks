@@ -49,14 +49,58 @@ const RECONNECT_TIMEOUT = 30_000;
 
 // ─── Type-aware input ─────────────────────────────────────────────────────────
 
+const PROVIDER_URLS: Record<string, string> = {
+  ollama:     'http://localhost:11434',
+  openai:     'https://api.openai.com/v1',
+  groq:       'https://api.groq.com/openai/v1',
+  deepseek:   'https://api.deepseek.com/v1',
+  openrouter: 'https://openrouter.ai/api/v1',
+  lm_studio:  'http://localhost:1234/v1',
+};
+
+const PROVIDER_MODELS: Record<string, string> = {
+  ollama:     'qwen2.5-coder:7b',
+  openai:     'gpt-4o-mini',
+  groq:       'llama-3.3-70b-versatile',
+  deepseek:   'deepseek-chat',
+  openrouter: 'mistralai/mistral-7b-instruct',
+  lm_studio:  'local-model',
+};
+
 const SettingInput: React.FC<{
   s: Setting;
   value: string;
   revealed: boolean;
   onChange: (v: string) => void;
   onToggleReveal: () => void;
-}> = ({ s, value, revealed, onChange, onToggleReveal }) => {
+  onProviderChange?: (provider: string) => void;
+}> = ({ s, value, revealed, onChange, onToggleReveal, onProviderChange }) => {
   const base = 'w-full px-3 py-1.5 text-xs rounded-lg bg-slate-900 border text-white focus:outline-none transition font-mono';
+
+  // Special dropdown for ai_provider
+  if (s.category === 'AI' && s.key === 'ai_provider') {
+    return (
+      <div className="flex items-center gap-2">
+        <select
+          value={value}
+          onChange={e => { onChange(e.target.value); onProviderChange?.(e.target.value); }}
+          className={`${base} border-slate-800 focus:border-purple-500 cursor-pointer`}
+        >
+          <option value="ollama">Ollama (local)</option>
+          <option value="openai">OpenAI</option>
+          <option value="groq">Groq (free tier)</option>
+          <option value="deepseek">DeepSeek</option>
+          <option value="openrouter">OpenRouter</option>
+          <option value="lm_studio">LM Studio (local)</option>
+        </select>
+        {['groq', 'deepseek', 'openrouter'].includes(value) && (
+          <span className="text-[10px] px-2 py-1 rounded bg-emerald-950 border border-emerald-900 text-emerald-400 font-semibold whitespace-nowrap">
+            {value === 'groq' ? 'Free tier' : value === 'openrouter' ? 'Pay-as-you-go' : '$0.14/M tokens'}
+          </span>
+        )}
+      </div>
+    );
+  }
 
   if (s.value_type === 'boolean') {
     const on = ['true', '1', 'yes'].includes(value.toLowerCase());
@@ -467,6 +511,13 @@ export const SettingsPanel: React.FC = () => {
                       revealed={!!showSecret[k]}
                       onChange={v => handleChange(s, v)}
                       onToggleReveal={() => setShowSecret(p => ({ ...p, [k]: !p[k] }))}
+                      onProviderChange={provider => {
+                        // Auto-fill base_url and suggest a model when provider changes
+                        const urlKey = 'AI/ai_base_url';
+                        const modelKey = 'AI/ai_model';
+                        if (PROVIDER_URLS[provider]) setEdits(p => ({ ...p, [urlKey]: PROVIDER_URLS[provider] }));
+                        if (PROVIDER_MODELS[provider]) setEdits(p => ({ ...p, [modelKey]: PROVIDER_MODELS[provider] }));
+                      }}
                     />
                     {/* Save button — hidden for booleans (auto-save via toggle) */}
                     {isBoolean ? (

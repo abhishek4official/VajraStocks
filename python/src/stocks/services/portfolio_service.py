@@ -7,14 +7,15 @@ only renders the payload produced by :meth:`PortfolioService.get_portfolio`.
 from __future__ import annotations
 
 import csv
+import datetime
 import re
 
 from collections import defaultdict
 from loguru import logger
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
-from stocks.db.models import PortfolioHolding, ScreeningSnapshot, Symbol, SymbolConfluenceLevel
+from stocks.db.models import DailyIndicator, DailyPrice, PortfolioHolding, ScreeningSnapshot, Symbol, SymbolConfluenceLevel
 from stocks.services.quant.confluence_service import ConfluenceService
 from stocks.services.quant.portfolio_risk import (
     compute_correlation_clusters,
@@ -191,6 +192,30 @@ class PortfolioService:
                 for lvl in confl_levels:
                     confl_by_symbol_id[lvl.symbol_id].append(lvl)
 
+            # Batch-load latest supertrend price level for dynamic trailing stops
+            supertrend_by_sid: dict[int, float | None] = {}
+            if symbol_ids:
+                _sub = (
+                    select(
+                        DailyIndicator.symbol_id,
+                        func.max(DailyIndicator.trading_date).label("max_date"),
+                    )
+                    .where(DailyIndicator.symbol_id.in_(symbol_ids))
+                    .group_by(DailyIndicator.symbol_id)
+                    .subquery()
+                )
+                latest_inds = self.db.scalars(
+                    select(DailyIndicator).join(
+                        _sub,
+                        (DailyIndicator.symbol_id == _sub.c.symbol_id)
+                        & (DailyIndicator.trading_date == _sub.c.max_date),
+                    )
+                ).all()
+                for ind in latest_inds:
+                    supertrend_by_sid[ind.symbol_id] = (
+                        float(ind.supertrend) if ind.supertrend is not None else None
+                    )
+
             # Pre-compute universe RS bottom-quartile threshold for rotation detection
             all_rs = self.db.scalars(
                 select(ScreeningSnapshot.rs_score_1m).where(ScreeningSnapshot.rs_score_1m.is_not(None))
@@ -223,13 +248,24 @@ class PortfolioService:
 
             # Per-position open risk via confluence support, plus structural resistance targets
             atr_pct = float(snap.atr_pct) if snap and snap.atr_pct is not None else None
+            snap_st_dir = snap.supertrend_dir if snap else None
+            st_val = supertrend_by_sid.get(r.symbol_id) if r.symbol_id is not None else None
+            stop_type = "structural"
             stop = open_risk = target_1 = target_2 = target_3 = potential_gain_pct = rr_ratio = None
             position_size_shares = None
             if atr_pct is not None and ltp > 0:
                 atr_abs = atr_pct / 100.0 * ltp
 
-                # Structural support stop-loss
-                if support_val is not None:
+                # Dynamic trailing stop: prefer Supertrend when it's below price & trending up
+                if st_val is not None and snap_st_dir == "UP" and st_val < ltp:
+                    if support_val is not None:
+                        stop = round(max(st_val, support_val - 1.5 * atr_abs), 2)
+                    else:
+                        stop = round(st_val, 2)
+                    if stop >= ltp:
+                        stop = round(ltp - 2.0 * atr_abs, 2)
+                    stop_type = "supertrend"
+                elif support_val is not None:
                     stop = round(support_val - 1.5 * atr_abs, 2)
                     if stop >= ltp:
                         stop = round(ltp - 2.0 * atr_abs, 2)
@@ -320,8 +356,57 @@ class PortfolioService:
                     "potential_gain_pct": potential_gain_pct,
                     "rr_ratio": rr_ratio,
                     "position_size_shares": position_size_shares,
+                    "stop_type": stop_type,
+                    "composite_score": round(float(snap.composite_score), 1) if snap and snap.composite_score is not None else None,
+                    "ml_label": snap.ml2_signal if snap else None,
+                    "supertrend_dir": snap_st_dir,
                 }
             )
+
+        # ── Rolling alpha vs NIFTY (1W / 4W / 3M) ─────────────────────────────
+        alpha_1w: float | None = None
+        alpha_4w: float | None = None
+        alpha_3m: float | None = None
+        if holdings and total_current > 0:
+            _nifty = self.db.scalar(select(ScreeningSnapshot).where(ScreeningSnapshot.symbol == "^NSEI"))
+            if _nifty:
+                _n1w = float(_nifty.ret_1w) if _nifty.ret_1w is not None else None
+                _n4w = float(_nifty.ret_4w) if _nifty.ret_4w is not None else None
+                _p1w = sum(h["current_val"] * (h["ret_1w"] or 0.0) for h in holdings) / total_current
+                _p4w = sum(h["current_val"] * (h["ret_4w"] or 0.0) for h in holdings) / total_current
+                if _n1w is not None and any(h["ret_1w"] is not None for h in holdings):
+                    alpha_1w = round(_p1w - _n1w, 2)
+                if _n4w is not None and any(h["ret_4w"] is not None for h in holdings):
+                    alpha_4w = round(_p4w - _n4w, 2)
+                if _nifty.symbol_id is not None:
+                    _held_sids = [r.symbol_id for r in rows if r.symbol_id is not None]
+                    _cutoff = datetime.date.today() - datetime.timedelta(days=91)
+                    _price_rows = self.db.execute(
+                        select(DailyPrice.symbol_id, DailyPrice.close)
+                        .where(
+                            DailyPrice.symbol_id.in_(_held_sids + [_nifty.symbol_id]),
+                            DailyPrice.trading_date >= _cutoff,
+                            DailyPrice.granularity == "1d",
+                        )
+                        .order_by(DailyPrice.symbol_id.asc(), DailyPrice.trading_date.asc())
+                    ).all()
+                    _by_sid: dict[int, list[float]] = {}
+                    for _pr in _price_rows:
+                        _by_sid.setdefault(_pr.symbol_id, []).append(float(_pr.close))
+                    _nc = _by_sid.get(_nifty.symbol_id, [])
+                    if len(_nc) >= 2:
+                        _nr3m = (_nc[-1] - _nc[0]) / _nc[0] * 100.0
+                        _sid2instr = {r.symbol_id: r.instrument for r in rows if r.symbol_id is not None}
+                        _ir3m: dict[str, float] = {}
+                        for _sid, _cl in _by_sid.items():
+                            if _sid == _nifty.symbol_id or len(_cl) < 2:
+                                continue
+                            _instr = _sid2instr.get(_sid)
+                            if _instr:
+                                _ir3m[_instr] = (_cl[-1] - _cl[0]) / _cl[0] * 100.0
+                        if _ir3m:
+                            _p3m = sum(h["current_val"] * _ir3m.get(h["instrument"], 0.0) for h in holdings) / total_current
+                            alpha_3m = round(_p3m - _nr3m, 2)
 
         total_pnl = total_current - total_invested
         # Charges estimate (round-trip): brokerage both legs + STT on sell side
@@ -401,6 +486,9 @@ class PortfolioService:
                 "correlation_clusters": correlation_clusters,
                 "portfolio_beta": portfolio_beta,
                 "diversification_score": diversification_score,
+                "alpha_1w": alpha_1w,
+                "alpha_4w": alpha_4w,
+                "alpha_3m": alpha_3m,
             },
         }
 
@@ -449,8 +537,8 @@ class PortfolioService:
                 score += 0.5  # highest conviction bonus
             if sn.composite_score is not None:
                 score += float(sn.composite_score) * 0.5  # pre-computed multi-factor blend
-            if sn.ml_prediction is not None:
-                score += float(sn.ml_prediction) * 1.0  # VajraML signal
+            if sn.ml2_ev_score is not None:
+                score += float(sn.ml2_ev_score) * 1.0  # VajraML signal
             return score
 
         ranked = sorted(rows, key=_momentum_score, reverse=True)[:limit]
@@ -554,7 +642,7 @@ class PortfolioService:
                     "obv_trend": getattr(sn, "obv_trend", None),
                     "supertrend_dir": getattr(sn, "supertrend_dir", None),
                     "composite_score": round(float(sn.composite_score), 3) if sn.composite_score is not None else None,
-                    "ml_prediction": round(float(sn.ml_prediction), 3) if sn.ml_prediction is not None else None,
+                    "ml_prediction": round(float(sn.ml2_ev_score), 3) if sn.ml2_ev_score is not None else None,
                 }
             )
         return out

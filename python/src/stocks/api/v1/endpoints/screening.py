@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from stocks.api.deps import get_db
 from stocks.config import Config as _Config
-from stocks.db.models import StrategySignal, SymbolConfluenceLevel
+from stocks.db.models import StrategySignal, SymbolConfluenceLevel, SymbolFundamentals
 from stocks.services.quant.confluence_service import ConfluenceService
 
 config = _Config.load()
@@ -188,7 +188,7 @@ class ScreeningParams(BaseModel):
     ha_dir: str | None = None  # 'UP', 'DOWN'
     renko_dir: str | None = None  # 'UP', 'DOWN'
     lb_dir: str | None = None  # 'UP', 'DOWN'
-    min_weekly_avg_volume: float | None = None
+    min_avg_traded_value: float | None = None
     volume_breakout: str | None = None  # 'ANY', '1.5X', '2.0X', '3.0X'
     only_nr7: bool = False
     only_inside_bar: bool = False
@@ -204,6 +204,11 @@ class ScreeningParams(BaseModel):
     max_stochrsi_k: float | None = None
     min_stochrsi_k: float | None = None
     stochrsi_bullish_xover_max_days: int | None = None
+    # Crossover recency filters
+    ema_ribbon_bull_max_days:  int | None = None   # days_since_ema9_ema20_bull
+    golden_cross_max_days:     int | None = None   # days_since_sma20_sma50_bull
+    macd_bull_xover_max_days:  int | None = None   # days_since_macd_bull
+    cmf_bull_xover_max_days:   int | None = None   # days_since_cmf_bull
     limit: int = 2500
 
 
@@ -231,7 +236,7 @@ class ScreenerRowResponse(BaseModel):
     rs_score_1m: float | None = None
     regime_bias: str | None = None
     weekly_trend: str | None = None
-    weekly_avg_volume: float | None = None
+    avg_traded_value: float | None = None
     volume_breakout_ratio: float | None = None
     ret_1w: float | None = None
     ret_2w: float | None = None
@@ -266,10 +271,51 @@ class ScreenerRowResponse(BaseModel):
     stochrsi_zone: str | None = None
     stochrsi_bullish_xover_days_ago: int | None = None
     stochrsi_bearish_xover_days_ago: int | None = None
-    ml_prediction: float | None = None
-    ml_rank: int | None = None
-    ml_label: str | None = None
+    ml2_p_tp: float | None = None
+    ml2_p_sl: float | None = None
+    ml2_ev_score: float | None = None
+    ml2_rank: int | None = None
+    ml2_signal: str | None = None
     strategy_signals: dict = {}   # {strategy_id: {"signal": str, "score": float|None}}
+    # Crossover recency
+    days_since_price_sma20_bull: int | None = None
+    days_since_price_sma50_bull: int | None = None
+    days_since_price_ema20_bull: int | None = None
+    days_since_ema9_ema20_bull:  int | None = None
+    days_since_ema9_ema20_bear:  int | None = None
+    days_since_sma20_sma50_bull: int | None = None
+    days_since_macd_bull:        int | None = None
+    days_since_macd_bear:        int | None = None
+    days_since_cmf_bull:         int | None = None
+    days_since_cmf_bear:         int | None = None
+    ema9_ema20_spread:           float | None = None
+    macd_histogram_slope:        float | None = None
+    macd_above_zero:             bool | None = None
+    cmf_slope_5d:                float | None = None
+    # Fundamentals
+    market_cap:       float | None = None
+    enterprise_value: float | None = None
+    pe_ratio:         float | None = None
+    forward_pe:       float | None = None
+    pb_ratio:         float | None = None
+    ev_ebitda:        float | None = None
+    price_to_sales:   float | None = None
+    revenue_ttm:      float | None = None
+    net_profit_ttm:   float | None = None
+    ebitda:           float | None = None
+    gross_margin:     float | None = None
+    profit_margin:    float | None = None
+    operating_margin: float | None = None
+    eps_ttm:          float | None = None
+    book_value:       float | None = None
+    dividend_yield:   float | None = None
+    roe:              float | None = None
+    roa:              float | None = None
+    debt_to_equity:   float | None = None
+    current_ratio:    float | None = None
+    free_cashflow:    float | None = None
+    sector:           str | None = None
+    industry:         str | None = None
 
     class Config:
         from_attributes = True
@@ -309,11 +355,27 @@ def _build_strategy_signal_map(db: Session, symbol_ids: list[int]) -> dict:
     return out
 
 
-def _build_row(r, confl_by_symbol_id: dict, risk_per_trade: float, strat_by_symbol_id: dict | None = None) -> dict:
+def _build_fund_map(db: Session, symbol_ids: list[int]) -> dict:
+    """Batch-loads SymbolFundamentals keyed by symbol_id."""
+    fund_by_id: dict = {}
+    if not symbol_ids:
+        return fund_by_id
+    chunk_size = 1000
+    for i in range(0, len(symbol_ids), chunk_size):
+        chunk = symbol_ids[i : i + chunk_size]
+        for f in db.scalars(
+            select(SymbolFundamentals).where(SymbolFundamentals.symbol_id.in_(chunk))
+        ).all():
+            fund_by_id[f.symbol_id] = f
+    return fund_by_id
+
+
+def _build_row(r, confl_by_symbol_id: dict, risk_per_trade: float, strat_by_symbol_id: dict | None = None, fund_by_symbol_id: dict | None = None) -> dict:
     """Builds a single screener response row dict from a ScreeningSnapshot."""
     close = float(r.close_price)
     setup = _structural_trade_setup(close, r.atr_pct, confl_by_symbol_id.get(r.symbol_id, []), risk_per_trade)
     tqs = compute_trade_quality_score(r, setup.get("rr_ratio"))
+    fund = (fund_by_symbol_id or {}).get(r.symbol_id)
     return {
         "symbol_id": r.symbol_id,
         "symbol": r.symbol,
@@ -338,7 +400,7 @@ def _build_row(r, confl_by_symbol_id: dict, risk_per_trade: float, strat_by_symb
         "rs_score_1m": r.rs_score_1m,
         "regime_bias": getattr(r, "regime_bias", None),
         "weekly_trend": getattr(r, "weekly_trend", None),
-        "weekly_avg_volume": getattr(r, "weekly_avg_volume", None),
+        "avg_traded_value": getattr(r, "avg_traded_value", None),
         "volume_breakout_ratio": getattr(r, "volume_breakout_ratio", None),
         "ret_1w": r.ret_1w,
         "ret_2w": r.ret_2w,
@@ -367,10 +429,49 @@ def _build_row(r, confl_by_symbol_id: dict, risk_per_trade: float, strat_by_symb
         "stochrsi_zone": getattr(r, "stochrsi_zone", None),
         "stochrsi_bullish_xover_days_ago": getattr(r, "stochrsi_bullish_xover_days_ago", None),
         "stochrsi_bearish_xover_days_ago": getattr(r, "stochrsi_bearish_xover_days_ago", None),
-        "ml_prediction": getattr(r, "ml_prediction", None),
-        "ml_rank": getattr(r, "ml_rank", None),
-        "ml_label": getattr(r, "ml_label", None),
+        "ml2_p_tp":    getattr(r, "ml2_p_tp",    None),
+        "ml2_p_sl":    getattr(r, "ml2_p_sl",    None),
+        "ml2_ev_score":getattr(r, "ml2_ev_score", None),
+        "ml2_rank":    getattr(r, "ml2_rank",     None),
+        "ml2_signal":  getattr(r, "ml2_signal",   None),
         "strategy_signals": (strat_by_symbol_id or {}).get(r.symbol_id, {}),
+        "market_cap":       getattr(fund, "market_cap",       None),
+        "enterprise_value": getattr(fund, "enterprise_value", None),
+        "pe_ratio":         getattr(fund, "pe_ratio",         None),
+        "forward_pe":       getattr(fund, "forward_pe",       None),
+        "pb_ratio":         getattr(fund, "pb_ratio",         None),
+        "ev_ebitda":        getattr(fund, "ev_ebitda",        None),
+        "price_to_sales":   getattr(fund, "price_to_sales",   None),
+        "revenue_ttm":      getattr(fund, "revenue_ttm",      None),
+        "net_profit_ttm":   getattr(fund, "net_profit_ttm",   None),
+        "ebitda":           getattr(fund, "ebitda",           None),
+        "gross_margin":     getattr(fund, "gross_margin",     None),
+        "profit_margin":    getattr(fund, "profit_margin",    None),
+        "operating_margin": getattr(fund, "operating_margin", None),
+        "eps_ttm":          getattr(fund, "eps_ttm",          None),
+        "book_value":       getattr(fund, "book_value",       None),
+        "dividend_yield":   getattr(fund, "dividend_yield",   None),
+        "roe":              getattr(fund, "roe",              None),
+        "roa":              getattr(fund, "roa",              None),
+        "debt_to_equity":   getattr(fund, "debt_to_equity",   None),
+        "current_ratio":    getattr(fund, "current_ratio",    None),
+        "free_cashflow":    getattr(fund, "free_cashflow",    None),
+        "sector":           getattr(fund, "sector",           None),
+        "industry":         getattr(fund, "industry",         None),
+        "days_since_price_sma20_bull": getattr(r, "days_since_price_sma20_bull", None),
+        "days_since_price_sma50_bull": getattr(r, "days_since_price_sma50_bull", None),
+        "days_since_price_ema20_bull": getattr(r, "days_since_price_ema20_bull", None),
+        "days_since_ema9_ema20_bull":  getattr(r, "days_since_ema9_ema20_bull", None),
+        "days_since_ema9_ema20_bear":  getattr(r, "days_since_ema9_ema20_bear", None),
+        "days_since_sma20_sma50_bull": getattr(r, "days_since_sma20_sma50_bull", None),
+        "days_since_macd_bull":        getattr(r, "days_since_macd_bull", None),
+        "days_since_macd_bear":        getattr(r, "days_since_macd_bear", None),
+        "days_since_cmf_bull":         getattr(r, "days_since_cmf_bull", None),
+        "days_since_cmf_bear":         getattr(r, "days_since_cmf_bear", None),
+        "ema9_ema20_spread":           getattr(r, "ema9_ema20_spread", None),
+        "macd_histogram_slope":        getattr(r, "macd_histogram_slope", None),
+        "macd_above_zero":             getattr(r, "macd_above_zero", None),
+        "cmf_slope_5d":                getattr(r, "cmf_slope_5d", None),
     }
 
 
@@ -385,7 +486,7 @@ def get_screening_results_get(
     ha_dir: str | None = None,
     renko_dir: str | None = None,
     lb_dir: str | None = None,
-    min_weekly_avg_volume: float | None = None,
+    min_avg_traded_value: float | None = None,
     volume_breakout: str | None = None,
     only_nr7: bool = False,
     only_inside_bar: bool = False,
@@ -399,6 +500,10 @@ def get_screening_results_get(
     max_stochrsi_k: float | None = None,
     min_stochrsi_k: float | None = None,
     stochrsi_bullish_xover_max_days: int | None = None,
+    ema_ribbon_bull_max_days: int | None = None,
+    golden_cross_max_days: int | None = None,
+    macd_bull_xover_max_days: int | None = None,
+    cmf_bull_xover_max_days: int | None = None,
     limit: int = 2500,
     db: Session = Depends(get_db),
 ):
@@ -414,7 +519,7 @@ def get_screening_results_get(
         ha_dir=ha_dir,
         renko_dir=renko_dir,
         lb_dir=lb_dir,
-        min_weekly_avg_volume=min_weekly_avg_volume,
+        min_avg_traded_value=min_avg_traded_value,
         volume_breakout=volume_breakout,
         only_nr7=only_nr7,
         only_inside_bar=only_inside_bar,
@@ -428,6 +533,10 @@ def get_screening_results_get(
         max_stochrsi_k=max_stochrsi_k,
         min_stochrsi_k=min_stochrsi_k,
         stochrsi_bullish_xover_max_days=stochrsi_bullish_xover_max_days,
+        ema_ribbon_bull_max_days=ema_ribbon_bull_max_days,
+        golden_cross_max_days=golden_cross_max_days,
+        macd_bull_xover_max_days=macd_bull_xover_max_days,
+        cmf_bull_xover_max_days=cmf_bull_xover_max_days,
         limit=limit,
     )
 
@@ -435,7 +544,8 @@ def get_screening_results_get(
     ids = [r.symbol_id for r in results]
     confl_by_symbol_id = _build_confl_map(db, ids)
     strat_by_symbol_id = _build_strategy_signal_map(db, ids)
-    return [_build_row(r, confl_by_symbol_id, risk_per_trade, strat_by_symbol_id) for r in results]
+    fund_by_symbol_id = _build_fund_map(db, ids)
+    return [_build_row(r, confl_by_symbol_id, risk_per_trade, strat_by_symbol_id, fund_by_symbol_id) for r in results]
 
 
 @router.post("/run", response_model=list[ScreenerRowResponse])
@@ -452,7 +562,7 @@ def get_screening_results_post(params: ScreeningParams, db: Session = Depends(ge
         ha_dir=params.ha_dir,
         renko_dir=params.renko_dir,
         lb_dir=params.lb_dir,
-        min_weekly_avg_volume=params.min_weekly_avg_volume,
+        min_avg_traded_value=params.min_avg_traded_value,
         volume_breakout=params.volume_breakout,
         only_nr7=params.only_nr7,
         only_inside_bar=params.only_inside_bar,
@@ -466,6 +576,10 @@ def get_screening_results_post(params: ScreeningParams, db: Session = Depends(ge
         max_stochrsi_k=params.max_stochrsi_k,
         min_stochrsi_k=params.min_stochrsi_k,
         stochrsi_bullish_xover_max_days=params.stochrsi_bullish_xover_max_days,
+        ema_ribbon_bull_max_days=params.ema_ribbon_bull_max_days,
+        golden_cross_max_days=params.golden_cross_max_days,
+        macd_bull_xover_max_days=params.macd_bull_xover_max_days,
+        cmf_bull_xover_max_days=params.cmf_bull_xover_max_days,
         limit=params.limit,
     )
 
@@ -473,4 +587,5 @@ def get_screening_results_post(params: ScreeningParams, db: Session = Depends(ge
     ids = [r.symbol_id for r in results]
     confl_by_symbol_id = _build_confl_map(db, ids)
     strat_by_symbol_id = _build_strategy_signal_map(db, ids)
-    return [_build_row(r, confl_by_symbol_id, risk_per_trade, strat_by_symbol_id) for r in results]
+    fund_by_symbol_id = _build_fund_map(db, ids)
+    return [_build_row(r, confl_by_symbol_id, risk_per_trade, strat_by_symbol_id, fund_by_symbol_id) for r in results]

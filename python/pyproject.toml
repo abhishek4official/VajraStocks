@@ -1,12 +1,15 @@
 [project]
 name = "stocks"
-version = "1.4.0"
+version = "1.5.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12, <3.13"
 dependencies = [
-    "agent-framework>=1.7.0",
     "aiosqlite>=0.22.1",
+    "langchain-core>=0.3.0",
+    "langchain-ollama>=0.2.0",
+    "langchain-openai>=0.2.0",
+    "langgraph>=0.2.0",
     "alembic>=1.18.4",
     "click>=8.4.1",
     "fastapi>=0.136.3",
@@ -23,6 +26,7 @@ dependencies = [
     "scikit-learn>=1.9.0",
     "scipy>=1.17.1",
     "sqlalchemy>=2.0.50",
+    "python-multipart>=0.0.9",
     "uvicorn>=0.48.0",
     "yfinance>=1.4.1",
 ]
