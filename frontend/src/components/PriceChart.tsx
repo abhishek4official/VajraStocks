@@ -235,6 +235,7 @@ export const PriceChart: React.FC<PriceChartProps> = ({
         borderColor: chartTheme.borderColor,
         timeVisible: true,
         secondsVisible: false,
+        rightOffset: 8,
       },
     };
 
@@ -273,6 +274,8 @@ export const PriceChart: React.FC<PriceChartProps> = ({
         mainChart.timeScale().setVisibleRange({ from: fromTs as any, to: toTs as any });
       } catch { mainChart.timeScale().fitContent(); }
     }
+    // Re-apply right padding after range is set so the last bar stays ~50px from the price axis
+    mainChart.timeScale().applyOptions({ rightOffset: 8 });
 
     // 5b. Custom horizontal price lines (user-drawn, persisted per symbol)
     for (const price of customLines) {
