@@ -19,11 +19,11 @@ const fmtNum = (v: number | null, dec = 2) => (v == null ? '—' : v.toFixed(dec
 
 const Stat: React.FC<{ label: string; value: string; highlight?: 'green' | 'red' | null }> = ({ label, value, highlight }) => (
   <div className="flex flex-col gap-0.5">
-    <span className="text-[10px] text-slate-500 uppercase tracking-wide font-semibold">{label}</span>
+    <span className="text-[10px] text-text-muted uppercase tracking-wide font-semibold">{label}</span>
     <span className={`text-sm font-bold font-mono ${
       highlight === 'green' ? 'text-emerald-400'
       : highlight === 'red' ? 'text-rose-400'
-      : 'text-slate-100'
+      : 'text-text-main'
     }`}>{value}</span>
   </div>
 );
@@ -53,9 +53,9 @@ export const FundamentalsCard: React.FC<Props> = ({ symbol }) => {
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <BarChart2 className="w-4 h-4 text-blue-400" />
-          <h3 className="text-sm font-bold text-white tracking-wide">Fundamentals</h3>
+          <h3 className="text-sm font-bold text-text-main tracking-wide">Fundamentals</h3>
           {data?.sector && (
-            <span className="text-[10px] px-2 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-400 font-mono">
+            <span className="text-[10px] px-2 py-0.5 rounded bg-bg-surface border border-border-subtle text-text-muted font-mono">
               {data.sector}
             </span>
           )}
@@ -64,16 +64,16 @@ export const FundamentalsCard: React.FC<Props> = ({ symbol }) => {
           onClick={handleRefresh}
           disabled={refreshing}
           title="Refresh from yfinance"
-          className="p-1.5 rounded-lg text-slate-500 hover:text-slate-200 hover:bg-slate-800 transition cursor-pointer"
+          className="p-1.5 rounded-lg text-text-muted hover:text-text-main hover:bg-bg-surface transition cursor-pointer"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
         </button>
       </div>
 
       {loading ? (
-        <div className="text-xs text-slate-500 py-4 text-center animate-pulse">Loading fundamentals…</div>
+        <div className="text-xs text-text-muted py-4 text-center animate-pulse">Loading fundamentals…</div>
       ) : data == null ? (
-        <div className="text-xs text-slate-500 py-4 text-center">
+        <div className="text-xs text-text-muted py-4 text-center">
           No data yet.{' '}
           <button onClick={handleRefresh} className="text-blue-400 hover:underline cursor-pointer">Fetch now</button>
         </div>
@@ -106,7 +106,7 @@ export const FundamentalsCard: React.FC<Props> = ({ symbol }) => {
       )}
 
       {data?.fetched_at && (
-        <div className="mt-3 text-[9px] text-slate-600 text-right font-mono">
+        <div className="mt-3 text-[9px] text-text-muted/60 text-right font-mono">
           Source: yfinance · Updated {new Date(data.fetched_at).toLocaleDateString('en-IN')}
         </div>
       )}

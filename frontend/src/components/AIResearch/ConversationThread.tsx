@@ -58,7 +58,7 @@ export function ConversationThread() {
 
   if (messages.length === 0 && !isStreaming) {
     return (
-      <div className="flex-1 flex flex-col bg-[#07080a]">
+      <div className="flex-1 flex flex-col bg-bg-base">
         <div className="flex-1 flex flex-col items-center justify-center px-6 py-10 text-center">
           <div
             className="w-12 h-12 rounded-2xl flex items-center justify-center mb-4 border border-slate-800"
@@ -99,9 +99,9 @@ export function ConversationThread() {
   }
 
   return (
-    <div className="flex-1 flex flex-col min-h-0 bg-[#07080a]">
+    <div className="flex-1 flex flex-col min-h-0 bg-bg-base">
       {/* Thread header */}
-      <div className="shrink-0 flex items-center justify-between px-4 py-2.5 border-b border-slate-800 bg-[#0d0f14]">
+      <div className="shrink-0 flex items-center justify-between px-4 py-2.5 border-b border-border-subtle bg-bg-surface">
         <span className="text-xs font-semibold text-slate-400">
           {agentMeta?.label} · {messages.length} message{messages.length !== 1 ? 's' : ''}
         </span>
@@ -124,7 +124,7 @@ export function ConversationThread() {
             <div className="shrink-0 w-6 h-6 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center mt-1 shrink-0">
               <Bot size={12} className="text-purple-400 animate-pulse" />
             </div>
-            <div className="bg-[#121620] border border-slate-800 rounded-2xl rounded-tl-sm px-4 py-3">
+            <div className="bg-bg-surface border border-border-subtle rounded-2xl rounded-tl-sm px-4 py-3">
               <StreamingIndicator />
             </div>
           </div>
@@ -168,7 +168,7 @@ function InputBar({
   return (
     <form
       onSubmit={onSubmit}
-      className="shrink-0 border-t border-slate-800 bg-[#0d0f14] px-4 py-3 flex gap-2 items-end"
+      className="shrink-0 border-t border-border-subtle bg-bg-surface px-4 py-3 flex gap-2 items-end"
     >
       <textarea
         ref={textareaRef}
@@ -183,7 +183,7 @@ function InputBar({
         }}
         placeholder="Ask the agent… (Enter to send, Shift+Enter for new line)"
         disabled={isStreaming}
-        className="flex-1 resize-none text-sm border border-slate-700 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-600/50 bg-[#121620] text-slate-200 placeholder-slate-600 disabled:opacity-50"
+        className="flex-1 resize-none text-sm border border-border-subtle rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent-primary/50 bg-bg-base text-text-main placeholder-text-muted disabled:opacity-50"
         style={{ maxHeight: 120, overflowY: 'auto' }}
       />
       <button

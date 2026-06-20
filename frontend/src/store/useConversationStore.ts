@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 import { API_BASE } from '../lib/apiBase';
 
 export interface Thread {
@@ -57,7 +58,9 @@ export const AGENT_TYPES = [
   { id: 'market_regime',    label: 'Market Regime',     color: '#ef4444', desc: 'Classify current Nifty macro trend & volatility state' },
 ] as const;
 
-export const useConversationStore = create<ConversationState>((set, get) => ({
+export const useConversationStore = create<ConversationState>()(
+  persist(
+    (set, get) => ({
   threads: [],
   activeThreadId: null,
   activeAgent: 'analyze_stock',
@@ -280,4 +283,13 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
   },
 
   clearStream: () => set({ streamEvents: [], report: null, recommendation: null, confidence: null, error: null }),
-}));
+    }),
+    {
+      name: 'vajra-conversation',
+      partialize: (state) => ({
+        activeAgent:   state.activeAgent,
+        activeThreadId: state.activeThreadId,
+      }),
+    }
+  )
+);

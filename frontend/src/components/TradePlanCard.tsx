@@ -43,11 +43,11 @@ export const TradePlanCard: React.FC = () => {
   const BiasIcon = isBull ? TrendingUp : isBear ? TrendingDown : Minus;
 
   return (
-    <div className="p-4 rounded-xl border border-slate-800/80 bg-[#121620]/40 flex flex-col gap-3">
+    <div className="p-4 rounded-xl border border-border-subtle bg-bg-surface/40 flex flex-col gap-3">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h3 className="text-xs font-bold text-white flex items-center gap-2">
-          <Target className="w-4 h-4 text-purple-500" />
+        <h3 className="text-xs font-bold text-text-main flex items-center gap-2">
+          <Target className="w-4 h-4 text-accent-primary" />
           Trade Plan
           {activeSymbolDetail && (
             <span className="text-slate-400 font-normal">— {activeSymbolDetail.symbol.replace('.NS', '')}</span>

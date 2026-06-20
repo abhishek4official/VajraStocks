@@ -1,10 +1,11 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useStockStore } from '../store/useStockStore';
 import {
   Upload, Trash2, TrendingUp, TrendingDown, Minus, BarChart2, ShieldAlert,
   Wallet, Gauge, PieChart, ArrowUpRight, ArrowDownRight, Sparkles, RefreshCw,
 } from 'lucide-react';
 import type { PortfolioHolding } from '../services/api';
+import { StockChartWorkspace } from './StockChartWorkspace';
 
 export const PortfolioPanel: React.FC = () => {
   const {
@@ -18,6 +19,7 @@ export const PortfolioPanel: React.FC = () => {
   const agg = portfolio?.aggregates ?? null;
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [modalSymbol, setModalSymbol] = useState<string | null>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -29,6 +31,12 @@ export const PortfolioPanel: React.FC = () => {
     const symbol = instrument.endsWith('.NS') ? instrument : `${instrument}.NS`;
     await setSelectedSymbol(symbol);
     setActiveTab('explorer');
+  };
+
+  const handleOpenChartModal = async (instrument: string) => {
+    const symbol = instrument.endsWith('.NS') ? instrument : `${instrument}.NS`;
+    setModalSymbol(symbol);
+    await setSelectedSymbol(symbol);
   };
 
   // ── Formatters ───────────────────────────────────────────────────────────
@@ -65,25 +73,20 @@ export const PortfolioPanel: React.FC = () => {
 
   // ── Header (always shown) ──────────────────────────────────────────────────
   const header = (
-    <div className="flex items-start justify-between gap-4 flex-wrap">
-      <div>
-        <h2 className="text-2xl font-bold text-white tracking-tight flex items-center gap-2.5">
+    <div className="flex items-center justify-between flex-wrap gap-3">
+        <h2 className="text-2xl font-bold text-text-main tracking-tight flex items-center gap-2.5">
           <span className="p-1.5 rounded-lg bg-purple-600/15 border border-purple-500/30 text-purple-400">
             <Wallet className="w-5 h-5" />
           </span>
           Portfolio
         </h2>
-        <p className="text-xs text-slate-400 mt-1.5">
-          Backend-computed risk &amp; multi-timeframe signals on your Zerodha holdings.
-        </p>
-      </div>
       <div className="flex items-center gap-2">
         <input ref={fileInputRef} type="file" accept=".csv" className="hidden" onChange={handleFileChange} />
         <button
           onClick={() => fetchPortfolio()}
           disabled={portfolioLoading}
           title="Refresh"
-          className="p-2.5 rounded-lg border border-slate-800 hover:bg-slate-800/60 text-slate-400 hover:text-white transition cursor-pointer"
+          className="p-2.5 rounded-lg border border-slate-800 hover:bg-slate-800/60 text-slate-400 hover:text-text-main transition cursor-pointer"
         >
           <RefreshCw className={`w-4 h-4 ${portfolioLoading ? 'animate-spin' : ''}`} />
         </button>
@@ -172,14 +175,14 @@ export const PortfolioPanel: React.FC = () => {
       <div className="shrink-0 grid grid-cols-1 lg:grid-cols-3 gap-4">
 
         {/* Value hero */}
-        <div className="lg:col-span-2 relative overflow-hidden rounded-2xl border border-slate-800/80 bg-gradient-to-br from-[#15131f] via-[#121620] to-[#0e1016] px-5 py-4">
+        <div className="lg:col-span-2 relative overflow-hidden rounded-2xl border border-border-subtle bg-gradient-to-br from-bg-surface via-bg-surface/90 to-bg-base/80 px-5 py-4">
           <div className="absolute -top-16 -right-10 w-48 h-48 bg-purple-600/10 blur-3xl rounded-full pointer-events-none" />
           <div className="relative flex items-center justify-between gap-6 h-full flex-wrap">
             {/* Value */}
             <div className="shrink-0">
               <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Current Value</span>
               <div className="flex items-end gap-2.5 mt-1 flex-wrap">
-                <span className="text-3xl font-extrabold text-white font-mono tracking-tight leading-none">₹{fmtINR0(agg.total_current)}</span>
+                <span className="text-3xl font-extrabold text-text-main font-mono tracking-tight leading-none">₹{fmtINR0(agg.total_current)}</span>
                 <span className={`flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-lg border ${pnlUp ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/25' : 'text-rose-400 bg-rose-500/10 border-rose-500/25'}`}>
                   {pnlUp ? <ArrowUpRight className="w-3.5 h-3.5" /> : <ArrowDownRight className="w-3.5 h-3.5" />}
                   {signed(agg.total_return_pct)}%
@@ -194,9 +197,9 @@ export const PortfolioPanel: React.FC = () => {
             {/* Inline stats */}
             <div className="flex items-center gap-6 sm:gap-8 flex-wrap">
               {[
-                { label: 'Invested', value: `₹${fmtINR0(agg.total_invested)}`, color: 'text-slate-200' },
+                { label: 'Invested', value: `₹${fmtINR0(agg.total_invested)}`, color: 'text-text-main' },
                 { label: agg.include_charges ? 'Net P&L' : 'P&L', value: `${pnlUp ? '+' : ''}₹${fmtINR0(pnl)}`, sub: `${signed(agg.total_return_pct)}%`, color: pnlText(pnl) },
-                { label: 'Positions', value: String(agg.positions), color: 'text-slate-200' },
+                { label: 'Positions', value: String(agg.positions), color: 'text-text-main' },
               ].map(({ label, value, color, sub }) => (
                 <div key={label}>
                   <p className="text-[10px] uppercase tracking-wide text-slate-500">{label}</p>
@@ -230,7 +233,7 @@ export const PortfolioPanel: React.FC = () => {
         </div>
 
         {/* Risk & Regime */}
-        <div className="rounded-2xl border border-slate-800/80 bg-[#121620]/50 px-4 py-3.5 flex flex-col gap-2.5">
+        <div className="rounded-2xl border border-border-subtle bg-bg-surface/50 px-4 py-3.5 flex flex-col gap-2.5">
           <div className="flex items-center justify-between">
             {sectionLabel('Risk & Regime', ShieldAlert)}
             <span className={`text-[11px] font-bold px-2 py-0.5 rounded-md border ${regimeStyle}`}>{agg.regime}</span>
@@ -257,19 +260,19 @@ export const PortfolioPanel: React.FC = () => {
           <div className="grid grid-cols-2 gap-2.5">
             <div className="rounded-lg bg-slate-900/40 border border-slate-800/60 px-2.5 py-2">
               <p className="text-[10px] uppercase tracking-wide text-slate-500">Open Risk</p>
-              <p className="text-sm font-bold font-mono text-slate-200 mt-0.5">₹{fmtINR0(agg.open_risk)}</p>
+              <p className="text-sm font-bold font-mono text-text-main mt-0.5">₹{fmtINR0(agg.open_risk)}</p>
               <p className="text-[10px] font-mono text-amber-400 mt-0.5">{fmt(openRiskPct)}% of portfolio</p>
             </div>
             <div className="rounded-lg bg-slate-900/40 border border-slate-800/60 px-2.5 py-2">
               <p className="text-[10px] uppercase tracking-wide text-slate-500">Breadth &gt;200d</p>
-              <p className="text-sm font-bold font-mono text-slate-200 mt-0.5">{fmt(agg.breadth_pct, 0)}%</p>
+              <p className="text-sm font-bold font-mono text-text-main mt-0.5">{fmt(agg.breadth_pct, 0)}%</p>
             </div>
           </div>
         </div>
       </div>
 
       {/* ── Allocation ─────────────────────────────────────────────────────── */}
-      <div className="shrink-0 rounded-2xl border border-slate-800/80 bg-[#121620]/40 px-5 py-3.5">
+      <div className="shrink-0 rounded-2xl border border-border-subtle bg-bg-surface/40 px-5 py-3.5">
         <div className="flex items-center justify-between mb-3">
           {sectionLabel('Allocation by Value', PieChart)}
           {agg.clusters.length > 0 && (
@@ -295,7 +298,7 @@ export const PortfolioPanel: React.FC = () => {
       </div>
 
       {/* ── Holdings table ─────────────────────────────────────────────────── */}
-      <div className="shrink-0 rounded-2xl border border-slate-800/80 bg-[#121620]/50 overflow-hidden">
+      <div className="shrink-0 rounded-2xl border border-border-subtle bg-bg-surface/50 overflow-hidden">
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-800/70">
           {sectionLabel('Holdings', BarChart2)}
           <span className="text-xs text-slate-500 font-mono">{holdings.length}</span>
@@ -303,7 +306,7 @@ export const PortfolioPanel: React.FC = () => {
         <div className="overflow-auto">
           <table className="w-full border-collapse text-sm">
             <thead className="sticky top-0 z-10">
-              <tr className="bg-[#0e1016] text-[10px] text-slate-500 uppercase tracking-wider font-semibold">
+              <tr className="bg-bg-base text-[10px] text-text-muted uppercase tracking-wider font-semibold">
                 <th className="py-2.5 pl-5 pr-3 text-left font-semibold">Instrument</th>
                 <th className="py-2.5 px-3 text-right font-semibold">Qty</th>
                 <th className="py-2.5 px-3 text-right font-semibold">Avg · LTP</th>
@@ -335,7 +338,7 @@ export const PortfolioPanel: React.FC = () => {
                       <div className="flex items-stretch">
                         <span className={`w-1 rounded-full mr-3 ${biasAccent(h.bias)}`} />
                         <div className="flex items-center gap-1.5 py-0.5">
-                          <span className="font-bold text-white font-mono tracking-wide">{h.instrument}</span>
+                          <span className="font-bold text-text-main font-mono tracking-wide">{h.instrument}</span>
                           {!h.matched && <span className="text-[9px] text-amber-500" title="Not in synced universe">⚠</span>}
                           {h.weak && (
                             <span className="text-[8px] font-bold px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/30 text-amber-400" title={h.weak_reason ?? ''}>
@@ -348,11 +351,11 @@ export const PortfolioPanel: React.FC = () => {
                     <td className="py-3 px-3 text-right font-mono text-slate-300">{h.qty.toLocaleString('en-IN')}</td>
                     <td className="py-3 px-3 text-right font-mono text-slate-400 whitespace-nowrap">
                       ₹{fmtINR(h.avg_cost)}<span className="text-slate-600"> · </span>
-                      <span className="text-slate-200" title={h.ltp_source === 'imported' ? 'From CSV (not synced)' : 'Latest synced close'}>
+                      <span className="text-text-main" title={h.ltp_source === 'imported' ? 'From CSV (not synced)' : 'Latest synced close'}>
                         ₹{fmtINR(h.ltp)}{h.ltp_source === 'imported' && <span className="text-[9px] text-amber-500">*</span>}
                       </span>
                     </td>
-                    <td className="py-3 px-3 text-right font-mono text-white">₹{fmtINR0(h.current_val)}</td>
+                    <td className="py-3 px-3 text-right font-mono text-text-main">₹{fmtINR0(h.current_val)}</td>
                     <td className={`py-3 px-3 text-right font-mono font-semibold ${pnlText(h.pnl)}`}>
                       {bull ? '+' : ''}₹{fmtINR0(h.pnl)}
                     </td>
@@ -407,7 +410,7 @@ export const PortfolioPanel: React.FC = () => {
                           h.rr_ratio >= 2.0 
                             ? 'text-emerald-400 bg-emerald-950/20' 
                             : h.rr_ratio >= 1.0 
-                            ? 'text-indigo-400 bg-[#121620]' 
+                            ? 'text-indigo-400 bg-bg-surface' 
                             : 'text-rose-400 bg-rose-950/20'
                         }`}>
                           {h.rr_ratio.toFixed(2)}x
@@ -429,12 +432,22 @@ export const PortfolioPanel: React.FC = () => {
                       ) : <span className="text-slate-600 text-xs">—</span>}
                     </td>
                     <td className="py-3 pr-5 pl-3 text-center">
-                      <button
-                        onClick={() => handleInspect(h.instrument)}
-                        className="px-2.5 py-1 rounded-md bg-slate-900 border border-slate-800 hover:border-purple-500/80 text-slate-400 hover:text-white text-xs transition cursor-pointer"
-                      >
-                        View
-                      </button>
+                      <div className="flex items-center gap-1 justify-center">
+                        <button
+                          onClick={() => handleInspect(h.instrument)}
+                          className="px-2 py-1 rounded bg-slate-900 border border-slate-800 hover:border-purple-500/80 text-slate-400 hover:text-text-main text-xs transition cursor-pointer"
+                        >
+                          View
+                        </button>
+                        <button
+                          onClick={() => handleOpenChartModal(h.instrument)}
+                          title="Quick Chart View"
+                          className="p-1 px-1.5 rounded bg-slate-900 border border-slate-800 hover:border-indigo-500/80 text-slate-400 hover:text-text-main text-xs flex items-center gap-1 transition cursor-pointer"
+                        >
+                          <TrendingUp className="w-3 h-3" />
+                          Chart
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -448,7 +461,7 @@ export const PortfolioPanel: React.FC = () => {
       </div>
 
       {/* ── Rotation candidates ────────────────────────────────────────────── */}
-      <div className="shrink-0 rounded-2xl border border-slate-800/80 bg-[#121620]/40 p-5">
+      <div className="shrink-0 rounded-2xl border border-border-subtle bg-bg-surface/40 p-5">
         <div className="flex items-center justify-between mb-1">
           {sectionLabel('Rotation Candidates', Sparkles)}
           {agg.weak_holdings.length > 0 && (
@@ -475,15 +488,24 @@ export const PortfolioPanel: React.FC = () => {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span className="text-[10px] font-mono text-slate-600">#{i + 1}</span>
-                    <span className="text-sm font-bold text-white font-mono group-hover:text-emerald-300 transition">{c.symbol}</span>
+                    <span className="text-sm font-bold text-text-main font-mono group-hover:text-emerald-300 transition">{c.symbol}</span>
                   </div>
-                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded border text-emerald-400 bg-emerald-500/10 border-emerald-500/25">
-                    {c.bias}
-                  </span>
+                  <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      onClick={() => handleOpenChartModal(c.symbol)}
+                      title="Quick Chart View"
+                      className="p-1 rounded bg-slate-955 border border-slate-800 hover:border-indigo-500/80 text-slate-400 hover:text-text-main transition cursor-pointer"
+                    >
+                      <TrendingUp className="w-3 h-3" />
+                    </button>
+                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded border text-emerald-400 bg-emerald-500/10 border-emerald-500/25">
+                      {c.bias}
+                    </span>
+                  </div>
                 </div>
                 <p className="text-[10px] text-slate-500 truncate mt-1">{c.company_name}</p>
                 <div className="flex items-center gap-3 mt-2.5 text-[10px] font-mono text-slate-400">
-                  <span className="text-slate-300">₹{fmtINR0(c.close_price)}</span>
+                  <span className="text-text-main">₹{fmtINR0(c.close_price)}</span>
                   {c.rsi_14 !== null && <span>RSI {c.rsi_14}</span>}
                   {c.atr_pct !== null && <span className={volText(c.vol_class)}>ATR {fmt(c.atr_pct)}%</span>}
                   <span className="ml-auto text-emerald-400/70 flex items-center gap-0.5"><TrendingUp className="w-3 h-3" />{c.weekly_trend}</span>
@@ -533,6 +555,20 @@ export const PortfolioPanel: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* ── Modal Stock Chart ── */}
+      {modalSymbol && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-6xl bg-bg-surface border border-border-subtle rounded-2xl shadow-2xl flex flex-col max-h-[95vh] overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="flex-1 flex flex-col p-6 overflow-y-auto">
+              <StockChartWorkspace
+                onClose={() => setModalSymbol(null)}
+                hideWatchlistButton={true}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

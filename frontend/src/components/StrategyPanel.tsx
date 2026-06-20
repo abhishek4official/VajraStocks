@@ -219,13 +219,13 @@ export const StrategyPanel: React.FC = () => {
   return (
     <div className="flex-1 flex flex-col overflow-hidden p-4 gap-4">
       {/* Header / controls */}
-      <div className="flex flex-col gap-3 p-4 rounded-xl border border-slate-800/80 bg-[#121620]/40">
+      <div className="flex flex-col gap-3 p-4 rounded-xl border border-border-subtle bg-bg-surface/40">
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div className="flex items-center gap-2">
-            <Target className="w-5 h-5 text-purple-400" />
-            <h2 className="text-lg font-bold text-white tracking-tight">Strategy Screener</h2>
+            <Target className="w-5 h-5 text-accent-primary" />
+            <h2 className="text-lg font-bold text-text-main tracking-tight">Strategy Screener</h2>
             {activeStrategy && (
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400">
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-bg-base border border-border-subtle text-text-muted">
                 v{activeStrategy.version}
               </span>
             )}
@@ -432,7 +432,7 @@ export const StrategyPanel: React.FC = () => {
 
       {/* Results — List or Matrix */}
       {viewMode === 'matrix' ? (
-        <div className="flex-1 overflow-auto rounded-xl border border-slate-800/80 bg-[#0d0f14]">
+        <div className="flex-1 overflow-auto rounded-xl border border-border-subtle bg-bg-base">
           {matrixLoading ? (
             <div className="flex items-center justify-center h-40 text-slate-500 text-sm">
               <RefreshCw className="w-4 h-4 animate-spin mr-2" /> Loading matrix…
@@ -441,9 +441,9 @@ export const StrategyPanel: React.FC = () => {
             <div className="flex items-center justify-center h-40 text-slate-500 text-sm">No active signals across strategies.</div>
           ) : (
             <table className="w-full text-xs">
-              <thead className="sticky top-0 bg-[#121620] border-b border-slate-800 text-slate-400 z-10">
+              <thead className="sticky top-0 bg-bg-surface border-b border-border-subtle text-text-muted z-10">
                 <tr>
-                  <th className="px-3 py-2 text-left font-bold sticky left-0 bg-[#121620]">Symbol</th>
+                  <th className="px-3 py-2 text-left font-bold sticky left-0 bg-bg-surface">Symbol</th>
                   {matrix.strategies.map(s => (
                     <th key={s.id} className="px-2 py-2 text-center font-bold whitespace-nowrap" title={s.name}>
                       {s.name.split(/[ (]/)[0]}
@@ -455,7 +455,7 @@ export const StrategyPanel: React.FC = () => {
               <tbody>
                 {matrix.rows.map(row => (
                   <tr key={row.symbol} className="border-b border-slate-800/50 hover:bg-slate-800/30">
-                    <td className="px-3 py-2 sticky left-0 bg-[#0d0f14]">
+                    <td className="px-3 py-2 sticky left-0 bg-bg-base">
                       <button onClick={() => openSymbol(row.symbol)} className="font-bold text-slate-100 hover:text-purple-400 cursor-pointer">
                         {row.symbol.replace('.NS', '')}
                       </button>
@@ -486,7 +486,7 @@ export const StrategyPanel: React.FC = () => {
           )}
         </div>
       ) : (
-      <div className="flex-1 overflow-auto rounded-xl border border-slate-800/80 bg-[#0d0f14]">
+      <div className="flex-1 overflow-auto rounded-xl border border-border-subtle bg-bg-base">
         {loading ? (
           <div className="flex items-center justify-center h-40 text-slate-500 text-sm">
             <RefreshCw className="w-4 h-4 animate-spin mr-2" /> Loading signals…
@@ -498,7 +498,7 @@ export const StrategyPanel: React.FC = () => {
           </div>
         ) : (
           <table className="w-full text-xs">
-            <thead className="sticky top-0 bg-[#121620] border-b border-slate-800 text-slate-400">
+            <thead className="sticky top-0 bg-bg-surface border-b border-border-subtle text-text-muted">
               <tr>
                 <th className="w-6"></th>
                 {([['symbol', 'Symbol'], ['score', 'Score'], ['last_close', 'Last'],

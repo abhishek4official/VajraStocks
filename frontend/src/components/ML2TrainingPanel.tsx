@@ -284,7 +284,7 @@ export const ML2TrainingPanel: React.FC = () => {
             <Brain className="w-5 h-5" />
           </div>
           <div>
-            <h2 className="text-lg font-bold text-white">VajraML2 Training</h2>
+            <h2 className="text-lg font-bold text-text-main">VajraML2 Training</h2>
             <p className="text-xs text-slate-500">Triple-Barrier Classifier — 6-fold walk-forward (CPU only)</p>
           </div>
         </div>
@@ -311,10 +311,10 @@ export const ML2TrainingPanel: React.FC = () => {
       </div>
 
       {/* V2 model info box */}
-      <div className="p-3 rounded-lg border border-slate-800 bg-slate-900/30 text-xs text-slate-500 space-y-1">
-        <p><span className="text-slate-300 font-semibold">Signal grades:</span> Strong Buy (dual-model agree + volume + P(TP) ≥ 45%) · Buy (P(TP) ≥ 40%) · Watch (EV &gt; 0) · Avoid · Market Risk (regime gate)</p>
-        <p><span className="text-slate-300 font-semibold">Training time:</span> ~90 min on CPU across 6 folds (~490K rows × 80 features)</p>
-        <p><span className="text-slate-300 font-semibold">Target:</span> TP = close + 1.5×ATR · SL = close – 1.0×ATR · horizon = 5 trading days</p>
+      <div className="p-3 rounded-lg border border-border-subtle bg-bg-surface/30 text-xs text-slate-500 space-y-1">
+        <p><span className="text-text-muted font-semibold">Signal grades:</span> Strong Buy (dual-model agree + volume + P(TP) ≥ 45%) · Buy (P(TP) ≥ 40%) · Watch (EV &gt; 0) · Avoid · Market Risk (regime gate)</p>
+        <p><span className="text-text-muted font-semibold">Training time:</span> ~90 min on CPU across 6 folds (~490K rows × 80 features)</p>
+        <p><span className="text-text-muted font-semibold">Target:</span> TP = close + 1.5×ATR · SL = close – 1.0×ATR · horizon = 5 trading days</p>
       </div>
 
       {/* Error banner */}
@@ -327,13 +327,13 @@ export const ML2TrainingPanel: React.FC = () => {
 
       {/* Active training card */}
       {(isTraining || pct > 0) && (
-        <div className="rounded-xl border border-emerald-500/30 bg-[#0f101a] p-5 space-y-4">
+        <div className="rounded-xl border border-emerald-500/30 bg-bg-surface p-5 space-y-4">
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <div className="flex items-center gap-2 text-sm">
               {isTraining
                 ? <RefreshCw className="w-4 h-4 text-emerald-400 animate-spin" />
                 : <CheckCircle2 className="w-4 h-4 text-emerald-400" />}
-              <span className="text-slate-200 font-medium">{stage || 'Initialising…'}</span>
+              <span className="text-text-main font-medium">{stage || 'Initialising…'}</span>
             </div>
             <span className="flex items-center gap-1.5 px-2 py-0.5 rounded border text-xs font-bold bg-slate-700/40 border-slate-600/40 text-slate-400">
               <Cpu className="w-3 h-3" />
@@ -382,10 +382,10 @@ export const ML2TrainingPanel: React.FC = () => {
 
       {/* Last trained model info */}
       {latestRun && !isTraining && (
-        <div className="rounded-xl border border-slate-800 bg-[#0c0f17] p-4">
+        <div className="rounded-xl border border-border-subtle bg-bg-surface p-4">
           <div className="flex items-center gap-2 mb-3">
             <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-            <span className="text-sm font-bold text-white">Active V2 Model</span>
+            <span className="text-sm font-bold text-text-main">Active V2 Model</span>
             <span className={`ml-auto px-2 py-0.5 rounded border text-[10px] font-bold ${statusBadge(latestRun.status)}`}>
               {latestRun.status}
             </span>
@@ -417,10 +417,10 @@ export const ML2TrainingPanel: React.FC = () => {
 
       {/* Training log */}
       {logs.length > 0 && (
-        <div className="rounded-xl border border-slate-800 bg-[#07080a]">
-          <div className="flex items-center gap-2 px-4 py-2.5 border-b border-slate-800">
+        <div className="rounded-xl border border-border-subtle bg-bg-base">
+          <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border-subtle">
             <Activity className="w-3.5 h-3.5 text-slate-500" />
-            <span className="text-xs font-bold text-slate-400">Training Log</span>
+            <span className="text-xs font-bold text-text-muted">Training Log</span>
             <span className="ml-auto text-[10px] text-slate-600 font-mono">{logs.length} lines</span>
           </div>
           <div className="h-48 overflow-y-auto p-3 font-mono text-[11px] text-slate-400 space-y-0.5">
@@ -438,14 +438,14 @@ export const ML2TrainingPanel: React.FC = () => {
       )}
 
       {/* History */}
-      <div className="rounded-xl border border-slate-800 bg-[#0c0f17]">
+      <div className="rounded-xl border border-border-subtle bg-bg-surface">
         <button
           onClick={() => { setShowHistory(h => !h); if (!showHistory) fetchHistory(); }}
-          className="w-full flex items-center gap-2 px-4 py-3 text-sm font-bold text-slate-300 hover:text-white transition cursor-pointer"
+          className="w-full flex items-center gap-2 px-4 py-3 text-sm font-bold text-text-muted hover:text-text-main transition cursor-pointer"
         >
           <History className="w-4 h-4 text-slate-500" />
           V2 Training History
-          <span className="ml-2 text-[10px] font-normal text-slate-600">({history.length} runs)</span>
+          <span className="ml-2 text-[10px] font-normal text-slate-500">({history.length} runs)</span>
           {showHistory
             ? <ChevronUp className="w-3.5 h-3.5 ml-auto text-slate-600" />
             : <ChevronDown className="w-3.5 h-3.5 ml-auto text-slate-600" />}

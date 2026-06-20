@@ -10,6 +10,7 @@ import type {
   HistogramData
 } from 'lightweight-charts';
 import { useStockStore } from '../store/useStockStore';
+import { useTheme } from '../contexts/ThemeProvider';
 
 type ChartTimeframe = '1W' | '1M' | '3M' | '6M' | '1Y' | 'MAX';
 type ChartOverlay = 'sma20' | 'sma50' | 'sma200' | 'ema9' | 'ema21' | 'bb' | 'sr' | 'nifty' | 'trendlines';
@@ -39,6 +40,7 @@ export const PriceChart: React.FC<PriceChartProps> = ({
 }) => {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const mainChartRef = useRef<any>(null);
+  const { theme } = useTheme();
 
   const {
     chartType,
@@ -54,6 +56,54 @@ export const PriceChart: React.FC<PriceChartProps> = ({
 
   useEffect(() => {
     if (!chartContainerRef.current) return;
+
+    const getChartThemeColors = (themeName: string) => {
+      switch (themeName) {
+        case 'light':
+          return {
+            background: '#ffffff',
+            textColor: '#4b5563',
+            gridColor: '#e5e7eb',
+            borderColor: '#e5e7eb',
+            accent: '#4f46e5', // indigo
+          };
+        case 'cyberpunk':
+          return {
+            background: '#000000',
+            textColor: '#00f0ff',
+            gridColor: '#0c1a30',
+            borderColor: '#00f0ff',
+            accent: '#39ff14', // neon green
+          };
+        case 'forest':
+          return {
+            background: '#082c1e',
+            textColor: '#a7f3d0',
+            gridColor: '#051b12',
+            borderColor: '#10b981',
+            accent: '#10b981',
+          };
+        case 'slate':
+          return {
+            background: '#1e293b',
+            textColor: '#cbd5e1',
+            gridColor: '#0f172a',
+            borderColor: '#38bdf8',
+            accent: '#38bdf8',
+          };
+        case 'carbon':
+        default:
+          return {
+            background: '#101217',
+            textColor: '#9ca3af',
+            gridColor: '#1e222d',
+            borderColor: '#252a34',
+            accent: '#a855f7',
+          };
+      }
+    };
+    
+    const chartTheme = getChartThemeColors(theme);
 
     // 2. Select data series based on chart type
     let primaryData: any[] = [];
@@ -158,33 +208,34 @@ export const PriceChart: React.FC<PriceChartProps> = ({
 
     const commonChartOptions: any = {
       layout: {
-        background: { color: '#101217' },
-        textColor: '#9ca3af',
+        background: { color: chartTheme.background },
+        textColor: chartTheme.textColor,
         fontSize: 11,
       },
       grid: {
-        vertLines: { color: '#1e222d' },
-        horzLines: { color: '#1e222d' },
+        vertLines: { color: chartTheme.gridColor },
+        horzLines: { color: chartTheme.gridColor },
       },
       crosshair: {
         mode: 1, // Magnet mode
         vertLine: {
-          color: 'rgba(168, 85, 247, 0.4)',
+          color: `${chartTheme.accent}66`,
           width: 1,
           style: 3, // dashed
-          labelBackgroundColor: '#a855f7',
+          labelBackgroundColor: chartTheme.accent,
         },
         horzLine: {
-          color: 'rgba(168, 85, 247, 0.4)',
+          color: `${chartTheme.accent}66`,
           width: 1,
           style: 3, // dashed
-          labelBackgroundColor: '#a855f7',
+          labelBackgroundColor: chartTheme.accent,
         },
       },
       timeScale: {
-        borderColor: '#252a34',
+        borderColor: chartTheme.borderColor,
         timeVisible: true,
         secondsVisible: false,
+        rightOffset: 8,
       },
     };
 
@@ -194,7 +245,7 @@ export const PriceChart: React.FC<PriceChartProps> = ({
       width: width,
       height: height,
       rightPriceScale: {
-        borderColor: '#252a34',
+        borderColor: chartTheme.borderColor,
         autoScale: true,
       },
     } as any);
@@ -223,6 +274,8 @@ export const PriceChart: React.FC<PriceChartProps> = ({
         mainChart.timeScale().setVisibleRange({ from: fromTs as any, to: toTs as any });
       } catch { mainChart.timeScale().fitContent(); }
     }
+    // Re-apply right padding after range is set so the last bar stays ~50px from the price axis
+    mainChart.timeScale().applyOptions({ rightOffset: 8 });
 
     // 5b. Custom horizontal price lines (user-drawn, persisted per symbol)
     for (const price of customLines) {
@@ -557,6 +610,7 @@ export const PriceChart: React.FC<PriceChartProps> = ({
     activeSymbol,
     confluenceLevels,
     trendlines,
+    theme,
   ]);
 
   const { isLoading } = useStockStore();
@@ -565,7 +619,7 @@ export const PriceChart: React.FC<PriceChartProps> = ({
   if (isLoading && candles.length === 0) {
     return (
       <div className="w-full">
-        <div className="w-full rounded-xl border border-slate-800/80 bg-[#101217] overflow-hidden"
+        <div className="w-full rounded-xl border border-border-subtle bg-bg-surface overflow-hidden"
           style={{ height: indicatorToShow !== 'NONE' ? 540 : 500 }}>
           <div className="h-full w-full animate-pulse">
             <div className="h-full bg-gradient-to-r from-slate-900/0 via-slate-800/30 to-slate-900/0 bg-[length:400%_100%]"
@@ -580,7 +634,7 @@ export const PriceChart: React.FC<PriceChartProps> = ({
     <div className="w-full">
       <div
         ref={chartContainerRef}
-        className="w-full rounded-xl overflow-hidden border border-slate-800/80 bg-[#101217]"
+        className="w-full rounded-xl overflow-hidden border border-border-subtle bg-bg-surface"
       />
     </div>
   );

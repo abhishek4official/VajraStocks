@@ -4,7 +4,7 @@ import { ContextPanel } from './ContextPanel';
 
 export function AIResearch() {
   return (
-    <div className="flex-1 flex overflow-hidden bg-[#07080a]">
+    <div className="flex-1 flex overflow-hidden bg-bg-base">
       <AgentSidebar />
       <main className="flex-1 flex flex-col min-w-0">
         <ConversationThread />

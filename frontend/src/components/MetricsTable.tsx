@@ -28,11 +28,11 @@ export const MetricsTable: React.FC = () => {
   };
 
   return (
-    <div className="w-full bg-[#121620]/60 rounded-xl border border-slate-800/80 p-4">
+    <div className="w-full bg-bg-surface/60 rounded-xl border border-border-subtle p-4">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          <Layers className="w-5 h-5 text-purple-500" />
-          <h3 className="text-md font-bold text-white tracking-wide">EOD Indicator Logs</h3>
+          <Layers className="w-5 h-5 text-accent-primary" />
+          <h3 className="text-md font-bold text-text-main tracking-wide">EOD Indicator Logs</h3>
         </div>
         <span className="text-xs text-slate-500 font-mono">Showing latest 15 trading days</span>
       </div>
