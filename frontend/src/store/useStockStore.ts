@@ -106,15 +106,6 @@ interface StockState {
   syncJobs: SyncJob[];
   syncStatuses: SymbolSyncStatus[];
 
-  // AI
-  aiQuery: string;
-  aiIsLoading: boolean;
-  aiEvents: { agent?: string; status: string; data?: Record<string, unknown> }[];
-  aiReport: string | null;
-  aiRecommendation: string | null;
-  aiConfidence: string | null;
-  _activeEventSource: EventSource | null;
-
   fetchNiftyCandles: () => Promise<void>;
   addCustomLine: (symbol: string, price: number) => void;
   removeCustomLines: (symbol: string) => void;
@@ -144,9 +135,6 @@ interface StockState {
   setChartTimeframe: (tf: ChartTimeframe) => void;
   toggleChartOverlay: (overlay: ChartOverlay) => void;
   setScreenerFilters: (filters: Partial<ScreenerFilters>) => void;
-  setAiQuery: (query: string) => void;
-  clearAiConsole: () => void;
-
   // Portfolio actions (backend-driven)
   fetchPortfolio: () => Promise<void>;
   importPortfolioFile: (file: File) => Promise<void>;
@@ -181,7 +169,6 @@ interface StockState {
   triggerSymbolSync: (symbol: string) => Promise<void>;
   triggerRecalculate: (symbol?: string) => Promise<void>;
   cancelSync: () => Promise<void>;
-  runAiWorkflow: (prompt: string) => Promise<void>;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -306,14 +293,6 @@ export const useStockStore = create<StockState>((set, get) => ({
   syncJobs: [],
   syncStatuses: [],
 
-  aiQuery: '',
-  aiIsLoading: false,
-  aiEvents: [],
-  aiReport: null,
-  aiRecommendation: null,
-  aiConfidence: null,
-  _activeEventSource: null,
-
   portfolio: null,
   portfolioLoading: false,
   stockAlerts: [],
@@ -349,9 +328,6 @@ export const useStockStore = create<StockState>((set, get) => ({
     saveScreenerFilters(nextFilters);
     set({ screenerFilters: nextFilters });
   },
-  setAiQuery: (aiQuery) => set({ aiQuery }),
-  clearAiConsole: () => set({ aiEvents: [], aiReport: null, aiRecommendation: null, aiConfidence: null }),
-
   // ── Portfolio ──────────────────────────────────────────────────────────────
 
   fetchPortfolio: async () => {
@@ -750,81 +726,6 @@ export const useStockStore = create<StockState>((set, get) => ({
     }
   },
 
-  runAiWorkflow: async (prompt: string) => {
-    // Close any previous connection before starting a new one
-    get()._activeEventSource?.close();
-
-    set({
-      aiIsLoading: true,
-      aiQuery: prompt,
-      aiEvents: [],
-      aiReport: null,
-      aiRecommendation: null,
-      aiConfidence: null,
-      _activeEventSource: null,
-    });
-
-    try {
-      const url = `${API_BASE}/agents/chat-stream?prompt=${encodeURIComponent(prompt)}`;
-      const eventSource = new EventSource(url);
-      set({ _activeEventSource: eventSource });
-
-      eventSource.onmessage = (event) => {
-        try {
-          const payload = JSON.parse(event.data);
-          const { event: eventType, data } = payload;
-
-          if (eventType === 'started') {
-            set((state) => ({ aiEvents: [...state.aiEvents, { status: data }] }));
-          } else if (eventType === 'intent_detected') {
-            set((state) => ({
-              aiEvents: [...state.aiEvents, {
-                status: `Intent Detected: ${data.intent.toUpperCase()}${data.symbol ? ` for ${data.symbol}` : ''}`,
-                data,
-              }],
-            }));
-          } else if (eventType === 'agent_active') {
-            set((state) => ({
-              aiEvents: [...state.aiEvents, { agent: data.agent, status: data.status, data }],
-            }));
-          } else if (eventType === 'complete') {
-            set({
-              aiReport: data.report || null,
-              aiRecommendation: data.recommendation || null,
-              aiConfidence: data.confidence || null,
-              screenerResults: data.screener_results || get().screenerResults,
-              aiIsLoading: false,
-            });
-            if (data.screener_results && data.screener_results.length > 0) {
-              get().setActiveTab('screener');
-            }
-            eventSource.close();
-          } else if (eventType === 'error') {
-            set((state) => ({
-              aiEvents: [...state.aiEvents, { status: `Error: ${data}` }],
-              aiIsLoading: false,
-            }));
-            eventSource.close();
-          }
-        } catch (err) {
-          console.error('Failed to parse SSE event data', err);
-        }
-      };
-
-      eventSource.onerror = () => {
-        set((state) => ({
-          aiEvents: [...state.aiEvents, { status: 'Connection error in AI Quant pipeline.' }],
-          aiIsLoading: false,
-        }));
-        eventSource.close();
-      };
-    } catch (err: unknown) {
-      set({
-        aiEvents: [{ status: `Failed to initiate AI stream: ${(err as Error).message}` }],
-        aiIsLoading: false,
-      });
-    }
-  },
 }));
 
 // Load DB-backed screener limit once the store is created (non-blocking)

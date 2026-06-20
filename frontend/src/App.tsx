@@ -10,7 +10,7 @@ import { CorporateActionsTimeline } from './components/CorporateActionsTimeline'
 import { ScreenerPanel } from './components/ScreenerPanel';
 import { StrategyPanel } from './components/StrategyPanel';
 import { SyncPanel } from './components/SyncPanel';
-import { AgentTerminal } from './components/AgentTerminal';
+import { AIResearch } from './components/AIResearch';
 import { PortfolioPanel } from './components/PortfolioPanel';
 import { WatchlistPanel } from './components/WatchlistPanel';
 import { TradePlanCard } from './components/TradePlanCard';
@@ -573,7 +573,7 @@ function Dashboard() {
         {activeTab === 'sync' && <SyncPanel />}
 
         {/* TAB 4: AI Research Workspace */}
-        {activeTab === 'ai-research' && <AgentTerminal />}
+        {activeTab === 'ai-research' && <AIResearch />}
 
         {/* TAB 5: Portfolio */}
         {activeTab === 'portfolio' && <PortfolioPanel />}

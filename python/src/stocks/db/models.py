@@ -3,6 +3,7 @@ from typing import Optional
 
 from sqlalchemy import (
     BIGINT,
+    JSON,
     Boolean,
     Date,
     DateTime,
@@ -694,3 +695,69 @@ class NewsItem(Base):
         UniqueConstraint("symbol", "article_id", name="UQ_NewsItem_Symbol_ArticleId"),
         Index("ix_news_items_symbol_published", "symbol", "published_at"),
     )
+
+
+# ─── AI Conversation Models ───────────────────────────────────────────────────
+
+class ConversationThread(Base):
+    """One persistent chat thread per agent type. Backed by LangGraph MemorySaver thread_id."""
+
+    __tablename__ = "conversation_threads"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)  # UUID
+    agent_type: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String(200), nullable=False, default="New conversation")
+    message_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=func.now())
+    last_active_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now())
+    is_archived: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+    messages: Mapped[list["ConversationMessage"]] = relationship(
+        "ConversationMessage", back_populates="thread", cascade="all, delete-orphan",
+        order_by="ConversationMessage.created_at",
+    )
+    summaries: Mapped[list["ConversationSummary"]] = relationship(
+        "ConversationSummary", back_populates="thread", cascade="all, delete-orphan",
+    )
+
+    __table_args__ = (
+        Index("ix_conv_threads_agent_active", "agent_type", "last_active_at"),
+    )
+
+
+class ConversationMessage(Base):
+    """Individual message (user turn or agent response) inside a conversation thread."""
+
+    __tablename__ = "conversation_messages"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    thread_id: Mapped[str] = mapped_column(String(36), ForeignKey("conversation_threads.id", ondelete="CASCADE"), nullable=False)
+    role: Mapped[str] = mapped_column(String(10), nullable=False)  # 'user' | 'agent'
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    recommendation: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    confidence: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    annotation: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_summarized: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=func.now())
+
+    thread: Mapped["ConversationThread"] = relationship("ConversationThread", back_populates="messages")
+
+    __table_args__ = (
+        Index("ix_conv_messages_thread_created", "thread_id", "created_at"),
+    )
+
+
+class ConversationSummary(Base):
+    """Rolling condensed summary of older messages in a thread."""
+
+    __tablename__ = "conversation_summaries"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    thread_id: Mapped[str] = mapped_column(String(36), ForeignKey("conversation_threads.id", ondelete="CASCADE"), nullable=False)
+    summary_text: Mapped[str] = mapped_column(Text, nullable=False)
+    covers_message_ids: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    key_tickers: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    key_decisions: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    generated_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=func.now())
+
+    thread: Mapped["ConversationThread"] = relationship("ConversationThread", back_populates="summaries")
