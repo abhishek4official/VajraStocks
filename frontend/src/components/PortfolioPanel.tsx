@@ -480,77 +480,85 @@ export const PortfolioPanel: React.FC = () => {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {agg.replacement_candidates.map((c, i) => (
-              <button
+              <div
                 key={c.symbol}
-                onClick={() => handleInspect(c.symbol)}
-                className="group text-left p-3.5 rounded-xl bg-slate-900/40 border border-slate-800/70 hover:border-emerald-500/40 hover:bg-emerald-950/10 transition cursor-pointer"
+                className="group text-left p-3.5 rounded-xl bg-slate-900/40 border border-slate-800/70 hover:border-emerald-500/40 hover:bg-emerald-950/10 transition"
               >
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
+                  <div
+                    className="flex items-center gap-2 flex-1 cursor-pointer"
+                    onClick={() => handleInspect(c.symbol)}
+                  >
                     <span className="text-[10px] font-mono text-slate-600">#{i + 1}</span>
                     <span className="text-sm font-bold text-text-main font-mono group-hover:text-emerald-300 transition">{c.symbol}</span>
                   </div>
-                  <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                  <div className="flex items-center gap-1.5">
                     <button
                       onClick={() => handleOpenChartModal(c.symbol)}
                       title="Quick Chart View"
-                      className="p-1 rounded bg-slate-955 border border-slate-800 hover:border-indigo-500/80 text-slate-400 hover:text-text-main transition cursor-pointer"
+                      className="p-1 px-1.5 rounded bg-slate-900 border border-slate-800 hover:border-indigo-500/80 text-slate-400 hover:text-text-main text-xs flex items-center gap-1 transition cursor-pointer"
                     >
                       <TrendingUp className="w-3 h-3" />
+                      Chart
                     </button>
                     <span className="text-[9px] font-bold px-1.5 py-0.5 rounded border text-emerald-400 bg-emerald-500/10 border-emerald-500/25">
                       {c.bias}
                     </span>
                   </div>
                 </div>
-                <p className="text-[10px] text-slate-500 truncate mt-1">{c.company_name}</p>
-                <div className="flex items-center gap-3 mt-2.5 text-[10px] font-mono text-slate-400">
-                  <span className="text-text-main">₹{fmtINR0(c.close_price)}</span>
-                  {c.rsi_14 !== null && <span>RSI {c.rsi_14}</span>}
-                  {c.atr_pct !== null && <span className={volText(c.vol_class)}>ATR {fmt(c.atr_pct)}%</span>}
-                  <span className="ml-auto text-emerald-400/70 flex items-center gap-0.5"><TrendingUp className="w-3 h-3" />{c.weekly_trend}</span>
-                </div>
-
-                {/* Weekly returns */}
-                <div className="flex items-center gap-2 mt-2 text-[10px] font-mono">
-                  {([['1W', c.ret_1w], ['2W', c.ret_2w], ['3W', c.ret_3w], ['4W', c.ret_4w]] as const).map(([lbl, r]) => (
-                    <span key={lbl} className="flex flex-col items-center">
-                      <span className="text-slate-600 text-[8px]">{lbl}</span>
-                      <span className={r === null ? 'text-slate-600' : r >= 0 ? 'text-emerald-400' : 'text-rose-400'}>
-                        {r === null ? '—' : `${r >= 0 ? '+' : ''}${r.toFixed(1)}`}
-                      </span>
-                    </span>
-                  ))}
-                </div>
-
-                {/* Trade setup: stop / target / upside */}
-                {c.target_1 !== null && (
-                  <div className="mt-2 pt-2 border-t border-slate-800/60 text-[10px] font-mono">
-                    <div className="flex items-center justify-between">
-                      <span className="text-rose-400/80">SL ₹{fmtINR0(c.stop_loss ?? 0)}</span>
-                      <div className="flex items-center gap-1.5">
-                        {c.rr_ratio != null && (
-                          <span className={`px-1 rounded font-bold ${
-                            c.rr_ratio >= 2.0 ? 'text-emerald-400 bg-emerald-950/30'
-                            : c.rr_ratio >= 1.0 ? 'text-indigo-400 bg-indigo-950/30'
-                            : 'text-rose-400 bg-rose-950/30'
-                          }`}>{c.rr_ratio.toFixed(1)}x</span>
-                        )}
-                        {c.position_size_shares != null && (
-                          <span className="text-purple-400">{c.position_size_shares.toLocaleString('en-IN')} sh</span>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between mt-0.5">
-                      <span className="text-emerald-400">T1 ₹{fmtINR0(c.target_1)} <span className="text-emerald-400/70">+{fmt(c.potential_gain_pct ?? 0, 1)}%</span></span>
-                      <div className="flex items-center gap-1.5">
-                        {c.target_2 != null && <span className="text-emerald-400/60">T2 ₹{fmtINR0(c.target_2)}</span>}
-                        {c.target_3 != null && <span className="text-emerald-400/40">T3 ₹{fmtINR0(c.target_3)}</span>}
-                      </div>
-                    </div>
+                <div
+                  className="cursor-pointer"
+                  onClick={() => handleInspect(c.symbol)}
+                >
+                  <p className="text-[10px] text-slate-500 truncate mt-1">{c.company_name}</p>
+                  <div className="flex items-center gap-3 mt-2.5 text-[10px] font-mono text-slate-400">
+                    <span className="text-text-main">₹{fmtINR0(c.close_price)}</span>
+                    {c.rsi_14 !== null && <span>RSI {c.rsi_14}</span>}
+                    {c.atr_pct !== null && <span className={volText(c.vol_class)}>ATR {fmt(c.atr_pct)}%</span>}
+                    <span className="ml-auto text-emerald-400/70 flex items-center gap-0.5"><TrendingUp className="w-3 h-3" />{c.weekly_trend}</span>
                   </div>
-                )}
-              </button>
+
+                  {/* Weekly returns */}
+                  <div className="flex items-center gap-2 mt-2 text-[10px] font-mono">
+                    {([['1W', c.ret_1w], ['2W', c.ret_2w], ['3W', c.ret_3w], ['4W', c.ret_4w]] as const).map(([lbl, r]) => (
+                      <span key={lbl} className="flex flex-col items-center">
+                        <span className="text-slate-600 text-[8px]">{lbl}</span>
+                        <span className={r === null ? 'text-slate-600' : r >= 0 ? 'text-emerald-400' : 'text-rose-400'}>
+                          {r === null ? '—' : `${r >= 0 ? '+' : ''}${r.toFixed(1)}`}
+                        </span>
+                      </span>
+                    ))}
+                  </div>
+
+                  {/* Trade setup: stop / target / upside */}
+                  {c.target_1 !== null && (
+                    <div className="mt-2 pt-2 border-t border-slate-800/60 text-[10px] font-mono">
+                      <div className="flex items-center justify-between">
+                        <span className="text-rose-400/80">SL ₹{fmtINR0(c.stop_loss ?? 0)}</span>
+                        <div className="flex items-center gap-1.5">
+                          {c.rr_ratio != null && (
+                            <span className={`px-1 rounded font-bold ${
+                              c.rr_ratio >= 2.0 ? 'text-emerald-400 bg-emerald-950/30'
+                              : c.rr_ratio >= 1.0 ? 'text-indigo-400 bg-indigo-950/30'
+                              : 'text-rose-400 bg-rose-950/30'
+                            }`}>{c.rr_ratio.toFixed(1)}x</span>
+                          )}
+                          {c.position_size_shares != null && (
+                            <span className="text-purple-400">{c.position_size_shares.toLocaleString('en-IN')} sh</span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between mt-0.5">
+                        <span className="text-emerald-400">T1 ₹{fmtINR0(c.target_1)} <span className="text-emerald-400/70">+{fmt(c.potential_gain_pct ?? 0, 1)}%</span></span>
+                        <div className="flex items-center gap-1.5">
+                          {c.target_2 != null && <span className="text-emerald-400/60">T2 ₹{fmtINR0(c.target_2)}</span>}
+                          {c.target_3 != null && <span className="text-emerald-400/40">T3 ₹{fmtINR0(c.target_3)}</span>}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
             ))}
           </div>
         )}
