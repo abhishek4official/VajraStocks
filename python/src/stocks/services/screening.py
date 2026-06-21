@@ -529,6 +529,59 @@ class ScreeningService:
                 if len(prior_bws) >= 10:
                     is_bb_squeeze = curr_bw <= min(prior_bws)
 
+            # 6g. TQS — Trend Quality Score (0-100)
+            # ADX strength (0-40) + price above MAs (0-30) + MA alignment (0-20) + RSI zone (0-10)
+            tqs = None
+            if ind and close_price > 0:
+                _tqs = 0.0
+                _adx = getattr(ind, "adx_14", None)
+                _ema9 = getattr(ind, "ema_9", None)
+                _sma20 = getattr(ind, "sma_20", None)
+                _sma50 = getattr(ind, "sma_50", None)
+                _sma200 = getattr(ind, "sma_200", None)
+                if _adx is not None:
+                    _tqs += min(float(_adx) / 40.0 * 40.0, 40.0)
+                if _ema9 is not None and close_price > float(_ema9):
+                    _tqs += 10.0
+                if _sma20 is not None and close_price > float(_sma20):
+                    _tqs += 10.0
+                if _sma50 is not None and close_price > float(_sma50):
+                    _tqs += 10.0
+                if _ema9 is not None and _sma20 is not None and float(_ema9) > float(_sma20):
+                    _tqs += 7.0
+                if _sma20 is not None and _sma50 is not None and float(_sma20) > float(_sma50):
+                    _tqs += 7.0
+                if _sma50 is not None and _sma200 is not None and float(_sma50) > float(_sma200):
+                    _tqs += 6.0
+                if rsi_14 is not None:
+                    _rsi = float(rsi_14)
+                    if 45.0 <= _rsi <= 70.0:
+                        _tqs += 10.0
+                    elif 40.0 <= _rsi < 45.0 or 70.0 < _rsi <= 75.0:
+                        _tqs += 5.0
+                tqs = round(_tqs, 1)
+
+            # 6h. Weinstein Stage (1-4) — price vs rising/flat/falling SMA200
+            weinstein_stage = None
+            if ind and getattr(ind, "sma_200", None) is not None and close_price > 0:
+                _sma200_now = float(ind.sma_200)
+                _sma200_old = None
+                for _row in ind_rows[15:22]:
+                    if getattr(_row, "sma_200", None) is not None:
+                        _sma200_old = float(_row.sma_200)
+                        break
+                _above = close_price > _sma200_now
+                if _sma200_old is not None and _sma200_now > 0 and _sma200_old > 0:
+                    _slope_pct = (_sma200_now - _sma200_old) / _sma200_old * 100.0
+                    if _above and _slope_pct > 0.3:
+                        weinstein_stage = 2   # Advancing — price above rising SMA200
+                    elif _above:
+                        weinstein_stage = 3   # Topping — price above but SMA200 flattening/falling
+                    elif _slope_pct < -0.3:
+                        weinstein_stage = 4   # Declining — price below falling SMA200
+                    else:
+                        weinstein_stage = 1   # Basing — price below flat/slightly-rising SMA200
+
             # 7. Upsert the ScreeningSnapshot
             snapshot = _prefetch.get("snapshot") if _prefetch else self.db.scalar(
                 select(ScreeningSnapshot).filter_by(symbol_id=symbol_id)
@@ -604,6 +657,8 @@ class ScreeningService:
                     is_vajraturn=is_vajraturn,
                     bb_bandwidth=bb_bandwidth,
                     is_bb_squeeze=is_bb_squeeze,
+                    tqs=tqs,
+                    weinstein_stage=weinstein_stage,
                 )
                 self.db.add(snapshot)
             else:
@@ -673,6 +728,8 @@ class ScreeningService:
                 snapshot.is_vajraturn                = is_vajraturn
                 snapshot.bb_bandwidth                = bb_bandwidth
                 snapshot.is_bb_squeeze               = is_bb_squeeze
+                snapshot.tqs                         = tqs
+                snapshot.weinstein_stage             = weinstein_stage
             if commit:
                 self.db.commit()
         except Exception as e:
@@ -939,6 +996,8 @@ class ScreeningService:
         cmf_bull_xover_max_days: int | None = None,
         only_vajraturn: bool = False,
         only_bb_squeeze: bool = False,
+        min_tqs: float | None = None,
+        only_weinstein_stage2: bool = False,
         limit: int = 2500,
     ) -> list[ScreeningSnapshot]:
         """Runs high-speed query sweeps directly against the narrow screening_snapshots table."""
@@ -1019,6 +1078,10 @@ class ScreeningService:
             stmt = stmt.where(ScreeningSnapshot.is_vajraturn == True)  # noqa: E712
         if only_bb_squeeze:
             stmt = stmt.where(ScreeningSnapshot.is_bb_squeeze == True)  # noqa: E712
+        if min_tqs is not None:
+            stmt = stmt.where(ScreeningSnapshot.tqs >= min_tqs, ScreeningSnapshot.tqs.is_not(None))
+        if only_weinstein_stage2:
+            stmt = stmt.where(ScreeningSnapshot.weinstein_stage == 2)
 
         stmt = stmt.order_by(ScreeningSnapshot.symbol.asc())
 

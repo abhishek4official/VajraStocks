@@ -51,6 +51,8 @@ interface ScreenerFilters {
   cmf_bull_xover_max_days?: number;
   only_vajraturn?: boolean;
   only_bb_squeeze?: boolean;
+  min_tqs?: number;
+  only_weinstein_stage2?: boolean;
   limit?: number;
 }
 

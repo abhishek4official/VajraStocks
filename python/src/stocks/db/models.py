@@ -398,6 +398,12 @@ class ScreeningSnapshot(Base):
     bb_bandwidth: Mapped[float | None] = mapped_column(Float, nullable=True)
     is_bb_squeeze: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
 
+    # Trend Quality Score (0-100): ADX strength + price-above-MAs + MA alignment + RSI zone
+    tqs: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    # Weinstein Stage (1-4): based on price vs rising/flat/falling SMA200
+    weinstein_stage: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
     updated_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now())
 
     # Relationships

@@ -289,6 +289,11 @@ export interface ScreenerRow {
   macd_histogram_slope?: number | null;
   macd_above_zero?: boolean | null;
   cmf_slope_5d?: number | null;
+  is_vajraturn?: boolean | null;
+  bb_bandwidth?: number | null;
+  is_bb_squeeze?: boolean | null;
+  tqs?: number | null;
+  weinstein_stage?: number | null;
   // Fundamentals
   market_cap?: number | null;
   enterprise_value?: number | null;
@@ -650,6 +655,8 @@ export const apiService = {
     cmf_bull_xover_max_days?: number;
     only_vajraturn?: boolean;
     only_bb_squeeze?: boolean;
+    min_tqs?: number;
+    only_weinstein_stage2?: boolean;
     limit?: number;
   }): Promise<ScreenerRow[]> {
     const response = await fetch(`${BASE_URL}/screeners/run`, {
@@ -685,6 +692,8 @@ export const apiService = {
         cmf_bull_xover_max_days: filters.cmf_bull_xover_max_days ?? null,
         only_vajraturn: filters.only_vajraturn ?? false,
         only_bb_squeeze: filters.only_bb_squeeze ?? false,
+        min_tqs: filters.min_tqs ?? null,
+        only_weinstein_stage2: filters.only_weinstein_stage2 ?? false,
         limit: filters.limit ?? 100
       })
     });

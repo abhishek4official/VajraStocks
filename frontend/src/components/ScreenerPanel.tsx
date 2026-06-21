@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useStockStore } from '../store/useStockStore';
-import { Eye, Filter, RefreshCw, BarChart2, Download, Bookmark, Zap, TrendingUp } from 'lucide-react';
+import { Eye, Filter, RefreshCw, BarChart2, Download, Bookmark, Zap, TrendingUp, HelpCircle, X } from 'lucide-react';
 import { StockChartWorkspace } from './StockChartWorkspace';
 import type { ScreenerRow, StrategyMeta } from '../services/api';
 import { apiService } from '../services/api';
@@ -21,7 +21,7 @@ const SHOW_COL_FILTERS_KEY = 'vajra_screener_show_col_filters';
 const DEFAULT_COL_FILTERS = {
   symbol: '', company_name: '', close_price: '', price_pct_change: '', regime_bias: '',
   ret_1w: '', ret_2w: '', ret_3w: '', ret_4w: '', stop_loss: '', target_1: '', target_2: '',
-  target_3: '', potential_gain_pct: '', rr_ratio: '', trade_quality_score: '',
+  target_3: '', potential_gain_pct: '', rr_ratio: '', tqs: '', weinstein_stage: '',
   position_size_shares: '', avg_traded_value: '', volume_breakout_ratio: '', rsi_14: '',
   cmf_20: '', stochrsi_k: '', stochrsi_d: '',
   sma_20_cross_direction: '', sma_50_cross_direction: '', sma_200_cross_direction: '',
@@ -58,6 +58,7 @@ const EMPTY_FILTERS = {
   ema_ribbon_bull_max_days: undefined, golden_cross_max_days: undefined,
   macd_bull_xover_max_days: undefined, cmf_bull_xover_max_days: undefined,
   only_vajraturn: undefined, only_bb_squeeze: undefined,
+  min_tqs: undefined, only_weinstein_stage2: undefined,
 } as const;
 
 // ── Screener presets ─────────────────────────────────────────────────────────
@@ -145,6 +146,18 @@ const PRESETS = [
     emoji: '🗜️',
     desc: 'Bollinger Band at 20-day width low — coiled for explosive move',
     filters: { only_bb_squeeze: true },
+  },
+  {
+    name: 'Weinstein Stage 2',
+    emoji: '📈',
+    desc: 'Price above rising SMA200 — classic markup phase entry',
+    filters: { only_weinstein_stage2: true },
+  },
+  {
+    name: 'Strong Trend (TQS 70+)',
+    emoji: '💪',
+    desc: 'Trend Quality Score ≥ 70 — strong ADX, aligned MAs, RSI in trend zone',
+    filters: { min_tqs: 70 },
   },
 ];
 
@@ -290,6 +303,7 @@ const MultiSelectFilter: React.FC<MultiSelectFilterProps> = ({
 export const ScreenerPanel: React.FC = () => {
   const {
     screenerResults,
+    screenerFilters,
     setScreenerFilters,
     runScreener,
     isLoading,
@@ -300,6 +314,18 @@ export const ScreenerPanel: React.FC = () => {
     addToWatchlist,
   } = useStockStore();
 
+  // Auto-run on mount — restores last session's scan (or returns full universe if no filters).
+  useEffect(() => { runScreener(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Detect which preset (if any) is currently active so we can highlight it.
+  const activePresetName = useMemo(() => {
+    return PRESETS.find(p =>
+      Object.entries(p.filters).every(
+        ([k, v]) => (screenerFilters as Record<string, unknown>)[k] === v
+      )
+    )?.name ?? null;
+  }, [screenerFilters]);
+
   // Client-side sorting + pagination states
   const [sortField, setSortField] = useState<keyof ScreenerRow | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
@@ -309,6 +335,7 @@ export const ScreenerPanel: React.FC = () => {
   const [strategies, setStrategies] = useState<StrategyMeta[]>([]);
 
   const [modalSymbol, setModalSymbol] = useState<string | null>(null);
+  const [showHelp, setShowHelp] = useState(false);
 
   const handleOpenChartModal = async (symbol: string) => {
     setModalSymbol(symbol);
@@ -450,7 +477,8 @@ export const ScreenerPanel: React.FC = () => {
         if (!matchNumericFilter(row.target_3, colFilters.target_3)) return false;
         if (!matchNumericFilter(row.potential_gain_pct, colFilters.potential_gain_pct)) return false;
         if (!matchNumericFilter(row.rr_ratio, colFilters.rr_ratio)) return false;
-        if (!matchNumericFilter(row.trade_quality_score, colFilters.trade_quality_score)) return false;
+        if (!matchNumericFilter(row.tqs, colFilters.tqs)) return false;
+        if (!matchNumericFilter(row.weinstein_stage, colFilters.weinstein_stage)) return false;
         if (!matchNumericFilter(row.position_size_shares, colFilters.position_size_shares)) return false;
         if (!matchNumericFilter(row.avg_traded_value, colFilters.avg_traded_value)) return false;
         if (!matchNumericFilter(row.volume_breakout_ratio, colFilters.volume_breakout_ratio)) return false;
@@ -533,7 +561,7 @@ export const ScreenerPanel: React.FC = () => {
     const headers = [
       'Ticker', 'Company Name', 'Last EOD Price', 'Change %',
       'Avg Val', 'Bias', '1W Return %', '2W Return %', '3W Return %', '4W Return %',
-      'Stop Loss', 'Target 1', 'Target 2', 'Target 3', 'Upside %', 'R:R', 'TQS', 'Suggested Shares',
+      'Stop Loss', 'Target 1', 'Target 2', 'Target 3', 'Upside %', 'R:R', 'TQS', 'Weinstein Stage', 'Suggested Shares',
       'Vol Breakout Ratio', 'RSI (14)', 'CMF (20)', 'StochRSI K', 'StochRSI D',
       'SMA 20 Position', 'SMA 50 Position', 'SMA 200 Position', 'MACD Trend',
       'Heikin Ashi', 'Renko', 'Three Line Break', 'RS 1M', 'Patterns',
@@ -567,7 +595,8 @@ export const ScreenerPanel: React.FC = () => {
         row.target_3 ?? '',
         row.potential_gain_pct ?? '',
         row.rr_ratio ?? '',
-        row.trade_quality_score ?? '',
+        row.tqs ?? '',
+        row.weinstein_stage ?? '',
         row.position_size_shares ?? '',
         row.volume_breakout_ratio ?? '',
         row.rsi_14 ?? '',
@@ -640,31 +669,47 @@ export const ScreenerPanel: React.FC = () => {
             <Download className="w-4 h-4" />
             Export CSV
           </button>
+          <button
+            onClick={() => setShowHelp(true)}
+            className="flex items-center gap-1.5 px-3 py-2 bg-bg-surface/80 hover:bg-indigo-900/30 border border-border-subtle hover:border-indigo-500/50 text-slate-400 hover:text-indigo-300 rounded-lg text-sm font-bold transition cursor-pointer"
+            title="How to use the screener"
+          >
+            <HelpCircle className="w-4 h-4" />
+            ?
+          </button>
         </div>
       </div>
 
       {/* ── Preset Cards ──────────────────────────────────────────────────── */}
       <div className="flex flex-wrap gap-2 items-start">
-        {PRESETS.map(p => (
-          <button
-            key={p.name}
-            onClick={() => {
-              setScreenerFilters({ ...EMPTY_FILTERS, ...p.filters });
-              runScreener();
-            }}
-            disabled={isLoading}
-            className="flex items-center gap-2 px-3 py-2 rounded-xl border border-border-subtle bg-bg-surface/30 hover:bg-bg-surface/70 hover:border-accent-primary/40 disabled:opacity-40 transition cursor-pointer text-left"
-          >
-            <span className="text-base leading-none">{p.emoji}</span>
-            <div>
-              <div className="text-xs font-bold text-white flex items-center gap-1">
-                <Zap className="w-2.5 h-2.5 text-purple-400" />
-                {p.name}
+        {PRESETS.map(p => {
+          const isActive = activePresetName === p.name;
+          return (
+            <button
+              key={p.name}
+              onClick={() => {
+                setScreenerFilters({ ...EMPTY_FILTERS, ...p.filters });
+                runScreener();
+              }}
+              disabled={isLoading}
+              className={`flex items-center gap-2 px-3 py-2 rounded-xl border disabled:opacity-40 transition cursor-pointer text-left ${
+                isActive
+                  ? 'border-purple-500/70 bg-purple-900/30 shadow shadow-purple-900/30'
+                  : 'border-border-subtle bg-bg-surface/30 hover:bg-bg-surface/70 hover:border-accent-primary/40'
+              }`}
+              title={p.desc}
+            >
+              <span className="text-base leading-none">{p.emoji}</span>
+              <div>
+                <div className={`text-xs font-bold flex items-center gap-1 ${isActive ? 'text-purple-300' : 'text-white'}`}>
+                  <Zap className={`w-2.5 h-2.5 ${isActive ? 'text-purple-300' : 'text-purple-400'}`} />
+                  {p.name}
+                </div>
+                <div className="text-[10px] text-slate-500">{p.desc}</div>
               </div>
-              <div className="text-[10px] text-slate-500">{p.desc}</div>
-            </div>
-          </button>
-        ))}
+            </button>
+          );
+        })}
         <button
           onClick={handleClearAll}
           disabled={isLoading}
@@ -678,6 +723,41 @@ export const ScreenerPanel: React.FC = () => {
           </div>
         </button>
       </div>
+
+      {/* ── Active filter chips ────────────────────────────────────────────── */}
+      {(() => {
+        const chips: { label: string; onRemove: () => void }[] = [];
+        if (screenerFilters.only_vajraturn) chips.push({ label: '🎯 VajraTurn', onRemove: () => { setScreenerFilters({ only_vajraturn: undefined }); runScreener(); } });
+        if (screenerFilters.only_bb_squeeze) chips.push({ label: '🗜️ BB Squeeze', onRemove: () => { setScreenerFilters({ only_bb_squeeze: undefined }); runScreener(); } });
+        if (screenerFilters.only_weinstein_stage2) chips.push({ label: '📈 Weinstein S2', onRemove: () => { setScreenerFilters({ only_weinstein_stage2: undefined }); runScreener(); } });
+        if (screenerFilters.min_tqs != null) chips.push({ label: `💪 TQS ≥ ${screenerFilters.min_tqs}`, onRemove: () => { setScreenerFilters({ min_tqs: undefined }); runScreener(); } });
+        if (screenerFilters.min_rsi != null) chips.push({ label: `RSI ≥ ${screenerFilters.min_rsi}`, onRemove: () => { setScreenerFilters({ min_rsi: undefined }); runScreener(); } });
+        if (screenerFilters.max_rsi != null) chips.push({ label: `RSI ≤ ${screenerFilters.max_rsi}`, onRemove: () => { setScreenerFilters({ max_rsi: undefined }); runScreener(); } });
+        if (screenerFilters.sma_200_cross) chips.push({ label: `SMA200 ${screenerFilters.sma_200_cross}`, onRemove: () => { setScreenerFilters({ sma_200_cross: undefined }); runScreener(); } });
+        if (screenerFilters.macd_trend) chips.push({ label: `MACD ${screenerFilters.macd_trend}`, onRemove: () => { setScreenerFilters({ macd_trend: undefined }); runScreener(); } });
+        if (screenerFilters.only_nr7) chips.push({ label: '🎯 NR7', onRemove: () => { setScreenerFilters({ only_nr7: undefined }); runScreener(); } });
+        if (screenerFilters.only_inside_bar) chips.push({ label: '📦 Inside Bar', onRemove: () => { setScreenerFilters({ only_inside_bar: undefined }); runScreener(); } });
+        if (screenerFilters.only_gap_up) chips.push({ label: '⬆️ Gap Up', onRemove: () => { setScreenerFilters({ only_gap_up: undefined }); runScreener(); } });
+        if (screenerFilters.only_gap_down) chips.push({ label: '⬇️ Gap Down', onRemove: () => { setScreenerFilters({ only_gap_down: undefined }); runScreener(); } });
+        if (screenerFilters.volume_breakout) chips.push({ label: `Vol ${screenerFilters.volume_breakout}`, onRemove: () => { setScreenerFilters({ volume_breakout: undefined }); runScreener(); } });
+        if (screenerFilters.stochrsi_bullish_xover_max_days != null) chips.push({ label: `StochRSI Xover ≤ ${screenerFilters.stochrsi_bullish_xover_max_days}d`, onRemove: () => { setScreenerFilters({ stochrsi_bullish_xover_max_days: undefined }); runScreener(); } });
+        if (chips.length === 0) return null;
+        return (
+          <div className="flex flex-wrap gap-1.5 items-center">
+            <span className="text-[10px] text-slate-500 uppercase tracking-wide font-semibold">Active:</span>
+            {chips.map(chip => (
+              <button
+                key={chip.label}
+                onClick={chip.onRemove}
+                className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-purple-900/30 border border-purple-500/40 text-purple-300 hover:bg-rose-900/30 hover:border-rose-500/40 hover:text-rose-300 transition"
+                title="Click to remove this filter"
+              >
+                {chip.label} <span className="opacity-60">✕</span>
+              </button>
+            ))}
+          </div>
+        );
+      })()}
 
       {/* Results Grid Table */}
       <div className="flex-1 bg-bg-surface/60 rounded-xl border border-border-subtle p-4 overflow-hidden flex flex-col min-h-[300px]">
@@ -947,8 +1027,11 @@ export const ScreenerPanel: React.FC = () => {
                 <th className="py-2 px-1 text-right cursor-pointer hover:text-text-main transition" title="Risk-to-Reward Ratio" onClick={() => handleSort('rr_ratio')}>
                   R:R {renderSortIcon('rr_ratio')}
                 </th>
-                <th className="py-2 px-1 text-right cursor-pointer hover:text-text-main transition" title="Trade Quality Score (0–100): Trend + Momentum + RS + Volume + R:R" onClick={() => handleSort('trade_quality_score' as any)}>
-                  TQS {renderSortIcon('trade_quality_score' as any)}
+                <th className="py-2 px-1 text-right cursor-pointer hover:text-text-main transition" title="Trend Quality Score (0–100): ADX strength + price above MAs + MA alignment + RSI zone" onClick={() => handleSort('tqs' as any)}>
+                  TQS {renderSortIcon('tqs' as any)}
+                </th>
+                <th className="py-2 px-1 text-center cursor-pointer hover:text-text-main transition" title="Weinstein Stage (1=Basing, 2=Markup, 3=Topping, 4=Decline)" onClick={() => handleSort('weinstein_stage' as any)}>
+                  Stage {renderSortIcon('weinstein_stage' as any)}
                 </th>
                 <th className="py-2 px-1 text-right cursor-pointer hover:text-text-main transition" title="Suggested position size (shares) based on risk budget ÷ stop distance" onClick={() => handleSort('position_size_shares' as any)}>
                   Shares {renderSortIcon('position_size_shares' as any)}
@@ -1217,9 +1300,19 @@ export const ScreenerPanel: React.FC = () => {
                     <input
                       type="text"
                       placeholder=">60"
-                      value={colFilters.trade_quality_score}
-                      onChange={(e) => setColFilters({ ...colFilters, trade_quality_score: e.target.value })}
+                      value={colFilters.tqs}
+                      onChange={(e) => setColFilters({ ...colFilters, tqs: e.target.value })}
                       className="w-full min-w-[40px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-purple-500 focus:text-text-main text-right transition font-mono"
+                    />
+                  </td>
+                  {/* Weinstein Stage */}
+                  <td className="py-1 px-1">
+                    <input
+                      type="text"
+                      placeholder="=2"
+                      value={colFilters.weinstein_stage}
+                      onChange={(e) => setColFilters({ ...colFilters, weinstein_stage: e.target.value })}
+                      className="w-full min-w-[36px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-purple-500 focus:text-text-main text-center transition font-mono"
                     />
                   </td>
                   {/* Shares */}
@@ -1584,9 +1677,9 @@ export const ScreenerPanel: React.FC = () => {
                       <span className="text-slate-500 text-xs">Executing database snapshot sweep...</span>
                     ) : screenerResults.length === 0 ? (
                       <div className="flex flex-col items-center gap-3">
-                        <span className="text-3xl">🎯</span>
-                        <p className="text-slate-400 text-sm font-semibold">Pick a preset to scan</p>
-                        <p className="text-slate-600 text-xs max-w-xs">Select one of the scan presets above, or use Clear All to view the full universe.</p>
+                        <span className="text-3xl">🔍</span>
+                        <p className="text-slate-400 text-sm font-semibold">No matches</p>
+                        <p className="text-slate-600 text-xs max-w-xs">No stocks match the current filters. Try loosening or clearing them.</p>
                       </div>
                     ) : (
                       <span className="text-slate-500 text-xs">No stock matches found for the current criteria.</span>
@@ -1604,7 +1697,20 @@ export const ScreenerPanel: React.FC = () => {
                     <tr key={row.symbol_id} className="hover:bg-slate-900/40 transition whitespace-nowrap text-xs">
                       {/* Ticker */}
                       <td className="py-2 px-1.5 font-bold text-text-main font-mono">
-                        {row.symbol.replace('.NS', '')}
+                        <div className="flex flex-col gap-0.5">
+                          {row.symbol.replace('.NS', '')}
+                          <div className="flex gap-0.5 flex-wrap">
+                            {row.is_vajraturn && (
+                              <span className="text-[8px] font-bold px-1 py-px rounded bg-purple-900/50 border border-purple-500/40 text-purple-300 leading-none" title="VajraTurn — early reversal near rising SMA200">VT</span>
+                            )}
+                            {row.is_bb_squeeze && (
+                              <span className="text-[8px] font-bold px-1 py-px rounded bg-amber-900/40 border border-amber-500/40 text-amber-300 leading-none" title="BB Squeeze — bandwidth at 20-day low">SQ</span>
+                            )}
+                            {row.weinstein_stage === 2 && (
+                              <span className="text-[8px] font-bold px-1 py-px rounded bg-emerald-900/40 border border-emerald-500/40 text-emerald-300 leading-none" title="Weinstein Stage 2 — Markup phase">S2</span>
+                            )}
+                          </div>
+                        </div>
                       </td>
                       
                       {/* Company Name */}
@@ -1703,17 +1809,39 @@ export const ScreenerPanel: React.FC = () => {
                         ) : <span className="text-slate-600">—</span>}
                       </td>
 
-                      {/* Trade Quality Score */}
+                      {/* Trend Quality Score */}
                       <td className="py-2 px-1 text-right font-mono text-xs">
-                        {row.trade_quality_score != null ? (
+                        {row.tqs != null ? (
                           <span className={`px-1 rounded font-bold ${
-                            row.trade_quality_score >= 70
+                            row.tqs >= 70
                               ? 'text-emerald-400 bg-emerald-950/20'
-                              : row.trade_quality_score >= 50
+                              : row.tqs >= 50
                               ? 'text-amber-400 bg-amber-950/20'
                               : 'text-rose-400 bg-rose-950/20'
                           }`}>
-                            {row.trade_quality_score.toFixed(0)}
+                            {row.tqs.toFixed(0)}
+                          </span>
+                        ) : <span className="text-slate-600">—</span>}
+                      </td>
+
+                      {/* Weinstein Stage */}
+                      <td className="py-2 px-1 text-center font-mono text-xs">
+                        {row.weinstein_stage != null ? (
+                          <span className={`px-1.5 py-0.5 rounded font-bold text-[10px] ${
+                            row.weinstein_stage === 2
+                              ? 'text-emerald-400 bg-emerald-950/20'
+                              : row.weinstein_stage === 1
+                              ? 'text-amber-400 bg-amber-950/20'
+                              : row.weinstein_stage === 3
+                              ? 'text-orange-400 bg-orange-950/20'
+                              : 'text-rose-400 bg-rose-950/20'
+                          }`} title={
+                            row.weinstein_stage === 1 ? 'Stage 1 — Basing'
+                            : row.weinstein_stage === 2 ? 'Stage 2 — Markup'
+                            : row.weinstein_stage === 3 ? 'Stage 3 — Topping'
+                            : 'Stage 4 — Decline'
+                          }>
+                            S{row.weinstein_stage}
                           </span>
                         ) : <span className="text-slate-600">—</span>}
                       </td>
@@ -2148,6 +2276,126 @@ export const ScreenerPanel: React.FC = () => {
               </div>
             </div>
           )}
+      {/* ── Help Modal ─────────────────────────────────────────────────────── */}
+      {showHelp && (
+        <div className="fixed inset-0 bg-bg-base/80 backdrop-blur-md flex items-center justify-center z-50 p-4" onClick={() => setShowHelp(false)}>
+          <div className="w-full max-w-3xl bg-bg-surface border border-border-subtle rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden" onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border-subtle">
+              <div className="flex items-center gap-2.5">
+                <HelpCircle className="w-5 h-5 text-accent-primary" />
+                <h2 className="text-base font-bold text-text-main">Screener — How to Use</h2>
+              </div>
+              <button onClick={() => setShowHelp(false)} className="p-1.5 rounded-lg hover:bg-bg-base/60 text-text-muted hover:text-text-main transition cursor-pointer">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="overflow-y-auto px-6 py-5 space-y-6 text-sm text-text-muted">
+
+              {/* How to use */}
+              <section>
+                <h3 className="text-xs font-bold uppercase tracking-widest text-accent-primary mb-3">How to Use</h3>
+                <div className="space-y-2 text-[13px] leading-relaxed">
+                  <p><span className="text-text-main font-semibold">1. Pick a Preset</span> — Click any scan card (Breakout, Momentum, VajraTurn, etc.) to instantly filter stocks matching that strategy's criteria. The active preset highlights in purple.</p>
+                  <p><span className="text-text-main font-semibold">2. Clear All</span> — Resets all filters and loads the full stock universe.</p>
+                  <p><span className="text-text-main font-semibold">3. Active Filter Chips</span> — Pills shown below the presets confirm which filters are live. Click ✕ on any chip to remove that filter individually.</p>
+                  <p><span className="text-text-main font-semibold">4. Column Filters</span> — The input row under the header lets you narrow results further (e.g. <code className="bg-bg-base px-1 rounded text-xs text-text-main">&gt;60</code> in TQS, <code className="bg-bg-base px-1 rounded text-xs text-text-main">&lt;30</code> in RSI). Supports <code className="bg-bg-base px-1 rounded text-xs text-text-main">&gt;</code> <code className="bg-bg-base px-1 rounded text-xs text-text-main">&lt;</code> <code className="bg-bg-base px-1 rounded text-xs text-text-main">=</code> operators.</p>
+                  <p><span className="text-text-main font-semibold">5. Sort</span> — Click any column header to sort. Click again to reverse.</p>
+                  <p><span className="text-text-main font-semibold">6. Chart</span> — Click <span className="text-purple-400 font-mono">Chart</span> on any row for a quick chart popup. Click <span className="text-purple-400 font-mono">View</span> to open the full Explorer.</p>
+                  <p><span className="text-text-main font-semibold">7. Export</span> — <span className="text-purple-400">Export CSV</span> downloads every visible (filtered) row.</p>
+                </div>
+              </section>
+
+              {/* Ticker badges */}
+              <section>
+                <h3 className="text-xs font-bold uppercase tracking-widest text-accent-primary mb-3">Ticker Badges</h3>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { badge: 'VT', color: 'bg-purple-900/50 border-purple-500/40 text-purple-300', label: 'VajraTurn', desc: 'StochRSI K crossed above D in oversold zone within 5 days + RSI 30–52 + volume above avg + price 0–5% above rising SMA200. High R:R early reversal signal.' },
+                    { badge: 'SQ', color: 'bg-amber-900/40 border-amber-500/40 text-amber-300', label: 'BB Squeeze', desc: 'Bollinger Band width is at its lowest in 20 days. Volatility contraction — stock is coiling for an explosive move.' },
+                    { badge: 'S2', color: 'bg-emerald-900/40 border-emerald-500/40 text-emerald-300', label: 'Weinstein Stage 2', desc: 'Price is above a rising 200-day SMA. Classic markup phase — the ideal stage to be long.' },
+                  ].map(b => (
+                    <div key={b.badge} className="flex gap-2 items-start p-2.5 rounded-lg bg-bg-base/60 border border-border-subtle">
+                      <span className={`shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded border ${b.color}`}>{b.badge}</span>
+                      <div>
+                        <p className="text-text-main font-semibold text-[11px]">{b.label}</p>
+                        <p className="text-text-muted text-[10px] mt-0.5 leading-relaxed">{b.desc}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              {/* Grid columns */}
+              <section>
+                <h3 className="text-xs font-bold uppercase tracking-widest text-accent-primary mb-3">Grid Columns</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5">
+                  {[
+                    ['Price', 'Last End-of-Day closing price (₹).'],
+                    ['Chg%', 'Day-over-day price change as a percentage.'],
+                    ['Avg Val', 'Average daily traded value (price × volume) over 20 days. Proxy for liquidity.'],
+                    ['Bias', 'Composite regime: VERY_BULLISH / BULLISH / NEUTRAL / BEARISH / VERY_BEARISH. Number = composite score (0–100).'],
+                    ['1W / 2W / 3W / 4W', 'Rolling returns over last 5 / 10 / 15 / 20 trading days.'],
+                    ['Stop', 'ATR-based stop-loss: nearest structural support − 1.5 × ATR.'],
+                    ['T1 / T2 / T3', 'Structural resistance targets ranked by confluence strength.'],
+                    ['Upside', 'Potential gain % from current price to Target 1.'],
+                    ['R:R', 'Risk-to-Reward ratio = (T1 − Price) ÷ (Price − Stop). ≥ 2 is preferred.'],
+                    ['TQS', 'Trend Quality Score (0–100). ADX strength (0–40) + price above EMA9/SMA20/SMA50 (0–30) + MA alignment stack (0–20) + RSI in trend zone 45–70 (0–10). Higher = cleaner trend.'],
+                    ['Stage', 'Weinstein Stage. S1=Basing · S2=Markup ✓ · S3=Topping · S4=Decline.'],
+                    ['Shares', 'Suggested position size: risk budget ÷ (Price − Stop).'],
+                    ['Vol Brk', 'Volume Breakout Ratio — today\'s volume ÷ 20-day average. >1.5 = notable.'],
+                    ['RSI', 'Relative Strength Index (14). <30 = oversold, >70 = overbought.'],
+                    ['CMF', 'Chaikin Money Flow (20). Positive = accumulation, negative = distribution.'],
+                    ['StochRSI K/D', 'Stochastic RSI oscillator. K crossing above D in <30 zone = bullish.'],
+                    ['SMA 20/50/200', 'Whether price is ABOVE or BELOW each moving average.'],
+                    ['MACD', 'MACD trend: BULLISH (histogram positive & rising) or BEARISH.'],
+                    ['HA', 'Heikin-Ashi candle direction — smoothed trend indicator.'],
+                    ['Renko / LB', 'Renko brick and Three-Line Break direction. Filters noise.'],
+                    ['RS 1M', 'Relative Strength vs NIFTY 50 over 21 days. >1 = outperforming.'],
+                    ['Patterns', 'NR7 (narrowest 7-day range), Inside Bar, Gap Up, Gap Down.'],
+                    ['ML Signal', 'VajraML triple-barrier classifier: Strong Buy / Buy / Watch / Avoid / Market Risk.'],
+                    ['EMA Ribbon', 'Days since EMA9 crossed above EMA20 (ribbon flip to bullish).'],
+                    ['GX / MACD Xover / CMF Xover', 'Days since Golden Cross (SMA20>SMA50), MACD bullish crossover, CMF crossed above zero.'],
+                    ['Mkt Cap', 'Market capitalisation in crores (₹).'],
+                    ['P/E · P/B · EV/EBITDA', 'Fundamental valuation multiples.'],
+                    ['ROE · D/E · Margin · EPS', 'Profitability and leverage metrics.'],
+                  ].map(([col, desc]) => (
+                    <div key={col} className="flex gap-2 py-1 border-b border-border-subtle/50">
+                      <span className="shrink-0 w-28 font-mono text-[10px] font-bold text-text-main">{col}</span>
+                      <span className="text-[11px] text-text-muted leading-relaxed">{desc}</span>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              {/* Presets */}
+              <section>
+                <h3 className="text-xs font-bold uppercase tracking-widest text-accent-primary mb-3">Scan Presets</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {PRESETS.map(p => (
+                    <div key={p.name} className="flex gap-2 items-start p-2.5 rounded-lg bg-bg-base/60 border border-border-subtle">
+                      <span className="text-base leading-none shrink-0">{p.emoji}</span>
+                      <div>
+                        <p className="text-text-main font-semibold text-[11px]">{p.name}</p>
+                        <p className="text-text-muted text-[10px] mt-0.5 leading-relaxed">{p.desc}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+            </div>
+
+            <div className="px-6 py-3 border-t border-border-subtle flex justify-end">
+              <button onClick={() => setShowHelp(false)} className="px-4 py-2 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-bold rounded-lg transition cursor-pointer">
+                Got it
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Modal Stock Chart ── */}
       {modalSymbol && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
