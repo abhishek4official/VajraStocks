@@ -391,6 +391,13 @@ class ScreeningSnapshot(Base):
     macd_above_zero:      Mapped[bool | None]  = mapped_column(Boolean, nullable=True) # macd_line > 0
     cmf_slope_5d:         Mapped[float | None] = mapped_column(Float, nullable=True)   # CMF 5-day change
 
+    # VajraTurn: early reversal near rising SMA200
+    is_vajraturn: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+
+    # Bollinger Band squeeze: bandwidth at a 20-day low (volatility contraction)
+    bb_bandwidth: Mapped[float | None] = mapped_column(Float, nullable=True)
+    is_bb_squeeze: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+
     updated_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now())
 
     # Relationships

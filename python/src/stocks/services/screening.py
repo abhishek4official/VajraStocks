@@ -482,6 +482,53 @@ class ScreeningService:
             if regime_bias is not None and weekly_trend is not None:
                 mtf_confirmed = (regime_bias in ("BULLISH", "VERY_BULLISH") and weekly_trend == "UP")
 
+            # 6e. VajraTurn — early reversal near rising SMA200
+            # Criteria: StochRSI K crossed above D in oversold zone (K≤25) within last
+            # 5 days + RSI stabilising (30-52) + volume above avg + price 0-5% above SMA200.
+            is_vajraturn = False
+            if ind and getattr(ind, "sma_200", None) is not None:
+                sma200_val = float(ind.sma_200)
+                near_sma200 = (
+                    sma200_val > 0
+                    and close_price >= sma200_val
+                    and (close_price / sma200_val) <= 1.05
+                )
+                rsi_stabilising = rsi_14 is not None and 30.0 <= float(rsi_14) <= 52.0
+                vol_ok = volume_breakout_ratio is not None and volume_breakout_ratio >= 1.0
+                stoch_xover_oversold = any(
+                    getattr(row, "stochrsi_bullish_xover", None)
+                    and getattr(row, "stochrsi_k", None) is not None
+                    and float(row.stochrsi_k) <= 25.0
+                    for row in ind_rows[:5]
+                )
+                is_vajraturn = near_sma200 and rsi_stabilising and vol_ok and stoch_xover_oversold
+
+            # 6f. BB Squeeze — bandwidth at a 20-day low (volatility contraction)
+            bb_bandwidth = None
+            is_bb_squeeze = None
+            if (
+                ind
+                and getattr(ind, "bb_upper", None) is not None
+                and getattr(ind, "bb_lower", None) is not None
+                and getattr(ind, "bb_middle", None) is not None
+                and float(ind.bb_middle) > 0
+            ):
+                curr_bw = (float(ind.bb_upper) - float(ind.bb_lower)) / float(ind.bb_middle)
+                bb_bandwidth = round(curr_bw, 6)
+                prior_bws = []
+                for row in ind_rows[1:21]:
+                    if (
+                        getattr(row, "bb_upper", None) is not None
+                        and getattr(row, "bb_lower", None) is not None
+                        and getattr(row, "bb_middle", None) is not None
+                        and float(row.bb_middle) > 0
+                    ):
+                        prior_bws.append(
+                            (float(row.bb_upper) - float(row.bb_lower)) / float(row.bb_middle)
+                        )
+                if len(prior_bws) >= 10:
+                    is_bb_squeeze = curr_bw <= min(prior_bws)
+
             # 7. Upsert the ScreeningSnapshot
             snapshot = _prefetch.get("snapshot") if _prefetch else self.db.scalar(
                 select(ScreeningSnapshot).filter_by(symbol_id=symbol_id)
@@ -554,6 +601,9 @@ class ScreeningService:
                     macd_histogram_slope=macd_histogram_slope,
                     macd_above_zero=macd_above_zero,
                     cmf_slope_5d=cmf_slope_5d,
+                    is_vajraturn=is_vajraturn,
+                    bb_bandwidth=bb_bandwidth,
+                    is_bb_squeeze=is_bb_squeeze,
                 )
                 self.db.add(snapshot)
             else:
@@ -620,6 +670,9 @@ class ScreeningService:
                 snapshot.macd_histogram_slope        = macd_histogram_slope
                 snapshot.macd_above_zero             = macd_above_zero
                 snapshot.cmf_slope_5d                = cmf_slope_5d
+                snapshot.is_vajraturn                = is_vajraturn
+                snapshot.bb_bandwidth                = bb_bandwidth
+                snapshot.is_bb_squeeze               = is_bb_squeeze
             if commit:
                 self.db.commit()
         except Exception as e:
@@ -884,6 +937,8 @@ class ScreeningService:
         golden_cross_max_days: int | None = None,
         macd_bull_xover_max_days: int | None = None,
         cmf_bull_xover_max_days: int | None = None,
+        only_vajraturn: bool = False,
+        only_bb_squeeze: bool = False,
         limit: int = 2500,
     ) -> list[ScreeningSnapshot]:
         """Runs high-speed query sweeps directly against the narrow screening_snapshots table."""
@@ -960,6 +1015,10 @@ class ScreeningService:
                 ScreeningSnapshot.days_since_cmf_bull <= cmf_bull_xover_max_days,
                 ScreeningSnapshot.days_since_cmf_bull.is_not(None),
             )
+        if only_vajraturn:
+            stmt = stmt.where(ScreeningSnapshot.is_vajraturn == True)  # noqa: E712
+        if only_bb_squeeze:
+            stmt = stmt.where(ScreeningSnapshot.is_bb_squeeze == True)  # noqa: E712
 
         stmt = stmt.order_by(ScreeningSnapshot.symbol.asc())
 

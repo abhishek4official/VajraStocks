@@ -43,6 +43,23 @@ function loadColFilters(): ColFilters {
   return { ...DEFAULT_COL_FILTERS };
 }
 
+// All filter fields in their cleared/undefined state (limit is intentionally omitted).
+const EMPTY_FILTERS = {
+  min_rsi: undefined, max_rsi: undefined,
+  min_price: undefined, max_price: undefined,
+  sma_20_cross: undefined, sma_50_cross: undefined, sma_200_cross: undefined,
+  macd_trend: undefined, ha_dir: undefined, renko_dir: undefined, lb_dir: undefined,
+  volume_breakout: undefined, min_avg_traded_value: undefined,
+  only_nr7: undefined, only_inside_bar: undefined,
+  only_gap_up: undefined, only_gap_down: undefined,
+  min_rs_1m: undefined,
+  min_cmf: undefined, max_cmf: undefined, cmf_rising: undefined, cmf_crossed_zero: undefined,
+  min_stochrsi_k: undefined, max_stochrsi_k: undefined, stochrsi_bullish_xover_max_days: undefined,
+  ema_ribbon_bull_max_days: undefined, golden_cross_max_days: undefined,
+  macd_bull_xover_max_days: undefined, cmf_bull_xover_max_days: undefined,
+  only_vajraturn: undefined, only_bb_squeeze: undefined,
+} as const;
+
 // ── Screener presets ─────────────────────────────────────────────────────────
 const PRESETS = [
   {
@@ -116,6 +133,18 @@ const PRESETS = [
     emoji: '📈',
     desc: 'StochRSI bullish crossover from oversold within 3 days',
     filters: { stochrsi_bullish_xover_max_days: 3, sma_200_cross: 'ABOVE' as const },
+  },
+  {
+    name: 'VajraTurn',
+    emoji: '🎯',
+    desc: 'Early reversal near rising SMA200 — high R:R low-risk entries',
+    filters: { only_vajraturn: true },
+  },
+  {
+    name: 'BB Squeeze',
+    emoji: '🗜️',
+    desc: 'Bollinger Band at 20-day width low — coiled for explosive move',
+    filters: { only_bb_squeeze: true },
   },
 ];
 
@@ -308,7 +337,13 @@ export const ScreenerPanel: React.FC = () => {
     setColFilters({ ...DEFAULT_COL_FILTERS });
   };
 
-  useEffect(() => { runScreener(); }, []);
+  const handleClearAll = () => {
+    try { localStorage.removeItem(COL_FILTERS_KEY); } catch { /* ignore */ }
+    setColFilters({ ...DEFAULT_COL_FILTERS });
+    setScreenerFilters({ ...EMPTY_FILTERS });
+    runScreener();
+  };
+
   // Load the registered strategies once for the per-strategy signal chips (stable column order).
   useEffect(() => { apiService.getStrategies().then(setStrategies).catch(() => setStrategies([])); }, []);
   // Reset to first page whenever results, search query, or column filters update
@@ -609,27 +644,12 @@ export const ScreenerPanel: React.FC = () => {
       </div>
 
       {/* ── Preset Cards ──────────────────────────────────────────────────── */}
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-2 items-start">
         {PRESETS.map(p => (
           <button
             key={p.name}
             onClick={() => {
-              // Reset all filters then apply preset
-              setScreenerFilters({
-                min_rsi: undefined, max_rsi: undefined,
-                min_price: undefined, max_price: undefined,
-                sma_20_cross: undefined, sma_50_cross: undefined, sma_200_cross: undefined,
-                macd_trend: undefined, ha_dir: undefined, renko_dir: undefined, lb_dir: undefined,
-                volume_breakout: undefined, min_avg_traded_value: undefined,
-                only_nr7: undefined, only_inside_bar: undefined,
-                only_gap_up: undefined, only_gap_down: undefined,
-                min_rs_1m: undefined,
-                min_cmf: undefined, max_cmf: undefined, cmf_rising: undefined, cmf_crossed_zero: undefined,
-                min_stochrsi_k: undefined, max_stochrsi_k: undefined, stochrsi_bullish_xover_max_days: undefined,
-                ema_ribbon_bull_max_days: undefined, golden_cross_max_days: undefined,
-                macd_bull_xover_max_days: undefined, cmf_bull_xover_max_days: undefined,
-                ...p.filters,
-              });
+              setScreenerFilters({ ...EMPTY_FILTERS, ...p.filters });
               runScreener();
             }}
             disabled={isLoading}
@@ -645,6 +665,18 @@ export const ScreenerPanel: React.FC = () => {
             </div>
           </button>
         ))}
+        <button
+          onClick={handleClearAll}
+          disabled={isLoading}
+          className="flex items-center gap-2 px-3 py-2 rounded-xl border border-rose-800/40 bg-rose-950/20 hover:bg-rose-950/40 hover:border-rose-700/60 disabled:opacity-40 transition cursor-pointer text-left"
+          title="Clear all filters and show all stocks"
+        >
+          <span className="text-base leading-none">✕</span>
+          <div>
+            <div className="text-xs font-bold text-rose-300">Clear All</div>
+            <div className="text-[10px] text-slate-500">Reset filters &amp; reload</div>
+          </div>
+        </button>
       </div>
 
       {/* Results Grid Table */}
@@ -1547,10 +1579,18 @@ export const ScreenerPanel: React.FC = () => {
             <tbody className="divide-y divide-slate-850">
               {filteredResults.length === 0 ? (
                 <tr>
-                  <td colSpan={47} className="py-10 text-center text-slate-500 text-xs">
-                    {isLoading 
-                      ? 'Executing database snapshot sweep...' 
-                      : 'No stock matches found for the current criteria.'}
+                  <td colSpan={47} className="py-16 text-center">
+                    {isLoading ? (
+                      <span className="text-slate-500 text-xs">Executing database snapshot sweep...</span>
+                    ) : screenerResults.length === 0 ? (
+                      <div className="flex flex-col items-center gap-3">
+                        <span className="text-3xl">🎯</span>
+                        <p className="text-slate-400 text-sm font-semibold">Pick a preset to scan</p>
+                        <p className="text-slate-600 text-xs max-w-xs">Select one of the scan presets above, or use Clear All to view the full universe.</p>
+                      </div>
+                    ) : (
+                      <span className="text-slate-500 text-xs">No stock matches found for the current criteria.</span>
+                    )}
                   </td>
                 </tr>
               ) : (

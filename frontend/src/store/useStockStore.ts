@@ -49,6 +49,8 @@ interface ScreenerFilters {
   golden_cross_max_days?: number;
   macd_bull_xover_max_days?: number;
   cmf_bull_xover_max_days?: number;
+  only_vajraturn?: boolean;
+  only_bb_squeeze?: boolean;
   limit?: number;
 }
 

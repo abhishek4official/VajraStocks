@@ -460,6 +460,92 @@ export const PortfolioPanel: React.FC = () => {
         </p>
       </div>
 
+      {/* ── Concentration & Risk ──────────────────────────────────────────── */}
+      {(agg.hhi != null || agg.var_1d_pct != null) && (
+        <div className="shrink-0 grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+          {/* HHI Concentration */}
+          {agg.hhi != null && (
+            <div className="rounded-2xl border border-border-subtle bg-bg-surface/40 px-5 py-4">
+              {sectionLabel('Concentration (HHI)', PieChart)}
+              <div className="mt-3 flex items-end justify-between">
+                <div>
+                  <span className="text-2xl font-extrabold font-mono text-text-main">{agg.hhi.toFixed(4)}</span>
+                  <span
+                    className={`ml-2 text-[11px] font-bold px-2 py-0.5 rounded-md border ${
+                      agg.hhi_label === 'HIGH'
+                        ? 'text-rose-400 bg-rose-500/10 border-rose-500/25'
+                        : agg.hhi_label === 'MODERATE'
+                        ? 'text-amber-400 bg-amber-500/10 border-amber-500/25'
+                        : 'text-emerald-400 bg-emerald-500/10 border-emerald-500/25'
+                    }`}
+                  >
+                    {agg.hhi_label}
+                  </span>
+                </div>
+                <div className="text-right text-[10px] text-slate-500 leading-relaxed">
+                  <p>&lt; 0.10 = Low · 0.10–0.25 = Moderate</p>
+                  <p>&gt; 0.25 = High concentration</p>
+                </div>
+              </div>
+              {/* HHI track */}
+              <div className="mt-3 relative h-2 bg-slate-900 rounded-full overflow-hidden">
+                <div className="absolute inset-y-0 left-0 w-[40%] bg-emerald-600/40 rounded-l-full" />
+                <div className="absolute inset-y-0 left-[40%] w-[60%] bg-rose-600/25 rounded-r-full" />
+                <div
+                  className={`absolute inset-y-0 left-0 rounded-full transition-all ${
+                    agg.hhi_label === 'HIGH' ? 'bg-rose-500' : agg.hhi_label === 'MODERATE' ? 'bg-amber-500' : 'bg-emerald-500'
+                  }`}
+                  style={{ width: `${Math.min(agg.hhi * 200, 100)}%` }}
+                />
+                {/* 0.10 marker */}
+                <div className="absolute inset-y-0 w-px bg-slate-500/60" style={{ left: '20%' }} title="0.10 threshold" />
+                {/* 0.25 marker */}
+                <div className="absolute inset-y-0 w-px bg-slate-500/60" style={{ left: '50%' }} title="0.25 threshold" />
+              </div>
+              <div className="flex justify-between text-[9px] text-slate-600 mt-1">
+                <span>0</span><span>0.10</span><span>0.25</span><span>0.50+</span>
+              </div>
+            </div>
+          )}
+
+          {/* VaR / CVaR */}
+          {agg.var_1d_pct != null && (
+            <div className="rounded-2xl border border-border-subtle bg-bg-surface/40 px-5 py-4">
+              {sectionLabel('Historical VaR / CVaR (1-day, 95%)', ShieldAlert)}
+              <div className="mt-3 grid grid-cols-2 gap-3">
+                <div className="rounded-xl bg-slate-900/50 border border-slate-800/60 px-3 py-2.5">
+                  <p className="text-[10px] uppercase tracking-wide text-slate-500">VaR 5%</p>
+                  <p className="text-lg font-extrabold font-mono text-rose-400 mt-0.5">
+                    {agg.var_1d_pct.toFixed(2)}%
+                  </p>
+                  {agg.var_1d_inr != null && (
+                    <p className="text-[11px] font-mono text-slate-400">
+                      ₹{new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(agg.var_1d_inr)}
+                    </p>
+                  )}
+                </div>
+                <div className="rounded-xl bg-slate-900/50 border border-slate-800/60 px-3 py-2.5">
+                  <p className="text-[10px] uppercase tracking-wide text-slate-500">CVaR 5%</p>
+                  <p className="text-lg font-extrabold font-mono text-rose-500 mt-0.5">
+                    {agg.cvar_1d_pct?.toFixed(2)}%
+                  </p>
+                  {agg.cvar_1d_inr != null && (
+                    <p className="text-[11px] font-mono text-slate-400">
+                      ₹{new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(agg.cvar_1d_inr)}
+                    </p>
+                  )}
+                </div>
+              </div>
+              <p className="text-[10px] text-slate-600 mt-3">
+                On 95% of days the portfolio is expected to lose no more than the VaR amount.
+                CVaR is the average loss on the worst 5% of days (expected shortfall).
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ── Rotation candidates ────────────────────────────────────────────── */}
       <div className="shrink-0 rounded-2xl border border-border-subtle bg-bg-surface/40 p-5">
         <div className="flex items-center justify-between mb-1">

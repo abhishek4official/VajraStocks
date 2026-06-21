@@ -141,6 +141,12 @@ export interface PortfolioAggregates {
   correlation_clusters: { pair: [string, string]; rho: number }[];
   portfolio_beta: number | null;
   diversification_score: number | null;
+  hhi?: number | null;
+  hhi_label?: 'LOW' | 'MODERATE' | 'HIGH' | null;
+  var_1d_pct?: number | null;
+  cvar_1d_pct?: number | null;
+  var_1d_inr?: number | null;
+  cvar_1d_inr?: number | null;
   alpha_1w?: number | null;
   alpha_4w?: number | null;
   alpha_3m?: number | null;
@@ -642,6 +648,8 @@ export const apiService = {
     golden_cross_max_days?: number;
     macd_bull_xover_max_days?: number;
     cmf_bull_xover_max_days?: number;
+    only_vajraturn?: boolean;
+    only_bb_squeeze?: boolean;
     limit?: number;
   }): Promise<ScreenerRow[]> {
     const response = await fetch(`${BASE_URL}/screeners/run`, {
@@ -675,6 +683,8 @@ export const apiService = {
         golden_cross_max_days: filters.golden_cross_max_days ?? null,
         macd_bull_xover_max_days: filters.macd_bull_xover_max_days ?? null,
         cmf_bull_xover_max_days: filters.cmf_bull_xover_max_days ?? null,
+        only_vajraturn: filters.only_vajraturn ?? false,
+        only_bb_squeeze: filters.only_bb_squeeze ?? false,
         limit: filters.limit ?? 100
       })
     });
