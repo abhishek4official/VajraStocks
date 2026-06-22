@@ -136,8 +136,15 @@ class SyncEngine:
         self.downloader = DownloaderService(config)
         self.validator = ValidationService(config)
 
-    def run_sync(self, specific_symbols: list[str] = None) -> dict[str, Any]:
-        """Runs a complete historical download sync, with resumable incremental updates."""
+    def run_sync(self, specific_symbols: list[str] = None, end_date: datetime.date = None) -> dict[str, Any]:
+        """Runs a complete historical download sync, with resumable incremental updates.
+
+        Args:
+            specific_symbols: Restrict sync to these NSE symbols (raw or .NS format).
+            end_date: Stop downloading at this date (inclusive). Defaults to today.
+                      Pass file_date - 1 day when called from the EOD import pipeline
+                      so Yahoo does not overwrite the just-imported official EOD prices.
+        """
         session = self.db_manager.get_session()
         db_service = DatabaseService(self.config, session)
 
@@ -199,6 +206,7 @@ class SyncEngine:
             # 3. Determine dynamic date ranges and collect symbols requiring updates
             symbols_to_sync = []  # List of tuples: (Symbol, start_date, end_date)
             today = datetime.date.today()
+            sync_end = end_date if end_date is not None else today
             history_start = today - datetime.timedelta(days=365 * self.config.downloader.history_years)
 
             for symbol_obj in active_symbols:
@@ -213,7 +221,7 @@ class SyncEngine:
                     # Cold Start - full history backfill
                     start_date = history_start
 
-                end_date = today
+                end_date = sync_end
 
                 # If already up to date, skip downloading
                 if start_date >= end_date:

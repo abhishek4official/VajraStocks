@@ -1,14 +1,13 @@
 """NSE EOD file import service.
 
-Workflow (Yahoo-first, EOD-as-fallback):
+Workflow (EOD-authoritative, Yahoo fills gaps only):
   1. Parse & validate PD{DDMMYYYY}.csv
   2. Stage parsed rows to eod_staging_data
-  3. Detect data gaps per symbol
-  4. Run scoped Yahoo sync to fill all gaps (including today)
-  5. Diff — find symbols Yahoo still couldn't provide for file_date
-  6. Patch those symbols from staged EOD data
-  7. Run calculations only for EOD-patched symbols
-  8. Full screening refresh (picks up all changes)
+  3. Detect data gaps (trading days before file_date with missing prices)
+  4. If gaps exist: run scoped Yahoo sync up to file_date-1 (never touches file_date)
+  5. Write ALL resolved EOD symbols for file_date — NSE official close is authoritative
+  6. Run calculations for all written symbols
+  7. Screening refresh
 """
 
 import csv
@@ -114,37 +113,49 @@ class EodImportService:
             job.staged_count = staged_count
             session.commit()
 
-            # ── Phase 4: Gap detection + Yahoo fill ─────────────────────────
+            # ── Phase 4: Gap detection — fill days BEFORE file_date via Yahoo ──
             nse_symbols = [r["symbol_nse"] for r in resolved]
             gap_info = self._compute_gap_info(resolved, file_date, session)
             job.gap_info = json.dumps(gap_info)
             session.commit()
+
+            has_gaps = (
+                gap_info.get("symbols_with_gap", 0) > 0
+                or gap_info.get("symbols_with_no_history", 0) > 0
+            )
             session.close()   # release before long Yahoo sync
             session = None
 
-            self._update_status_detached(job_id, "GAP_FILLING")
-            logger.info(f"[EOD {job_id}] Running Yahoo sync for {len(nse_symbols)} symbols to fill gaps...")
-            self._run_yahoo_gap_fill(nse_symbols)
-            logger.info(f"[EOD {job_id}] Yahoo sync complete.")
+            if has_gaps:
+                self._update_status_detached(job_id, "GAP_FILLING")
+                # Stop Yahoo at file_date-1 so it never touches the date the EOD
+                # file covers — NSE official close is authoritative for that date.
+                yahoo_end = file_date - datetime.timedelta(days=1)
+                logger.info(
+                    f"[EOD {job_id}] Running Yahoo gap-fill for {len(nse_symbols)} symbols "
+                    f"up to {yahoo_end} (file_date excluded)..."
+                )
+                self._run_yahoo_gap_fill(nse_symbols, end_date=yahoo_end)
+                logger.info(f"[EOD {job_id}] Yahoo gap-fill complete.")
+            else:
+                logger.info(f"[EOD {job_id}] No prior gaps — skipping Yahoo sync.")
 
-            # ── Phase 5: Diff — what did Yahoo miss for file_date? ──────────
+            # ── Phase 5: Write EOD data for file_date (always authoritative) ──
             session = self.db_manager.get_session()
             self._update_status_detached(job_id, "PATCHING")
-            diff_records = self._compute_diff(job_id, file_date, session)
-            logger.info(f"[EOD {job_id}] Yahoo missed {len(diff_records)} symbols for {file_date}. Patching from EOD.")
-
-            # ── Phase 6: Patch from EOD ─────────────────────────────────────
-            patched_symbol_ids: list[int] = []
-            if diff_records:
-                patched_symbol_ids = self._patch_from_eod(diff_records, file_date, session)
+            # All resolved records from the official EOD file are written for
+            # file_date, overwriting anything Yahoo may have put there earlier.
+            patched_symbol_ids = self._patch_from_eod(resolved, file_date, session)
+            logger.info(f"[EOD {job_id}] Wrote {len(patched_symbol_ids)} symbols from NSE EOD file for {file_date}.")
             job = session.scalar(select(EodImportJob).where(EodImportJob.job_id == job_id))
+            job.yahoo_filled_count = gap_info.get("symbols_with_gap", 0)
             job.eod_patched_count = len(patched_symbol_ids)
             session.commit()
 
-            # ── Phase 7: Calculations for patched symbols ───────────────────
+            # ── Phase 6: Calculations for all EOD-written symbols ──────────
             if patched_symbol_ids:
                 self._update_status_detached(job_id, "CALCULATING")
-                logger.info(f"[EOD {job_id}] Running derived calculations for {len(patched_symbol_ids)} patched symbols.")
+                logger.info(f"[EOD {job_id}] Running derived calculations for {len(patched_symbol_ids)} symbols.")
                 self._calculate_for_symbols(patched_symbol_ids, file_date, session)
 
                 # ── Phase 8: Screening refresh for patched symbols ──────────
@@ -347,63 +358,22 @@ class EodImportService:
             "file_date": str(file_date),
         }
 
-    def _run_yahoo_gap_fill(self, nse_symbols: list[str]) -> None:
-        """Runs a scoped Yahoo Finance sync for the given symbols, filling all gaps up to today."""
+    def _run_yahoo_gap_fill(self, nse_symbols: list[str], end_date: datetime.date = None) -> None:
+        """Runs a scoped Yahoo Finance sync for the given symbols up to end_date (exclusive of file_date)."""
         from stocks.services.sync_engine import SyncEngine
         engine = SyncEngine(self.config, self.db_manager)
-        engine.run_sync(specific_symbols=nse_symbols)
-
-    def _compute_diff(self, job_id: str, file_date: datetime.date, session: Session) -> list[dict]:
-        """Returns staged records for symbols Yahoo did NOT fill for file_date."""
-        staged = session.execute(
-            select(
-                EodStagingData.symbol_id,
-                EodStagingData.symbol_nse,
-                EodStagingData.open,
-                EodStagingData.high,
-                EodStagingData.low,
-                EodStagingData.close,
-                EodStagingData.volume,
-            ).where(
-                EodStagingData.job_id == job_id,
-                EodStagingData.symbol_id != None,
-            )
-        ).all()
-
-        # Which symbol_ids already have daily_prices for file_date (filled by Yahoo)?
-        staged_ids = [r[0] for r in staged]
-        if not staged_ids:
-            return []
-
-        yahoo_filled = set(
-            session.scalars(
-                select(DailyPrice.symbol_id).where(
-                    DailyPrice.symbol_id.in_(staged_ids),
-                    DailyPrice.trading_date == file_date,
-                )
-            ).all()
-        )
-
-        return [
-            {
-                "symbol_id": r[0],
-                "symbol_nse": r[1],
-                "open": float(r[2]),
-                "high": float(r[3]),
-                "low": float(r[4]),
-                "close": float(r[5]),
-                "volume": int(r[6]),
-            }
-            for r in staged
-            if r[0] not in yahoo_filled
-        ]
+        engine.run_sync(specific_symbols=nse_symbols, end_date=end_date)
 
     def _patch_from_eod(
-        self, diff_records: list[dict], file_date: datetime.date, session: Session
+        self, records: list[dict], file_date: datetime.date, session: Session
     ) -> list[int]:
-        """Inserts EOD data into daily_prices for symbols Yahoo missed. Returns patched symbol_ids."""
+        """Writes NSE official EOD prices into daily_prices for file_date, overwriting any prior data.
+
+        NSE official close is authoritative — this always runs regardless of what
+        Yahoo Finance may have previously stored for this date.
+        """
         patched_ids: list[int] = []
-        for rec in diff_records:
+        for rec in records:
             sid = rec["symbol_id"]
             # Delete any existing row for this symbol+date (safety)
             session.execute(
@@ -444,14 +414,10 @@ class EodImportService:
 
         if patched_ids:
             session.commit()
-
-        # Mark staging rows as used
-        if patched_ids:
-            used_ids = {r["symbol_id"] for r in diff_records}
+            # Mark all written staging rows
+            written_ids = set(patched_ids)
             staged_rows = session.execute(
-                select(EodStagingData).where(
-                    EodStagingData.symbol_id.in_(list(used_ids))
-                )
+                select(EodStagingData).where(EodStagingData.symbol_id.in_(list(written_ids)))
             ).scalars().all()
             for row in staged_rows:
                 row.used_for_patch = True
