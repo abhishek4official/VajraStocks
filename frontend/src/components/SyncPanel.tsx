@@ -10,8 +10,10 @@ import {
   Heart,
   CheckCircle,
   AlertOctagon,
-  AlertTriangle
+  AlertTriangle,
+  Upload,
 } from 'lucide-react';
+import { EodImportPanel } from './EodImportPanel';
 
 interface RecalcProgress { status: string; total: number; processed: number; failed: number; }
 
@@ -31,7 +33,7 @@ export const SyncPanel: React.FC = () => {
   const { get } = useSettingsCtx();
   const pollIntervalMs = get('UI', 'sync_poll_interval_ms', 5000);
 
-  const [activeSubTab, setActiveSubTab] = useState<'history' | 'status'>('history');
+  const [activeSubTab, setActiveSubTab] = useState<'history' | 'status' | 'eod'>('history');
   const [recalcProgress, setRecalcProgress] = useState<RecalcProgress | null>(null);
   const recalcPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -232,6 +234,18 @@ export const SyncPanel: React.FC = () => {
             <AlertTriangle className="w-4 h-4" />
             Ticker Health Center
           </button>
+
+          <button
+            onClick={() => setActiveSubTab('eod')}
+            className={`flex items-center gap-1.5 pb-1 px-1 border-b-2 text-sm font-bold transition cursor-pointer ${
+              activeSubTab === 'eod'
+                ? 'border-emerald-500 text-text-main'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Upload className="w-4 h-4" />
+            NSE EOD Import
+          </button>
         </div>
 
         {/* Dynamic Sub-Tab Content */}
@@ -294,6 +308,8 @@ export const SyncPanel: React.FC = () => {
                 )}
               </tbody>
             </table>
+          ) : activeSubTab === 'eod' ? (
+            <EodImportPanel />
           ) : (
             // Ticker Health Center
             <table className="w-full border-collapse text-left text-sm text-slate-300">

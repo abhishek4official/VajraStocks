@@ -237,6 +237,7 @@ class DatabaseManager:
                     pool_size=self.pool_size,
                     max_overflow=self.max_overflow,
                     pool_recycle=self.pool_recycle,
+                    pool_pre_ping=True,
                     echo=False,
                 )
 
@@ -335,6 +336,8 @@ class DatabaseManager:
             ("screening_snapshots", "macd_histogram_slope", "FLOAT",   "FLOAT"),
             ("screening_snapshots", "macd_above_zero",      "BOOLEAN", "BIT"),
             ("screening_snapshots", "cmf_slope_5d",         "FLOAT",   "FLOAT"),
+            # EOD import provenance column
+            ("daily_prices",        "data_source",          "VARCHAR(20)",  "VARCHAR(20)"),
             # New DailyIndicator columns
             ("daily_indicators",    "ema_9",                "FLOAT",        "FLOAT"),
             ("daily_indicators",    "ema_20",               "FLOAT",        "FLOAT"),

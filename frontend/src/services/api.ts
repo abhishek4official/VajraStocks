@@ -408,6 +408,27 @@ export interface SymbolSyncStatus {
   last_error_message?: string | null;
 }
 
+export interface EodImportJob {
+  job_id: string;
+  filename: string;
+  file_date: string;
+  status:
+    | 'PENDING' | 'VALIDATING' | 'STAGING' | 'GAP_FILLING'
+    | 'PATCHING' | 'CALCULATING' | 'REFRESHING'
+    | 'SUCCESS' | 'FAILED' | 'DUPLICATE';
+  uploaded_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+  total_rows: number | null;
+  equity_rows: number | null;
+  staged_count: number | null;
+  yahoo_filled_count: number | null;
+  eod_patched_count: number | null;
+  unresolved_symbols: string[] | null;
+  gap_info: { symbols_with_gap: number; symbols_with_no_history: number; file_date: string } | null;
+  error_message: string | null;
+}
+
 // ── ML Training (VajraML2) ────────────────────────────────────────────────────
 export interface ML2FoldMetric {
   fold: number;
@@ -962,5 +983,41 @@ export const apiService = {
     } catch {
       return [];
     }
+  },
+
+  // ── EOD Import ────────────────────────────────────────────────────────────
+
+  async uploadEodFile(file: File): Promise<EodImportJob> {
+    const form = new FormData();
+    form.append('file', file);
+    const r = await fetch(`${BASE_URL}/eod/upload`, { method: 'POST', body: form });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({ detail: 'Upload failed' }));
+      throw new Error(err.detail ?? 'Upload failed');
+    }
+    return r.json();
+  },
+
+  async listEodJobs(limit = 30): Promise<EodImportJob[]> {
+    const r = await fetch(`${BASE_URL}/eod/jobs?limit=${limit}`);
+    if (!r.ok) throw new Error('Failed to fetch EOD import jobs');
+    return r.json();
+  },
+
+  async getEodJob(jobId: string): Promise<EodImportJob> {
+    const r = await fetch(`${BASE_URL}/eod/jobs/${jobId}`);
+    if (!r.ok) throw new Error('Failed to fetch EOD job');
+    return r.json();
+  },
+
+  async retryEodCalculations(jobId: string): Promise<EodImportJob> {
+    const r = await fetch(`${BASE_URL}/eod/jobs/${jobId}/retry-calculations`, { method: 'POST' });
+    if (!r.ok) throw new Error('Failed to retry calculations');
+    return r.json();
+  },
+
+  async deleteEodJob(jobId: string): Promise<void> {
+    const r = await fetch(`${BASE_URL}/eod/jobs/${jobId}`, { method: 'DELETE' });
+    if (!r.ok) throw new Error('Failed to delete EOD job');
   },
 };
