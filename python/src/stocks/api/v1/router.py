@@ -8,6 +8,7 @@ from stocks.api.v1.endpoints import (
     announcements,
     charts,
     conversations,
+    eod,
     fundamentals,
     indicators,
     ml2_training,
@@ -45,3 +46,4 @@ api_router.include_router(fundamentals.router)
 api_router.include_router(announcements.router)
 api_router.include_router(news.router)
 api_router.include_router(trendlines.router)
+api_router.include_router(eod.router)

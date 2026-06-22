@@ -3,6 +3,7 @@ import { useStockStore } from '../store/useStockStore';
 import {
   Upload, Trash2, TrendingUp, TrendingDown, Minus, BarChart2, ShieldAlert,
   Wallet, Gauge, PieChart, ArrowUpRight, ArrowDownRight, Sparkles, RefreshCw,
+  HelpCircle, X,
 } from 'lucide-react';
 import type { PortfolioHolding } from '../services/api';
 import { StockChartWorkspace } from './StockChartWorkspace';
@@ -20,6 +21,7 @@ export const PortfolioPanel: React.FC = () => {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [modalSymbol, setModalSymbol] = useState<string | null>(null);
+  const [showHelp, setShowHelp] = useState(false);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -82,6 +84,13 @@ export const PortfolioPanel: React.FC = () => {
         </h2>
       <div className="flex items-center gap-2">
         <input ref={fileInputRef} type="file" accept=".csv" className="hidden" onChange={handleFileChange} />
+        <button
+          onClick={() => setShowHelp(true)}
+          title="How to use the Portfolio panel"
+          className="p-2.5 rounded-lg border border-border-subtle hover:bg-bg-base/60 hover:border-indigo-500/50 text-text-muted hover:text-indigo-300 transition cursor-pointer"
+        >
+          <HelpCircle className="w-4 h-4" />
+        </button>
         <button
           onClick={() => fetchPortfolio()}
           disabled={portfolioLoading}
@@ -460,6 +469,92 @@ export const PortfolioPanel: React.FC = () => {
         </p>
       </div>
 
+      {/* ── Concentration & Risk ──────────────────────────────────────────── */}
+      {(agg.hhi != null || agg.var_1d_pct != null) && (
+        <div className="shrink-0 grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+          {/* HHI Concentration */}
+          {agg.hhi != null && (
+            <div className="rounded-2xl border border-border-subtle bg-bg-surface/40 px-5 py-4">
+              {sectionLabel('Concentration (HHI)', PieChart)}
+              <div className="mt-3 flex items-end justify-between">
+                <div>
+                  <span className="text-2xl font-extrabold font-mono text-text-main">{agg.hhi.toFixed(4)}</span>
+                  <span
+                    className={`ml-2 text-[11px] font-bold px-2 py-0.5 rounded-md border ${
+                      agg.hhi_label === 'HIGH'
+                        ? 'text-rose-400 bg-rose-500/10 border-rose-500/25'
+                        : agg.hhi_label === 'MODERATE'
+                        ? 'text-amber-400 bg-amber-500/10 border-amber-500/25'
+                        : 'text-emerald-400 bg-emerald-500/10 border-emerald-500/25'
+                    }`}
+                  >
+                    {agg.hhi_label}
+                  </span>
+                </div>
+                <div className="text-right text-[10px] text-slate-500 leading-relaxed">
+                  <p>&lt; 0.10 = Low · 0.10–0.25 = Moderate</p>
+                  <p>&gt; 0.25 = High concentration</p>
+                </div>
+              </div>
+              {/* HHI track */}
+              <div className="mt-3 relative h-2 bg-slate-900 rounded-full overflow-hidden">
+                <div className="absolute inset-y-0 left-0 w-[40%] bg-emerald-600/40 rounded-l-full" />
+                <div className="absolute inset-y-0 left-[40%] w-[60%] bg-rose-600/25 rounded-r-full" />
+                <div
+                  className={`absolute inset-y-0 left-0 rounded-full transition-all ${
+                    agg.hhi_label === 'HIGH' ? 'bg-rose-500' : agg.hhi_label === 'MODERATE' ? 'bg-amber-500' : 'bg-emerald-500'
+                  }`}
+                  style={{ width: `${Math.min(agg.hhi * 200, 100)}%` }}
+                />
+                {/* 0.10 marker */}
+                <div className="absolute inset-y-0 w-px bg-slate-500/60" style={{ left: '20%' }} title="0.10 threshold" />
+                {/* 0.25 marker */}
+                <div className="absolute inset-y-0 w-px bg-slate-500/60" style={{ left: '50%' }} title="0.25 threshold" />
+              </div>
+              <div className="flex justify-between text-[9px] text-slate-600 mt-1">
+                <span>0</span><span>0.10</span><span>0.25</span><span>0.50+</span>
+              </div>
+            </div>
+          )}
+
+          {/* VaR / CVaR */}
+          {agg.var_1d_pct != null && (
+            <div className="rounded-2xl border border-border-subtle bg-bg-surface/40 px-5 py-4">
+              {sectionLabel('Historical VaR / CVaR (1-day, 95%)', ShieldAlert)}
+              <div className="mt-3 grid grid-cols-2 gap-3">
+                <div className="rounded-xl bg-slate-900/50 border border-slate-800/60 px-3 py-2.5">
+                  <p className="text-[10px] uppercase tracking-wide text-slate-500">VaR 5%</p>
+                  <p className="text-lg font-extrabold font-mono text-rose-400 mt-0.5">
+                    {agg.var_1d_pct.toFixed(2)}%
+                  </p>
+                  {agg.var_1d_inr != null && (
+                    <p className="text-[11px] font-mono text-slate-400">
+                      ₹{new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(agg.var_1d_inr)}
+                    </p>
+                  )}
+                </div>
+                <div className="rounded-xl bg-slate-900/50 border border-slate-800/60 px-3 py-2.5">
+                  <p className="text-[10px] uppercase tracking-wide text-slate-500">CVaR 5%</p>
+                  <p className="text-lg font-extrabold font-mono text-rose-500 mt-0.5">
+                    {agg.cvar_1d_pct?.toFixed(2)}%
+                  </p>
+                  {agg.cvar_1d_inr != null && (
+                    <p className="text-[11px] font-mono text-slate-400">
+                      ₹{new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(agg.cvar_1d_inr)}
+                    </p>
+                  )}
+                </div>
+              </div>
+              <p className="text-[10px] text-slate-600 mt-3">
+                On 95% of days the portfolio is expected to lose no more than the VaR amount.
+                CVaR is the average loss on the worst 5% of days (expected shortfall).
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ── Rotation candidates ────────────────────────────────────────────── */}
       <div className="shrink-0 rounded-2xl border border-border-subtle bg-bg-surface/40 p-5">
         <div className="flex items-center justify-between mb-1">
@@ -480,81 +575,239 @@ export const PortfolioPanel: React.FC = () => {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {agg.replacement_candidates.map((c, i) => (
-              <button
+              <div
                 key={c.symbol}
-                onClick={() => handleInspect(c.symbol)}
-                className="group text-left p-3.5 rounded-xl bg-slate-900/40 border border-slate-800/70 hover:border-emerald-500/40 hover:bg-emerald-950/10 transition cursor-pointer"
+                className="group text-left p-3.5 rounded-xl bg-slate-900/40 border border-slate-800/70 hover:border-emerald-500/40 hover:bg-emerald-950/10 transition"
               >
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
+                  <div
+                    className="flex items-center gap-2 flex-1 cursor-pointer"
+                    onClick={() => handleInspect(c.symbol)}
+                  >
                     <span className="text-[10px] font-mono text-slate-600">#{i + 1}</span>
                     <span className="text-sm font-bold text-text-main font-mono group-hover:text-emerald-300 transition">{c.symbol}</span>
                   </div>
-                  <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                  <div className="flex items-center gap-1.5">
                     <button
                       onClick={() => handleOpenChartModal(c.symbol)}
                       title="Quick Chart View"
-                      className="p-1 rounded bg-slate-955 border border-slate-800 hover:border-indigo-500/80 text-slate-400 hover:text-text-main transition cursor-pointer"
+                      className="p-1 px-1.5 rounded bg-slate-900 border border-slate-800 hover:border-indigo-500/80 text-slate-400 hover:text-text-main text-xs flex items-center gap-1 transition cursor-pointer"
                     >
                       <TrendingUp className="w-3 h-3" />
+                      Chart
                     </button>
                     <span className="text-[9px] font-bold px-1.5 py-0.5 rounded border text-emerald-400 bg-emerald-500/10 border-emerald-500/25">
                       {c.bias}
                     </span>
                   </div>
                 </div>
-                <p className="text-[10px] text-slate-500 truncate mt-1">{c.company_name}</p>
-                <div className="flex items-center gap-3 mt-2.5 text-[10px] font-mono text-slate-400">
-                  <span className="text-text-main">₹{fmtINR0(c.close_price)}</span>
-                  {c.rsi_14 !== null && <span>RSI {c.rsi_14}</span>}
-                  {c.atr_pct !== null && <span className={volText(c.vol_class)}>ATR {fmt(c.atr_pct)}%</span>}
-                  <span className="ml-auto text-emerald-400/70 flex items-center gap-0.5"><TrendingUp className="w-3 h-3" />{c.weekly_trend}</span>
-                </div>
-
-                {/* Weekly returns */}
-                <div className="flex items-center gap-2 mt-2 text-[10px] font-mono">
-                  {([['1W', c.ret_1w], ['2W', c.ret_2w], ['3W', c.ret_3w], ['4W', c.ret_4w]] as const).map(([lbl, r]) => (
-                    <span key={lbl} className="flex flex-col items-center">
-                      <span className="text-slate-600 text-[8px]">{lbl}</span>
-                      <span className={r === null ? 'text-slate-600' : r >= 0 ? 'text-emerald-400' : 'text-rose-400'}>
-                        {r === null ? '—' : `${r >= 0 ? '+' : ''}${r.toFixed(1)}`}
-                      </span>
-                    </span>
-                  ))}
-                </div>
-
-                {/* Trade setup: stop / target / upside */}
-                {c.target_1 !== null && (
-                  <div className="mt-2 pt-2 border-t border-slate-800/60 text-[10px] font-mono">
-                    <div className="flex items-center justify-between">
-                      <span className="text-rose-400/80">SL ₹{fmtINR0(c.stop_loss ?? 0)}</span>
-                      <div className="flex items-center gap-1.5">
-                        {c.rr_ratio != null && (
-                          <span className={`px-1 rounded font-bold ${
-                            c.rr_ratio >= 2.0 ? 'text-emerald-400 bg-emerald-950/30'
-                            : c.rr_ratio >= 1.0 ? 'text-indigo-400 bg-indigo-950/30'
-                            : 'text-rose-400 bg-rose-950/30'
-                          }`}>{c.rr_ratio.toFixed(1)}x</span>
-                        )}
-                        {c.position_size_shares != null && (
-                          <span className="text-purple-400">{c.position_size_shares.toLocaleString('en-IN')} sh</span>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between mt-0.5">
-                      <span className="text-emerald-400">T1 ₹{fmtINR0(c.target_1)} <span className="text-emerald-400/70">+{fmt(c.potential_gain_pct ?? 0, 1)}%</span></span>
-                      <div className="flex items-center gap-1.5">
-                        {c.target_2 != null && <span className="text-emerald-400/60">T2 ₹{fmtINR0(c.target_2)}</span>}
-                        {c.target_3 != null && <span className="text-emerald-400/40">T3 ₹{fmtINR0(c.target_3)}</span>}
-                      </div>
-                    </div>
+                <div
+                  className="cursor-pointer"
+                  onClick={() => handleInspect(c.symbol)}
+                >
+                  <p className="text-[10px] text-slate-500 truncate mt-1">{c.company_name}</p>
+                  <div className="flex items-center gap-3 mt-2.5 text-[10px] font-mono text-slate-400">
+                    <span className="text-text-main">₹{fmtINR0(c.close_price)}</span>
+                    {c.rsi_14 !== null && <span>RSI {c.rsi_14}</span>}
+                    {c.atr_pct !== null && <span className={volText(c.vol_class)}>ATR {fmt(c.atr_pct)}%</span>}
+                    <span className="ml-auto text-emerald-400/70 flex items-center gap-0.5"><TrendingUp className="w-3 h-3" />{c.weekly_trend}</span>
                   </div>
-                )}
-              </button>
+
+                  {/* Weekly returns */}
+                  <div className="flex items-center gap-2 mt-2 text-[10px] font-mono">
+                    {([['1W', c.ret_1w], ['2W', c.ret_2w], ['3W', c.ret_3w], ['4W', c.ret_4w]] as const).map(([lbl, r]) => (
+                      <span key={lbl} className="flex flex-col items-center">
+                        <span className="text-slate-600 text-[8px]">{lbl}</span>
+                        <span className={r === null ? 'text-slate-600' : r >= 0 ? 'text-emerald-400' : 'text-rose-400'}>
+                          {r === null ? '—' : `${r >= 0 ? '+' : ''}${r.toFixed(1)}`}
+                        </span>
+                      </span>
+                    ))}
+                  </div>
+
+                  {/* Trade setup: stop / target / upside */}
+                  {c.target_1 !== null && (
+                    <div className="mt-2 pt-2 border-t border-slate-800/60 text-[10px] font-mono">
+                      <div className="flex items-center justify-between">
+                        <span className="text-rose-400/80">SL ₹{fmtINR0(c.stop_loss ?? 0)}</span>
+                        <div className="flex items-center gap-1.5">
+                          {c.rr_ratio != null && (
+                            <span className={`px-1 rounded font-bold ${
+                              c.rr_ratio >= 2.0 ? 'text-emerald-400 bg-emerald-950/30'
+                              : c.rr_ratio >= 1.0 ? 'text-indigo-400 bg-indigo-950/30'
+                              : 'text-rose-400 bg-rose-950/30'
+                            }`}>{c.rr_ratio.toFixed(1)}x</span>
+                          )}
+                          {c.position_size_shares != null && (
+                            <span className="text-purple-400">{c.position_size_shares.toLocaleString('en-IN')} sh</span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between mt-0.5">
+                        <span className="text-emerald-400">T1 ₹{fmtINR0(c.target_1)} <span className="text-emerald-400/70">+{fmt(c.potential_gain_pct ?? 0, 1)}%</span></span>
+                        <div className="flex items-center gap-1.5">
+                          {c.target_2 != null && <span className="text-emerald-400/60">T2 ₹{fmtINR0(c.target_2)}</span>}
+                          {c.target_3 != null && <span className="text-emerald-400/40">T3 ₹{fmtINR0(c.target_3)}</span>}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
             ))}
           </div>
         )}
       </div>
+
+      {/* ── Help Modal ─────────────────────────────────────────────────────── */}
+      {showHelp && (
+        <div className="fixed inset-0 bg-bg-base/80 backdrop-blur-md flex items-center justify-center z-50 p-4" onClick={() => setShowHelp(false)}>
+          <div className="w-full max-w-3xl bg-bg-surface border border-border-subtle rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden" onClick={e => e.stopPropagation()}>
+
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border-subtle">
+              <div className="flex items-center gap-2.5">
+                <HelpCircle className="w-5 h-5 text-purple-400" />
+                <h2 className="text-base font-bold text-text-main">Portfolio — How to Use</h2>
+              </div>
+              <button onClick={() => setShowHelp(false)} className="p-1.5 rounded-lg hover:bg-bg-base/60 text-text-muted hover:text-text-main transition cursor-pointer">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="overflow-y-auto px-6 py-5 space-y-6 text-sm text-text-muted">
+
+              {/* Getting Started */}
+              <section>
+                <h3 className="text-xs font-bold uppercase tracking-widest text-purple-400 mb-3">Getting Started</h3>
+                <div className="space-y-2 text-[13px] leading-relaxed">
+                  <p><span className="text-text-main font-semibold">1. Import CSV</span> — Export your holdings from <span className="text-purple-300 font-mono">Zerodha Console → Portfolio → Holdings → Download</span>, then click <span className="text-text-main font-semibold">Import CSV</span> here. Your positions, P&amp;L and all analytics load automatically.</p>
+                  <p><span className="text-text-main font-semibold">2. Refresh</span> — Click the refresh icon anytime to re-sync the latest End-of-Day prices and recalculate all metrics.</p>
+                  <p><span className="text-text-main font-semibold">3. Clear</span> — The trash icon removes the portfolio from local storage.</p>
+                  <p><span className="text-text-main font-semibold">4. Charts</span> — Click <span className="text-purple-300 font-mono">Chart</span> on any holding row to open a quick chart. Click <span className="text-purple-300 font-mono">View</span> to open the full Explorer with all indicators.</p>
+                </div>
+              </section>
+
+              {/* Hero metrics */}
+              <section>
+                <h3 className="text-xs font-bold uppercase tracking-widest text-purple-400 mb-3">Hero Metrics</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5">
+                  {[
+                    ['Current Value', 'Total market value of all holdings right now (qty × LTP).'],
+                    ['Invested', 'Total amount you paid to buy your current positions (qty × avg cost).'],
+                    ['P&L / Net P&L', 'Profit or loss = Current Value − Invested. Net P&L deducts estimated brokerage and STT charges.'],
+                    ['Return %', 'P&L as a percentage of what you invested.'],
+                    ['Positions', 'Number of distinct stocks you currently hold.'],
+                    ['Alpha vs NIFTY (1W / 4W / 3M)', 'Your portfolio return minus NIFTY 50 return for each period. Positive = you are beating the market.'],
+                    ['Risk (badge)', 'Open risk as % of portfolio value — total money at risk across all stop-losses.'],
+                  ].map(([col, desc]) => (
+                    <div key={col} className="flex gap-2 py-1 border-b border-border-subtle/50">
+                      <span className="shrink-0 w-36 font-mono text-[10px] font-bold text-text-main">{col}</span>
+                      <span className="text-[11px] text-text-muted leading-relaxed">{desc}</span>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              {/* Risk & Regime */}
+              <section>
+                <h3 className="text-xs font-bold uppercase tracking-widest text-purple-400 mb-3">Risk &amp; Regime Panel</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5">
+                  {[
+                    ['Regime', 'Overall market regime from NIFTY 50\'s bias: BULL / NEUTRAL / BEAR. Drives heat limits.'],
+                    ['Portfolio Heat', 'Sum of open risk (distance to stop × qty) across all holdings, as % of capital. BULL limit is 8%, NEUTRAL 5%, BEAR 3%. Stop adding positions once this is breached.'],
+                    ['Open Risk', 'Total rupee amount you would lose if every stop-loss triggered today.'],
+                    ['Breadth >200d', '% of your holdings trading above their 200-day SMA. High breadth = healthy portfolio.'],
+                  ].map(([col, desc]) => (
+                    <div key={col} className="flex gap-2 py-1 border-b border-border-subtle/50">
+                      <span className="shrink-0 w-36 font-mono text-[10px] font-bold text-text-main">{col}</span>
+                      <span className="text-[11px] text-text-muted leading-relaxed">{desc}</span>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              {/* Concentration & Risk */}
+              <section>
+                <h3 className="text-xs font-bold uppercase tracking-widest text-purple-400 mb-3">Concentration &amp; Risk Analytics</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5">
+                  {[
+                    ['HHI Score', 'Herfindahl-Hirschman Index = sum of squared position weights. Measures how concentrated your bets are.'],
+                    ['HHI LOW (<0.10)', 'Well diversified — no single stock dominates your portfolio.'],
+                    ['HHI MODERATE (0.10–0.25)', 'Some concentration. Consider whether top positions are intentional overweights.'],
+                    ['HHI HIGH (>0.25)', 'Portfolio is heavily concentrated. A drop in one stock can significantly hurt overall returns.'],
+                    ['VaR 5% (1-day)', 'Value at Risk — on 95% of trading days your portfolio is expected to lose no more than this amount. Calculated from 1 year of historical returns.'],
+                    ['CVaR 5% (1-day)', 'Conditional VaR (Expected Shortfall) — the average loss on the worst 5% of days. A more conservative tail-risk measure than VaR.'],
+                  ].map(([col, desc]) => (
+                    <div key={col} className="flex gap-2 py-1 border-b border-border-subtle/50">
+                      <span className="shrink-0 w-36 font-mono text-[10px] font-bold text-text-main">{col}</span>
+                      <span className="text-[11px] text-text-muted leading-relaxed">{desc}</span>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              {/* Holdings table */}
+              <section>
+                <h3 className="text-xs font-bold uppercase tracking-widest text-purple-400 mb-3">Holdings Table Columns</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5">
+                  {[
+                    ['Qty', 'Number of shares you hold.'],
+                    ['Avg · LTP', 'Your average buy price · Last Traded Price from EOD data.'],
+                    ['Cur. Value', 'Current market value = qty × LTP.'],
+                    ['P&L', 'Unrealised profit or loss on this position.'],
+                    ['Return %', 'P&L as % of amount invested in this stock.'],
+                    ['1W / 2W / 3W / 4W', 'Rolling price return of this stock over 5 / 10 / 15 / 20 trading days.'],
+                    ['Bias', 'Composite regime for this stock: VERY_BULLISH → VERY_BEARISH.'],
+                    ['MTF ✓/✗', 'Multi-timeframe confirmation — daily bias matches the weekly trend. ✓ = both aligned bullish.'],
+                    ['ATR%', 'Average True Range as % of price — measures daily volatility. LOW = calm, HIGH = choppy.'],
+                    ['Risk · Stop', 'Open risk in ₹ for this position and the stop-loss price being tracked.'],
+                    ['Target 1', 'First structural resistance target and the % gain to reach it.'],
+                    ['R:R', 'Risk-to-Reward ratio for this holding. ≥ 2 means you stand to gain at least 2× what you risk.'],
+                    ['RS', 'Relative Strength vs NIFTY 50 over 1 month. >1 = stock is outperforming the index.'],
+                    ['Score', 'Composite momentum score (0–100): trend + volume + RS + momentum + CMF + breakout signals.'],
+                    ['ROTATE badge', 'Weak signal — stock is showing bearish bias or breaking down. Consider replacing it.'],
+                  ].map(([col, desc]) => (
+                    <div key={col} className="flex gap-2 py-1 border-b border-border-subtle/50">
+                      <span className="shrink-0 w-28 font-mono text-[10px] font-bold text-text-main">{col}</span>
+                      <span className="text-[11px] text-text-muted leading-relaxed">{desc}</span>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              {/* Rotation Candidates */}
+              <section>
+                <h3 className="text-xs font-bold uppercase tracking-widest text-purple-400 mb-3">Rotation Candidates</h3>
+                <div className="space-y-1.5 text-[13px] leading-relaxed">
+                  <p>Stocks you do <span className="text-text-main font-semibold">not</span> currently hold that are bullish, MTF-confirmed, and rank highly on momentum. These are suggestions for <span className="text-text-main font-semibold">rotating</span> out of weak positions (marked ROTATE) and into stronger names.</p>
+                  <p>Each candidate shows a suggested <span className="text-text-main font-semibold">position size</span> (shares) calculated so the new position's open risk does not push your total Portfolio Heat over the market-regime limit.</p>
+                  <p className="text-[11px] text-text-muted/70">Candidates are ranked by: momentum per unit of volatility + ADX strength + OBV trend + VajraML prediction.</p>
+                </div>
+              </section>
+
+              {/* Tips */}
+              <section>
+                <h3 className="text-xs font-bold uppercase tracking-widest text-purple-400 mb-3">Tips for New Traders</h3>
+                <div className="space-y-2 text-[13px] leading-relaxed">
+                  <p>📌 <span className="text-text-main font-semibold">Never let Portfolio Heat exceed the regime limit.</span> In a BEAR market the limit drops to 3% — that is your hard cap on total open risk.</p>
+                  <p>📌 <span className="text-text-main font-semibold">Positive Alpha is the goal.</span> If your 4W alpha is negative, your stock picks are underperforming simply buying an index fund.</p>
+                  <p>📌 <span className="text-text-main font-semibold">Watch Breadth &gt;200d.</span> If less than 50% of your holdings are above their 200-day SMA, your portfolio is deteriorating — tighten stops.</p>
+                  <p>📌 <span className="text-text-main font-semibold">High HHI is not always bad</span> if it is intentional (a high-conviction position). It is a warning when you do not realise how concentrated you are.</p>
+                  <p>📌 <span className="text-text-main font-semibold">R:R below 1 means poor trade structure.</span> If a position's remaining upside to T1 is less than your downside to the stop, consider exiting or tightening the stop.</p>
+                </div>
+              </section>
+
+            </div>
+
+            <div className="px-6 py-3 border-t border-border-subtle flex justify-end">
+              <button onClick={() => setShowHelp(false)} className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white text-sm font-bold rounded-lg transition cursor-pointer">
+                Got it
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Modal Stock Chart ── */}
       {modalSymbol && (

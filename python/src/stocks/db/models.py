@@ -91,6 +91,7 @@ class DailyPrice(Base):
     adj_close: Mapped[float] = mapped_column(Numeric(18, 4), nullable=False)
     volume: Mapped[int] = mapped_column(BIGINT, nullable=False)
     granularity: Mapped[str] = mapped_column(String(10), nullable=False, default="1d")
+    data_source: Mapped[str] = mapped_column(String(20), nullable=False, default="YAHOO")
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=func.now())
 
     # Relationships
@@ -390,6 +391,19 @@ class ScreeningSnapshot(Base):
     macd_histogram_slope: Mapped[float | None] = mapped_column(Float, nullable=True)   # 3-day macd_hist slope
     macd_above_zero:      Mapped[bool | None]  = mapped_column(Boolean, nullable=True) # macd_line > 0
     cmf_slope_5d:         Mapped[float | None] = mapped_column(Float, nullable=True)   # CMF 5-day change
+
+    # VajraTurn: early reversal near rising SMA200
+    is_vajraturn: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+
+    # Bollinger Band squeeze: bandwidth at a 20-day low (volatility contraction)
+    bb_bandwidth: Mapped[float | None] = mapped_column(Float, nullable=True)
+    is_bb_squeeze: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+
+    # Trend Quality Score (0-100): ADX strength + price-above-MAs + MA alignment + RSI zone
+    tqs: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    # Weinstein Stage (1-4): based on price vs rising/flat/falling SMA200
+    weinstein_stage: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     updated_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now())
 
@@ -790,4 +804,49 @@ class SymbolTrendline(Base):
 
     __table_args__ = (
         Index("ix_trendlines_symbol_id", "symbol_id"),
+    )
+
+
+class EodImportJob(Base):
+    """Tracks each NSE EOD file import attempt."""
+
+    __tablename__ = "eod_import_jobs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    job_id: Mapped[str] = mapped_column(String(50), nullable=False, unique=True, index=True)
+    filename: Mapped[str] = mapped_column(String(100), nullable=False)
+    file_date: Mapped[datetime.date] = mapped_column(Date, nullable=False, unique=True)
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="PENDING")
+    uploaded_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=func.now())
+    started_at: Mapped[datetime.datetime | None] = mapped_column(DateTime, nullable=True)
+    completed_at: Mapped[datetime.datetime | None] = mapped_column(DateTime, nullable=True)
+    total_rows: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    equity_rows: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    staged_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    yahoo_filled_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    eod_patched_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    unresolved_symbols: Mapped[str | None] = mapped_column(Text, nullable=True)
+    gap_info: Mapped[str | None] = mapped_column(Text, nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class EodStagingData(Base):
+    """Temporary staging area for parsed EOD rows before Yahoo-first resolution."""
+
+    __tablename__ = "eod_staging_data"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    job_id: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    symbol_nse: Mapped[str] = mapped_column(String(30), nullable=False)
+    symbol_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("symbols.id", ondelete="SET NULL"), nullable=True)
+    file_date: Mapped[datetime.date] = mapped_column(Date, nullable=False)
+    open: Mapped[float] = mapped_column(Numeric(18, 4), nullable=False)
+    high: Mapped[float] = mapped_column(Numeric(18, 4), nullable=False)
+    low: Mapped[float] = mapped_column(Numeric(18, 4), nullable=False)
+    close: Mapped[float] = mapped_column(Numeric(18, 4), nullable=False)
+    volume: Mapped[int] = mapped_column(BIGINT, nullable=False)
+    used_for_patch: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+    __table_args__ = (
+        Index("ix_eod_staging_job_date", "job_id", "file_date"),
     )

@@ -141,6 +141,12 @@ export interface PortfolioAggregates {
   correlation_clusters: { pair: [string, string]; rho: number }[];
   portfolio_beta: number | null;
   diversification_score: number | null;
+  hhi?: number | null;
+  hhi_label?: 'LOW' | 'MODERATE' | 'HIGH' | null;
+  var_1d_pct?: number | null;
+  cvar_1d_pct?: number | null;
+  var_1d_inr?: number | null;
+  cvar_1d_inr?: number | null;
   alpha_1w?: number | null;
   alpha_4w?: number | null;
   alpha_3m?: number | null;
@@ -283,6 +289,11 @@ export interface ScreenerRow {
   macd_histogram_slope?: number | null;
   macd_above_zero?: boolean | null;
   cmf_slope_5d?: number | null;
+  is_vajraturn?: boolean | null;
+  bb_bandwidth?: number | null;
+  is_bb_squeeze?: boolean | null;
+  tqs?: number | null;
+  weinstein_stage?: number | null;
   // Fundamentals
   market_cap?: number | null;
   enterprise_value?: number | null;
@@ -395,6 +406,27 @@ export interface SymbolSyncStatus {
   last_successful_sync_date: string;
   last_attempt_status: string;
   last_error_message?: string | null;
+}
+
+export interface EodImportJob {
+  job_id: string;
+  filename: string;
+  file_date: string;
+  status:
+    | 'PENDING' | 'VALIDATING' | 'STAGING' | 'GAP_FILLING'
+    | 'PATCHING' | 'CALCULATING' | 'REFRESHING'
+    | 'SUCCESS' | 'FAILED' | 'DUPLICATE';
+  uploaded_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+  total_rows: number | null;
+  equity_rows: number | null;
+  staged_count: number | null;
+  yahoo_filled_count: number | null;
+  eod_patched_count: number | null;
+  unresolved_symbols: string[] | null;
+  gap_info: { symbols_with_gap: number; symbols_with_no_history: number; file_date: string } | null;
+  error_message: string | null;
 }
 
 // ── ML Training (VajraML2) ────────────────────────────────────────────────────
@@ -642,6 +674,10 @@ export const apiService = {
     golden_cross_max_days?: number;
     macd_bull_xover_max_days?: number;
     cmf_bull_xover_max_days?: number;
+    only_vajraturn?: boolean;
+    only_bb_squeeze?: boolean;
+    min_tqs?: number;
+    only_weinstein_stage2?: boolean;
     limit?: number;
   }): Promise<ScreenerRow[]> {
     const response = await fetch(`${BASE_URL}/screeners/run`, {
@@ -675,6 +711,10 @@ export const apiService = {
         golden_cross_max_days: filters.golden_cross_max_days ?? null,
         macd_bull_xover_max_days: filters.macd_bull_xover_max_days ?? null,
         cmf_bull_xover_max_days: filters.cmf_bull_xover_max_days ?? null,
+        only_vajraturn: filters.only_vajraturn ?? false,
+        only_bb_squeeze: filters.only_bb_squeeze ?? false,
+        min_tqs: filters.min_tqs ?? null,
+        only_weinstein_stage2: filters.only_weinstein_stage2 ?? false,
         limit: filters.limit ?? 100
       })
     });
@@ -943,5 +983,41 @@ export const apiService = {
     } catch {
       return [];
     }
+  },
+
+  // ── EOD Import ────────────────────────────────────────────────────────────
+
+  async uploadEodFile(file: File): Promise<EodImportJob> {
+    const form = new FormData();
+    form.append('file', file);
+    const r = await fetch(`${BASE_URL}/eod/upload`, { method: 'POST', body: form });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({ detail: 'Upload failed' }));
+      throw new Error(err.detail ?? 'Upload failed');
+    }
+    return r.json();
+  },
+
+  async listEodJobs(limit = 30): Promise<EodImportJob[]> {
+    const r = await fetch(`${BASE_URL}/eod/jobs?limit=${limit}`);
+    if (!r.ok) throw new Error('Failed to fetch EOD import jobs');
+    return r.json();
+  },
+
+  async getEodJob(jobId: string): Promise<EodImportJob> {
+    const r = await fetch(`${BASE_URL}/eod/jobs/${jobId}`);
+    if (!r.ok) throw new Error('Failed to fetch EOD job');
+    return r.json();
+  },
+
+  async retryEodCalculations(jobId: string): Promise<EodImportJob> {
+    const r = await fetch(`${BASE_URL}/eod/jobs/${jobId}/retry-calculations`, { method: 'POST' });
+    if (!r.ok) throw new Error('Failed to retry calculations');
+    return r.json();
+  },
+
+  async deleteEodJob(jobId: string): Promise<void> {
+    const r = await fetch(`${BASE_URL}/eod/jobs/${jobId}`, { method: 'DELETE' });
+    if (!r.ok) throw new Error('Failed to delete EOD job');
   },
 };

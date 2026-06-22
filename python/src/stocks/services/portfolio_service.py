@@ -20,7 +20,9 @@ from stocks.services.quant.confluence_service import ConfluenceService
 from stocks.services.quant.portfolio_risk import (
     compute_correlation_clusters,
     compute_diversification_score,
+    compute_hhi,
     compute_portfolio_beta,
+    compute_var_cvar,
 )
 from stocks.services.settings_service import SettingsService
 
@@ -447,6 +449,8 @@ class PortfolioService:
         correlation_clusters: list[dict] = []
         portfolio_beta: float | None = None
         diversification_score: int | None = None
+        hhi_result: dict | None = None
+        var_cvar: dict | None = None
         try:
             if len(holdings) >= 2:
                 correlation_clusters = compute_correlation_clusters(self.db, holdings)
@@ -458,6 +462,8 @@ class PortfolioService:
                 diversification_score = compute_diversification_score(
                     correlation_clusters, len(holdings), clusters
                 )
+                hhi_result = compute_hhi(weights)
+                var_cvar = compute_var_cvar(self.db, holdings, weights, total_current)
         except Exception as e:
             logger.warning(f"Portfolio risk calculation failed (non-fatal): {e}")
 
@@ -486,6 +492,12 @@ class PortfolioService:
                 "correlation_clusters": correlation_clusters,
                 "portfolio_beta": portfolio_beta,
                 "diversification_score": diversification_score,
+                "hhi": hhi_result.get("hhi") if hhi_result else None,
+                "hhi_label": hhi_result.get("label") if hhi_result else None,
+                "var_1d_pct": var_cvar.get("var_1d_pct") if var_cvar else None,
+                "cvar_1d_pct": var_cvar.get("cvar_1d_pct") if var_cvar else None,
+                "var_1d_inr": var_cvar.get("var_1d_inr") if var_cvar else None,
+                "cvar_1d_inr": var_cvar.get("cvar_1d_inr") if var_cvar else None,
                 "alpha_1w": alpha_1w,
                 "alpha_4w": alpha_4w,
                 "alpha_3m": alpha_3m,

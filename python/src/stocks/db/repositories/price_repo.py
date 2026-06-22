@@ -25,7 +25,12 @@ class PriceRepository:
         return set(self.db.scalars(stmt).all())
 
     def bulk_save_stock_data(
-        self, symbol_id: int, prices: list[dict[str, Any]], actions: list[dict[str, Any]], sync_date: datetime.date
+        self,
+        symbol_id: int,
+        prices: list[dict[str, Any]],
+        actions: list[dict[str, Any]],
+        sync_date: datetime.date,
+        data_source: str = "YAHOO",
     ) -> int:
         """Saves stock daily prices and corporate actions using bulk database operations.
 
@@ -78,6 +83,7 @@ class PriceRepository:
                         "adj_close": p["adj_close"],
                         "volume": p["volume"],
                         "granularity": p.get("granularity", "1d"),
+                        "data_source": data_source,
                     }
                 )
 

@@ -209,6 +209,10 @@ class ScreeningParams(BaseModel):
     golden_cross_max_days:     int | None = None   # days_since_sma20_sma50_bull
     macd_bull_xover_max_days:  int | None = None   # days_since_macd_bull
     cmf_bull_xover_max_days:   int | None = None   # days_since_cmf_bull
+    only_vajraturn: bool = False
+    only_bb_squeeze: bool = False
+    min_tqs: float | None = None
+    only_weinstein_stage2: bool = False
     limit: int = 2500
 
 
@@ -292,6 +296,11 @@ class ScreenerRowResponse(BaseModel):
     macd_histogram_slope:        float | None = None
     macd_above_zero:             bool | None = None
     cmf_slope_5d:                float | None = None
+    is_vajraturn:                bool | None = None
+    bb_bandwidth:                float | None = None
+    is_bb_squeeze:               bool | None = None
+    tqs:                         float | None = None
+    weinstein_stage:             int | None = None
     # Fundamentals
     market_cap:       float | None = None
     enterprise_value: float | None = None
@@ -472,6 +481,11 @@ def _build_row(r, confl_by_symbol_id: dict, risk_per_trade: float, strat_by_symb
         "macd_histogram_slope":        getattr(r, "macd_histogram_slope", None),
         "macd_above_zero":             getattr(r, "macd_above_zero", None),
         "cmf_slope_5d":                getattr(r, "cmf_slope_5d", None),
+        "is_vajraturn":                getattr(r, "is_vajraturn", None),
+        "bb_bandwidth":                getattr(r, "bb_bandwidth", None),
+        "is_bb_squeeze":               getattr(r, "is_bb_squeeze", None),
+        "tqs":                         getattr(r, "tqs", None),
+        "weinstein_stage":             getattr(r, "weinstein_stage", None),
     }
 
 
@@ -504,6 +518,10 @@ def get_screening_results_get(
     golden_cross_max_days: int | None = None,
     macd_bull_xover_max_days: int | None = None,
     cmf_bull_xover_max_days: int | None = None,
+    only_vajraturn: bool = False,
+    only_bb_squeeze: bool = False,
+    min_tqs: float | None = None,
+    only_weinstein_stage2: bool = False,
     limit: int = 2500,
     db: Session = Depends(get_db),
 ):
@@ -537,6 +555,10 @@ def get_screening_results_get(
         golden_cross_max_days=golden_cross_max_days,
         macd_bull_xover_max_days=macd_bull_xover_max_days,
         cmf_bull_xover_max_days=cmf_bull_xover_max_days,
+        only_vajraturn=only_vajraturn,
+        only_bb_squeeze=only_bb_squeeze,
+        min_tqs=min_tqs,
+        only_weinstein_stage2=only_weinstein_stage2,
         limit=limit,
     )
 
@@ -580,6 +602,10 @@ def get_screening_results_post(params: ScreeningParams, db: Session = Depends(ge
         golden_cross_max_days=params.golden_cross_max_days,
         macd_bull_xover_max_days=params.macd_bull_xover_max_days,
         cmf_bull_xover_max_days=params.cmf_bull_xover_max_days,
+        only_vajraturn=params.only_vajraturn,
+        only_bb_squeeze=params.only_bb_squeeze,
+        min_tqs=params.min_tqs,
+        only_weinstein_stage2=params.only_weinstein_stage2,
         limit=params.limit,
     )
 
