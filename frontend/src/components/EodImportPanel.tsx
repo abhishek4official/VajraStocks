@@ -12,7 +12,7 @@ const STATUS_LABEL: Record<string, string> = {
   VALIDATING: 'Validating file…',
   STAGING:    'Staging data…',
   GAP_FILLING:'Filling gaps via Yahoo…',
-  PATCHING:   'Patching missing symbols…',
+  PATCHING:   'Writing NSE official prices…',
   CALCULATING:'Calculating indicators…',
   REFRESHING: 'Refreshing screener…',
   SUCCESS:    'Complete',
@@ -238,8 +238,8 @@ export const EodImportPanel: React.FC = () => {
       <div className="flex items-start gap-2 bg-blue-500/5 border border-blue-500/20 rounded-lg px-4 py-3 text-xs text-blue-300">
         <Clock className="w-3.5 h-3.5 mt-0.5 shrink-0" />
         <span>
-          <strong>Yahoo-first strategy:</strong> After upload, Yahoo Finance syncs all data gaps
-          automatically. EOD data is only used for symbols Yahoo cannot provide (e.g. same-day upload).
+          <strong>NSE official prices are authoritative:</strong> EOD file data always overwrites
+          the file's trading date. Yahoo Finance fills any missing prior days automatically.
         </span>
       </div>
 
