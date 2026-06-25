@@ -109,6 +109,45 @@ def test_backfill_then_read_adjusted(db_session, store):
     assert out.loc[D(2024, 6, 7), "volume"] == 2000
 
 
+def test_incremental_backfill_only_writes_new_rows(db_session, store):
+    sym = _add_symbol(db_session, "INCR", "010")
+    _add_price(db_session, sym.id, D(2023, 1, 2), 100.0)
+    _add_price(db_session, sym.id, D(2023, 1, 3), 101.0)
+    db_session.flush()
+    assert backfill_symbol(db_session, store, sym.id, sym.symbol) == 2  # full first
+
+    _add_price(db_session, sym.id, D(2023, 1, 4), 110.0)
+    db_session.flush()
+    n = backfill_symbol(db_session, store, sym.id, sym.symbol, incremental=True)
+    assert n == 1  # only the new bar
+
+    out = store.read_bars("INCR")
+    assert len(out) == 3
+    assert list(out["trading_date"])[-1] == D(2023, 1, 4)
+
+
+def test_incremental_backfill_skips_unchanged(db_session, store):
+    sym = _add_symbol(db_session, "SAME", "011")
+    _add_price(db_session, sym.id, D(2023, 1, 2), 100.0)
+    db_session.flush()
+    backfill_symbol(db_session, store, sym.id, sym.symbol)
+    assert backfill_symbol(db_session, store, sym.id, sym.symbol, incremental=True) == 0
+
+
+def test_backfill_all_incremental_returns_only_changed(db_session, store):
+    a = _add_symbol(db_session, "UPD", "012")
+    b = _add_symbol(db_session, "STALE", "013")
+    _add_price(db_session, a.id, D(2023, 1, 2), 10.0)
+    _add_price(db_session, b.id, D(2023, 1, 2), 20.0)
+    db_session.flush()
+    backfill_all(db_session, store)  # both mirrored
+
+    _add_price(db_session, a.id, D(2023, 1, 3), 11.0)  # only A gets a new bar
+    db_session.flush()
+    result = backfill_all(db_session, store, incremental=True)
+    assert result == {"UPD": 1}
+
+
 def test_sync_columnar_store_mirrors_all(db_manager, tmp_path):
     # Seed and COMMIT so the job's own fresh session can see the data.
     session = db_manager.get_session()

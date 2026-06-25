@@ -39,27 +39,8 @@ def load_actions(session: Session, symbol_id: int) -> list[dict[str, Any]]:
     ]
 
 
-def backfill_symbol(
-    session: Session,
-    store: BarStore,
-    symbol_id: int,
-    symbol: str,
-    granularity: str = "1d",
-) -> int:
-    """Copy one symbol's price series into the BarStore. Returns rows written."""
-    rows = (
-        session.execute(
-            select(DailyPrice)
-            .where(DailyPrice.symbol_id == symbol_id, DailyPrice.granularity == granularity)
-            .order_by(DailyPrice.trading_date)
-        )
-        .scalars()
-        .all()
-    )
-    if not rows:
-        return 0
-
-    df = pd.DataFrame(
+def _rows_to_df(rows: list[DailyPrice]) -> pd.DataFrame:
+    return pd.DataFrame(
         [
             {
                 "trading_date": r.trading_date,
@@ -73,19 +54,49 @@ def backfill_symbol(
             for r in rows
         ]
     )
-    return store.write_bars(symbol, df, granularity=granularity)
+
+
+def backfill_symbol(
+    session: Session,
+    store: BarStore,
+    symbol_id: int,
+    symbol: str,
+    granularity: str = "1d",
+    incremental: bool = False,
+) -> int:
+    """Copy one symbol's price series into the BarStore. Returns rows written.
+
+    When ``incremental`` is set, only bars newer than the store's last mirrored date are
+    fetched and written, so an already-mirrored symbol with no new bars writes nothing.
+    """
+    stmt = select(DailyPrice).where(
+        DailyPrice.symbol_id == symbol_id, DailyPrice.granularity == granularity
+    )
+    if incremental:
+        last = store.last_date(symbol, granularity)
+        if last is not None:
+            stmt = stmt.where(DailyPrice.trading_date > last)
+
+    rows = session.execute(stmt.order_by(DailyPrice.trading_date)).scalars().all()
+    if not rows:
+        return 0
+
+    return store.write_bars(symbol, _rows_to_df(rows), granularity=granularity)
 
 
 def backfill_all(
     session: Session,
     store: BarStore,
     granularity: str = "1d",
+    incremental: bool = False,
 ) -> dict[str, int]:
     """Backfill every symbol that has price data. Returns ``{symbol: rows_written}``."""
     symbols = session.execute(select(Symbol.id, Symbol.symbol)).all()
     written: dict[str, int] = {}
     for symbol_id, symbol in symbols:
-        n = backfill_symbol(session, store, symbol_id, symbol, granularity=granularity)
+        n = backfill_symbol(
+            session, store, symbol_id, symbol, granularity=granularity, incremental=incremental
+        )
         if n:
             written[symbol] = n
     return written
@@ -95,17 +106,18 @@ def sync_columnar_store(
     db_manager,
     config: Config,
     granularity: str = "1d",
+    incremental: bool = True,
 ) -> dict[str, int]:
     """Post-sync job: mirror the SQLite price series into the columnar BarStore.
 
-    Opens its own session, builds the store from config, and runs a full backfill.
-    Intended to be invoked from the scheduler after an EOD sync completes. Returns
-    ``{symbol: rows_written}``.
+    Opens its own session, builds the store from config, and (by default) runs an
+    incremental backfill so only symbols with new bars are rewritten. Intended to be
+    invoked from the scheduler after an EOD sync completes. Returns ``{symbol: rows_written}``.
     """
     store = BarStore.from_config(config)
     session = db_manager.get_session()
     try:
-        result = backfill_all(session, store, granularity=granularity)
+        result = backfill_all(session, store, granularity=granularity, incremental=incremental)
         logger.info(f"Columnar backfill complete: {len(result)} symbols mirrored to BarStore.")
         return result
     finally:

@@ -151,6 +151,34 @@ class BarStore:
 
         return df
 
+    def last_date(self, symbol: str, granularity: str = "1d") -> dt.date | None:
+        """Return the most recent stored trading_date for a symbol, or None if empty.
+
+        Only the highest-year partition is scanned, since the max date always lives there.
+        """
+        sdir = self._symbol_dir(symbol, granularity)
+        if not sdir.exists():
+            return None
+
+        year_dirs = sorted(
+            sdir.glob("year=*"),
+            key=lambda d: int(d.name.split("=", 1)[1]) if d.name.split("=", 1)[1].isdigit() else -1,
+        )
+        for year_dir in reversed(year_dirs):
+            pq = year_dir / "data.parquet"
+            if not pq.exists():
+                continue
+            con = duckdb.connect()
+            try:
+                value = con.execute(
+                    "SELECT max(trading_date) FROM read_parquet(?)", [[pq.as_posix()]]
+                ).fetchone()[0]
+            finally:
+                con.close()
+            if value is not None:
+                return _as_date(value)
+        return None
+
     # ── catalog ──────────────────────────────────────────────────────────────
 
     def list_symbols(self, granularity: str = "1d") -> list[str]:

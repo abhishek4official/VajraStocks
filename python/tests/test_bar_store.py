@@ -100,6 +100,18 @@ def test_symbols_are_isolated(store):
     assert sorted(store.list_symbols()) == ["AAA", "BBB"]
 
 
+def test_last_date_none_when_empty(store):
+    assert store.last_date("NOPE") is None
+
+
+def test_last_date_returns_max(store):
+    store.write_bars("ACME", _bars([
+        (D(2022, 12, 30), 10, 11, 9, 10, 100),
+        (D(2023, 1, 3), 12, 13, 11, 12, 100),
+    ]))
+    assert store.last_date("ACME") == D(2023, 1, 3)
+
+
 def test_read_adjusted_applies_split(store):
     store.write_bars("ACME", _bars([
         (D(2024, 6, 7), 198, 202, 196, 200, 1000),
