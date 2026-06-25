@@ -15,12 +15,15 @@ from __future__ import annotations
 import datetime as dt
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import duckdb
 import pandas as pd
 
 from stocks.data.adjustments import _as_date, apply_split_adjustments
+
+if TYPE_CHECKING:
+    from stocks.config import Config
 
 DATA_COLUMNS = ["trading_date", "open", "high", "low", "close", "adj_close", "volume"]
 
@@ -31,6 +34,11 @@ class BarStore:
     def __init__(self, data_dir: str | Path):
         self.data_dir = Path(data_dir)
         self.data_dir.mkdir(parents=True, exist_ok=True)
+
+    @classmethod
+    def from_config(cls, config: Config) -> BarStore:
+        """Construct from the app Config (``storage.columnar_data_dir``)."""
+        return cls(config.storage.columnar_data_dir)
 
     # ── paths ────────────────────────────────────────────────────────────────
 
