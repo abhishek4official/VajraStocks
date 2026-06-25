@@ -10,14 +10,18 @@ See Doc/VajraStocks_V2.0_PRD_BRD_Architecture.md §18, §27.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pandas as pd
+from loguru import logger
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from stocks.data.bar_store import BarStore
 from stocks.db.models import CorporateAction, DailyPrice, Symbol
+
+if TYPE_CHECKING:
+    from stocks.config import Config
 
 
 def load_actions(session: Session, symbol_id: int) -> list[dict[str, Any]]:
@@ -85,3 +89,24 @@ def backfill_all(
         if n:
             written[symbol] = n
     return written
+
+
+def sync_columnar_store(
+    db_manager,
+    config: Config,
+    granularity: str = "1d",
+) -> dict[str, int]:
+    """Post-sync job: mirror the SQLite price series into the columnar BarStore.
+
+    Opens its own session, builds the store from config, and runs a full backfill.
+    Intended to be invoked from the scheduler after an EOD sync completes. Returns
+    ``{symbol: rows_written}``.
+    """
+    store = BarStore.from_config(config)
+    session = db_manager.get_session()
+    try:
+        result = backfill_all(session, store, granularity=granularity)
+        logger.info(f"Columnar backfill complete: {len(result)} symbols mirrored to BarStore.")
+        return result
+    finally:
+        session.close()

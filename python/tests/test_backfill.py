@@ -9,7 +9,13 @@ import datetime as dt
 
 import pytest
 
-from stocks.data.backfill import backfill_all, backfill_symbol, load_actions
+from stocks.config import Config
+from stocks.data.backfill import (
+    backfill_all,
+    backfill_symbol,
+    load_actions,
+    sync_columnar_store,
+)
 from stocks.data.bar_store import BarStore
 from stocks.db.models import CorporateAction, DailyPrice, Symbol
 
@@ -101,3 +107,26 @@ def test_backfill_then_read_adjusted(db_session, store):
     out = store.read_bars("ACME", adjusted=True, actions=actions).set_index("trading_date")
     assert out.loc[D(2024, 6, 7), "close"] == 100.0   # back-adjusted for the 2:1 split
     assert out.loc[D(2024, 6, 7), "volume"] == 2000
+
+
+def test_sync_columnar_store_mirrors_all(db_manager, tmp_path):
+    # Seed and COMMIT so the job's own fresh session can see the data.
+    session = db_manager.get_session()
+    try:
+        a = _add_symbol(session, "AAA", "007")
+        b = _add_symbol(session, "BBB", "008")
+        _add_price(session, a.id, D(2023, 1, 2), 10.0)
+        _add_price(session, b.id, D(2023, 1, 2), 20.0)
+        _add_price(session, b.id, D(2023, 1, 3), 21.0)
+        session.commit()
+    finally:
+        session.close()
+
+    cfg = Config()
+    cfg.storage.columnar_data_dir = str(tmp_path / "col")
+
+    result = sync_columnar_store(db_manager, cfg)
+    assert result == {"AAA": 1, "BBB": 2}
+
+    store = BarStore.from_config(cfg)
+    assert store.read_bars("BBB").iloc[-1]["close"] == 21.0
