@@ -14,7 +14,6 @@ from langgraph.graph import END, START, StateGraph
 from stocks.services.agents.nodes import (
     analyze_stock_node,
     analyze_swing_candidates_node,
-    backtest_node,
     fetch_data_node,
     fetch_market_node,
     market_regime_node,
@@ -26,7 +25,6 @@ from stocks.services.agents.nodes import (
     trade_plan_swing_node,
 )
 from stocks.services.agents.state import VajraState
-
 
 # ─── Routing functions ────────────────────────────────────────────────────────
 
@@ -69,7 +67,6 @@ def build_graph():
     builder.add_node("analyze_swing_candidates", analyze_swing_candidates_node)
     builder.add_node("trade_plan", trade_plan_node)
     builder.add_node("trade_plan_swing", trade_plan_swing_node)
-    builder.add_node("backtest", backtest_node)
     builder.add_node("sql_screen", sql_screen_node)
     builder.add_node("report", report_node)
 
@@ -86,8 +83,9 @@ def build_graph():
     # ── analyze_stock path ───────────────────────────────────────────────────
     builder.add_edge("fetch_data", "analyze_stock")
     builder.add_edge("analyze_stock", "trade_plan")
-    builder.add_edge("trade_plan", "backtest")
-    builder.add_edge("backtest", "report")
+    # NOTE: the fabricated "backtest" node was removed (V2.0 spec M0). A real,
+    # reproducible backtest engine (M2) will re-insert a trustworthy node here.
+    builder.add_edge("trade_plan", "report")
 
     # ── market_regime / breakout_scan / swing_trade_scan shared entry ────────
     builder.add_edge("fetch_market", "market_regime")

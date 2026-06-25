@@ -21,7 +21,6 @@ _NODE_STATUS: dict[str, str] = {
     "analyze_swing_candidates": "Evaluating swing candidates...",
     "trade_plan": "Calculating ATR trade plan...",
     "trade_plan_swing": "Building swing trade plans...",
-    "backtest": "Running backtest strategy...",
     "sql_screen": "Executing SQL screening...",
     "report": "Compiling investment report...",
 }

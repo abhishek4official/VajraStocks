@@ -1,8 +1,8 @@
 """LangGraph nodes for the VajraStocks multi-agent research pipeline.
 
 Replaces orchestrator.py + llm_client.py.
-Deterministic Python services (TradePlannerService, BacktestingService,
-ConfluenceService) are called directly — no LLM wrapping needed for math.
+Deterministic Python services (TradePlannerService, ConfluenceService) are called
+directly — no LLM wrapping needed for math.
 """
 
 from __future__ import annotations
@@ -618,19 +618,6 @@ async def trade_plan_swing_node(state: VajraState, config: RunnableConfig) -> di
         trade_plans.append(plan)
 
     return {"trade_plan": {"swing_plans": trade_plans}}
-
-
-async def backtest_node(state: VajraState, config: RunnableConfig) -> dict[str, Any]:
-    """Run deterministic Golden Cross backtesting — pure Python, no LLM."""
-    from stocks.services.quant.backtester import BacktestingService
-
-    sql_data = state.get("sql_data", {})
-    backtest = BacktestingService().execute_strategy_backtest(
-        price_records=sql_data.get("prices", []),
-        indicator_records=sql_data.get("ind_list", []),
-    )
-    plan = {**state.get("trade_plan", {}), "backtest": backtest}
-    return {"trade_plan": plan}
 
 
 async def report_node(state: VajraState, config: RunnableConfig) -> dict[str, Any]:
