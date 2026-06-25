@@ -33,5 +33,5 @@ logging:
   retention: 30 days
 ai:
   provider: ollama
-  base_url: http://192.168.31.27:11434
-  model: gemma4:e4b
+  base_url: http://localhost:11434
+  model: qwen2.5-coder:7b
