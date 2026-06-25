@@ -21,6 +21,7 @@ import { SettingsPanel } from './components/SettingsPanel';
 import { SetupWizard } from './components/SetupWizard';
 import { AboutPanel } from './components/AboutPanel';
 import { ML2TrainingPanel } from './components/ML2TrainingPanel';
+import { SwingPicksPanel } from './components/SwingPicksPanel';
 import { FundamentalsCard } from './components/FundamentalsCard';
 import { AnnouncementsPanel } from './components/AnnouncementsPanel';
 import { NewsPanel } from './components/NewsPanel';
@@ -38,6 +39,7 @@ import {
   X,
   BookOpen,
   Brain,
+  Zap,
 } from 'lucide-react';
 import './App.css';
 
@@ -116,6 +118,7 @@ function Dashboard() {
         case 'w': setActiveTab('watchlist');   break;
         case 'a': setActiveTab('ai-research'); break;
         case 'c': setActiveTab('compare');    break;
+        case 'r': setActiveTab('swing-picks'); break;
       }
     };
     window.addEventListener('keydown', handleKey);
@@ -155,6 +158,7 @@ function Dashboard() {
             { id: 'portfolio',   label: 'Portfolio',   Icon: IndianRupee },
             { id: 'watchlist',   label: 'Watchlist',   Icon: Bookmark    },
             { id: 'compare',     label: 'Compare',     Icon: TrendingUp  },
+            { id: 'swing-picks', label: 'Picks',       Icon: Zap         },
             { id: 'ai-research', label: 'AI Research', Icon: Cpu         },
             { id: 'ml2-training', label: 'ML Model',    Icon: Brain       },
             { id: 'about',       label: 'About',       Icon: BookOpen    },
@@ -336,6 +340,9 @@ function Dashboard() {
 
         {/* Compare */}
         {activeTab === 'compare' && <ComparePanel />}
+
+        {/* Swing Picks */}
+        {activeTab === 'swing-picks' && <SwingPicksPanel />}
 
         {/* Settings */}
         {activeTab === 'settings' && <SettingsPanel />}

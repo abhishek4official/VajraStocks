@@ -100,8 +100,11 @@ def ensure_localdb_started() -> None:
 
         logger.info("Ensuring SQL Server LocalDB 'MSSQLLocalDB' instance is started...")
 
-        # If stopped and stuck, kill the orphaned process first
-        if "Stopped" in check.stdout:
+        # Only kill the orphaned process when the instance is confirmed Stopped AND no
+        # named pipe is present. This prevents killing sqlservr.exe mid-sync when LocalDB
+        # transiently reports "Stopped" while it is actually serving requests.
+        is_stopped = "Stopped" in check.stdout
+        if is_stopped and not _localdb_pipe():
             _kill_stuck_sqlservr()
             time.sleep(1)
 

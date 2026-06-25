@@ -1,6 +1,6 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { useStockStore } from '../store/useStockStore';
-import { Eye, Filter, RefreshCw, BarChart2, Download, Bookmark, Zap, TrendingUp, HelpCircle, X } from 'lucide-react';
+import { Filter, RefreshCw, BarChart2, Download, Bookmark, Zap, TrendingUp, HelpCircle, X, ChevronDown } from 'lucide-react';
 import { StockChartWorkspace } from './StockChartWorkspace';
 import type { ScreenerRow, StrategyMeta } from '../services/api';
 import { apiService } from '../services/api';
@@ -29,6 +29,10 @@ const DEFAULT_COL_FILTERS = {
   rs_score_1m: '', patterns: '', ml2_signal: '',
   days_since_ema9_ema20_bull: '', days_since_sma20_sma50_bull: '',
   days_since_macd_bull: '', days_since_cmf_bull: '',
+  // New indicators
+  hilega_milega_signal: '', rsi_divergence: '', macd_divergence: '',
+  candle_type: '', cpr_daily_narrow: '', cpr_weekly_narrow: '',
+  psy_20: '', price_vs_avwap: '', price_vs_zlema21: '',
   // Fundamentals
   market_cap: '', pe_ratio: '', pb_ratio: '', ev_ebitda: '',
   roe: '', debt_to_equity: '', profit_margin: '', eps_ttm: '', sector: '',
@@ -59,6 +63,10 @@ const EMPTY_FILTERS = {
   macd_bull_xover_max_days: undefined, cmf_bull_xover_max_days: undefined,
   only_vajraturn: undefined, only_bb_squeeze: undefined,
   min_tqs: undefined, only_weinstein_stage2: undefined,
+  only_hilega_buy: undefined, only_rsi_bullish_div: undefined,
+  only_macd_bullish_div: undefined, only_boring_candle: undefined,
+  only_explosive_candle: undefined, min_psy_20: undefined, max_psy_20: undefined,
+  price_above_avwap: undefined, price_above_zlema21: undefined, only_cpr_narrow: undefined,
 } as const;
 
 // ── Screener presets ─────────────────────────────────────────────────────────
@@ -158,6 +166,36 @@ const PRESETS = [
     emoji: '💪',
     desc: 'Trend Quality Score ≥ 70 — strong ADX, aligned MAs, RSI in trend zone',
     filters: { min_tqs: 70 },
+  },
+  {
+    name: 'Hilega-Milega Buy',
+    emoji: '🟢',
+    desc: 'RSI currently above its 21-WMA — Hilega-Milega bullish state',
+    filters: { only_hilega_buy: true },
+  },
+  {
+    name: 'RSI Bullish Divergence',
+    emoji: '📐',
+    desc: 'Price lower low but RSI higher low — hidden bullish strength',
+    filters: { only_rsi_bullish_div: true },
+  },
+  {
+    name: 'Explosive Candle',
+    emoji: '💥',
+    desc: 'Today\'s candle ≥1.5× prior boring candle — Supply & Demand breakout',
+    filters: { only_explosive_candle: true },
+  },
+  {
+    name: 'Above AVWAP',
+    emoji: '🔵',
+    desc: 'Price above Anchored VWAP from last gap-up — institutional support',
+    filters: { price_above_avwap: true },
+  },
+  {
+    name: 'CPR Narrow Day',
+    emoji: '📏',
+    desc: 'Central Pivot Range < 0.5% — trending day expected',
+    filters: { only_cpr_narrow: true },
   },
 ];
 
@@ -307,11 +345,12 @@ export const ScreenerPanel: React.FC = () => {
     setScreenerFilters,
     runScreener,
     isLoading,
-    setActiveTab,
     setSelectedSymbol,
     watchlists,
     activeWatchlistId,
     addToWatchlist,
+    addToQualifyQueue,
+    qualifyQueue,
   } = useStockStore();
 
   // Auto-run on mount — restores last session's scan (or returns full universe if no filters).
@@ -336,6 +375,20 @@ export const ScreenerPanel: React.FC = () => {
 
   const [modalSymbol, setModalSymbol] = useState<string | null>(null);
   const [showHelp, setShowHelp] = useState(false);
+  const [showPresetMenu, setShowPresetMenu] = useState(false);
+  const presetMenuRef = useRef<HTMLDivElement>(null);
+
+  // Close preset dropdown when clicking outside
+  useEffect(() => {
+    if (!showPresetMenu) return;
+    const handler = (e: MouseEvent) => {
+      if (presetMenuRef.current && !presetMenuRef.current.contains(e.target as Node)) {
+        setShowPresetMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showPresetMenu]);
 
   const handleOpenChartModal = async (symbol: string) => {
     setModalSymbol(symbol);
@@ -378,11 +431,6 @@ export const ScreenerPanel: React.FC = () => {
 
 
 
-  // Navigate in-place to the Explorer Dashboard for the selected symbol
-  const handleSelectScreenerMatch = async (symbol: string) => {
-    await setSelectedSymbol(symbol);
-    setActiveTab('explorer');
-  };
 
   // Add ticker to the active watchlist (or the first one if none active)
   const handleAddToWatchlist = (symbol: string) => {
@@ -536,6 +584,21 @@ export const ScreenerPanel: React.FC = () => {
         if (!matchNumericFilter(row.days_since_sma20_sma50_bull, colFilters.days_since_sma20_sma50_bull)) return false;
         if (!matchNumericFilter(row.days_since_macd_bull, colFilters.days_since_macd_bull)) return false;
         if (!matchNumericFilter(row.days_since_cmf_bull, colFilters.days_since_cmf_bull)) return false;
+        // New indicator column filters
+        if (!matchNumericFilter(row.hilega_milega_signal, colFilters.hilega_milega_signal)) return false;
+        if (!matchNumericFilter(row.rsi_divergence, colFilters.rsi_divergence)) return false;
+        if (!matchNumericFilter(row.macd_divergence, colFilters.macd_divergence)) return false;
+        if (colFilters.price_vs_zlema21 && row.price_vs_zlema21 !== colFilters.price_vs_zlema21) return false;
+        if (colFilters.candle_type === 'BORING' && !row.is_boring_candle) return false;
+        if (colFilters.candle_type === 'EXPLOSIVE' && !row.is_explosive_candle) return false;
+        if (colFilters.cpr_daily_narrow === 'NARROW' && !row.cpr_daily_narrow) return false;  // cpr_daily_narrow is boolean
+        if (colFilters.cpr_weekly_narrow === 'NARROW') {
+          const wPivot = row.cpr_weekly_pivot, wTc = row.cpr_weekly_tc, wBc = row.cpr_weekly_bc;
+          const isWeeklyNarrow = wPivot != null && wTc != null && wBc != null && Math.abs(wTc - wBc) / wPivot * 100 < 0.5;
+          if (!isWeeklyNarrow) return false;
+        }
+        if (!matchNumericFilter(row.psy_20, colFilters.psy_20)) return false;
+        if (colFilters.price_vs_avwap && row.price_vs_avwap !== colFilters.price_vs_avwap) return false;
         // Fundamentals (ratio fields converted to % for intuitive ">15" style filtering)
         if (!matchNumericFilter(row.market_cap, colFilters.market_cap)) return false;
         if (!matchNumericFilter(row.pe_ratio, colFilters.pe_ratio)) return false;
@@ -567,6 +630,9 @@ export const ScreenerPanel: React.FC = () => {
       'Heikin Ashi', 'Renko', 'Three Line Break', 'RS 1M', 'Patterns',
       'ML Signal', 'ML EV Score', 'ML Rank',
       'Days since EMA9/20 Bull', 'Days since SMA20/50 Bull', 'Days since MACD Bull', 'Days since CMF Bull',
+      'HM Signal', 'RSI Div', 'MACD Div', 'ZLEMA Pos', 'Boring Candle', 'Explosive Candle',
+      'CPR Daily Pivot', 'CPR Daily TC', 'CPR Daily BC', 'CPR Daily Narrow',
+      'CPR Weekly Pivot', 'CPR Weekly TC', 'CPR Weekly BC', 'PSY-20', 'AVWAP', 'AVWAP Pos',
       'Mkt Cap', 'P/E', 'P/B', 'EV/EBITDA', 'ROE %', 'D/E', 'Net Margin %', 'EPS TTM', 'Sector'
     ];
 
@@ -619,6 +685,22 @@ export const ScreenerPanel: React.FC = () => {
         row.days_since_sma20_sma50_bull ?? '',
         row.days_since_macd_bull ?? '',
         row.days_since_cmf_bull ?? '',
+        row.hilega_milega_signal ?? '',
+        row.rsi_divergence ?? '',
+        row.macd_divergence ?? '',
+        row.price_vs_zlema21 ?? '',
+        row.is_boring_candle != null ? (row.is_boring_candle ? 'Y' : '') : '',
+        row.is_explosive_candle != null ? (row.is_explosive_candle ? 'Y' : '') : '',
+        row.cpr_daily_pivot ?? '',
+        row.cpr_daily_tc ?? '',
+        row.cpr_daily_bc ?? '',
+        row.cpr_daily_narrow != null ? (row.cpr_daily_narrow ? 'Y' : '') : '',
+        row.cpr_weekly_pivot ?? '',
+        row.cpr_weekly_tc ?? '',
+        row.cpr_weekly_bc ?? '',
+        row.psy_20 != null ? row.psy_20.toFixed(1) : '',
+        row.avwap ?? '',
+        row.price_vs_avwap ?? '',
         row.market_cap ?? '',
         row.pe_ratio ?? '',
         row.pb_ratio ?? '',
@@ -680,48 +762,83 @@ export const ScreenerPanel: React.FC = () => {
         </div>
       </div>
 
-      {/* ── Preset Cards ──────────────────────────────────────────────────── */}
-      <div className="flex flex-wrap gap-2 items-start">
-        {PRESETS.map(p => {
-          const isActive = activePresetName === p.name;
-          return (
-            <button
-              key={p.name}
-              onClick={() => {
-                setScreenerFilters({ ...EMPTY_FILTERS, ...p.filters });
-                runScreener();
-              }}
-              disabled={isLoading}
-              className={`flex items-center gap-2 px-3 py-2 rounded-xl border disabled:opacity-40 transition cursor-pointer text-left ${
-                isActive
-                  ? 'border-purple-500/70 bg-purple-900/30 shadow shadow-purple-900/30'
-                  : 'border-border-subtle bg-bg-surface/30 hover:bg-bg-surface/70 hover:border-accent-primary/40'
-              }`}
-              title={p.desc}
-            >
-              <span className="text-base leading-none">{p.emoji}</span>
-              <div>
-                <div className={`text-xs font-bold flex items-center gap-1 ${isActive ? 'text-purple-300' : 'text-white'}`}>
-                  <Zap className={`w-2.5 h-2.5 ${isActive ? 'text-purple-300' : 'text-purple-400'}`} />
-                  {p.name}
+      {/* ── Preset Dropdown ───────────────────────────────────────────────── */}
+      <div className="flex items-center gap-2">
+        <div className="relative" ref={presetMenuRef}>
+          <button
+            onClick={() => setShowPresetMenu(v => !v)}
+            disabled={isLoading}
+            className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-sm font-bold disabled:opacity-40 transition cursor-pointer ${
+              activePresetName
+                ? 'border-purple-500/70 bg-purple-900/30 text-purple-300'
+                : 'border-border-subtle bg-bg-surface/30 hover:bg-bg-surface/70 hover:border-accent-primary/40 text-white'
+            }`}
+            title="Choose a preset scan"
+          >
+            <Zap className="w-3.5 h-3.5 text-purple-400" />
+            {activePresetName
+              ? <><span>{PRESETS.find(p => p.name === activePresetName)?.emoji}</span> {activePresetName}</>
+              : 'Presets'
+            }
+            <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showPresetMenu ? 'rotate-180' : ''}`} />
+          </button>
+
+          {showPresetMenu && (
+            <div className="absolute top-full left-0 mt-1.5 z-50 w-72 bg-slate-950 border border-slate-700 rounded-xl shadow-xl overflow-hidden">
+              <div className="p-1.5 max-h-[60vh] overflow-y-auto">
+                {PRESETS.map(p => {
+                  const isActive = activePresetName === p.name;
+                  return (
+                    <button
+                      key={p.name}
+                      onClick={() => {
+                        setScreenerFilters({ ...EMPTY_FILTERS, ...p.filters });
+                        runScreener();
+                        setShowPresetMenu(false);
+                      }}
+                      className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-left transition cursor-pointer ${
+                        isActive
+                          ? 'bg-purple-900/40 text-purple-200'
+                          : 'hover:bg-slate-800/70 text-slate-200'
+                      }`}
+                      title={p.desc}
+                    >
+                      <span className="text-base leading-none shrink-0">{p.emoji}</span>
+                      <div className="min-w-0">
+                        <div className="text-xs font-bold truncate">{p.name}</div>
+                        <div className="text-[10px] text-slate-500 truncate">{p.desc}</div>
+                      </div>
+                      {isActive && <span className="ml-auto text-purple-400 text-[10px] font-bold shrink-0">✓</span>}
+                    </button>
+                  );
+                })}
+                <div className="border-t border-slate-800 mt-1 pt-1">
+                  <button
+                    onClick={() => { handleClearAll(); setShowPresetMenu(false); }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-left hover:bg-rose-950/30 transition cursor-pointer text-rose-400"
+                  >
+                    <span className="text-base leading-none shrink-0">✕</span>
+                    <div>
+                      <div className="text-xs font-bold">Clear All</div>
+                      <div className="text-[10px] text-slate-500">Reset filters &amp; reload</div>
+                    </div>
+                  </button>
                 </div>
-                <div className="text-[10px] text-slate-500">{p.desc}</div>
               </div>
-            </button>
-          );
-        })}
-        <button
-          onClick={handleClearAll}
-          disabled={isLoading}
-          className="flex items-center gap-2 px-3 py-2 rounded-xl border border-rose-800/40 bg-rose-950/20 hover:bg-rose-950/40 hover:border-rose-700/60 disabled:opacity-40 transition cursor-pointer text-left"
-          title="Clear all filters and show all stocks"
-        >
-          <span className="text-base leading-none">✕</span>
-          <div>
-            <div className="text-xs font-bold text-rose-300">Clear All</div>
-            <div className="text-[10px] text-slate-500">Reset filters &amp; reload</div>
-          </div>
-        </button>
+            </div>
+          )}
+        </div>
+
+        {/* Active preset badge + quick-clear */}
+        {activePresetName && (
+          <button
+            onClick={handleClearAll}
+            className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold bg-rose-950/20 border border-rose-800/40 text-rose-400 hover:bg-rose-950/40 transition cursor-pointer"
+            title="Clear this preset"
+          >
+            Clear <X className="w-3 h-3" />
+          </button>
+        )}
       </div>
 
       {/* ── Active filter chips ────────────────────────────────────────────── */}
@@ -731,6 +848,16 @@ export const ScreenerPanel: React.FC = () => {
         if (screenerFilters.only_bb_squeeze) chips.push({ label: '🗜️ BB Squeeze', onRemove: () => { setScreenerFilters({ only_bb_squeeze: undefined }); runScreener(); } });
         if (screenerFilters.only_weinstein_stage2) chips.push({ label: '📈 Weinstein S2', onRemove: () => { setScreenerFilters({ only_weinstein_stage2: undefined }); runScreener(); } });
         if (screenerFilters.min_tqs != null) chips.push({ label: `💪 TQS ≥ ${screenerFilters.min_tqs}`, onRemove: () => { setScreenerFilters({ min_tqs: undefined }); runScreener(); } });
+        if (screenerFilters.only_hilega_buy) chips.push({ label: '🟢 HM Buy', onRemove: () => { setScreenerFilters({ only_hilega_buy: undefined }); runScreener(); } });
+        if (screenerFilters.only_rsi_bullish_div) chips.push({ label: '📐 RSI Div', onRemove: () => { setScreenerFilters({ only_rsi_bullish_div: undefined }); runScreener(); } });
+        if (screenerFilters.only_macd_bullish_div) chips.push({ label: '📐 MACD Div', onRemove: () => { setScreenerFilters({ only_macd_bullish_div: undefined }); runScreener(); } });
+        if (screenerFilters.only_boring_candle) chips.push({ label: '😴 Boring', onRemove: () => { setScreenerFilters({ only_boring_candle: undefined }); runScreener(); } });
+        if (screenerFilters.only_explosive_candle) chips.push({ label: '💥 Explosive', onRemove: () => { setScreenerFilters({ only_explosive_candle: undefined }); runScreener(); } });
+        if (screenerFilters.only_cpr_narrow) chips.push({ label: '📏 CPR Narrow', onRemove: () => { setScreenerFilters({ only_cpr_narrow: undefined }); runScreener(); } });
+        if (screenerFilters.price_above_avwap) chips.push({ label: '🔵 Above AVWAP', onRemove: () => { setScreenerFilters({ price_above_avwap: undefined }); runScreener(); } });
+        if (screenerFilters.price_above_zlema21) chips.push({ label: '⚡ Above ZLEMA', onRemove: () => { setScreenerFilters({ price_above_zlema21: undefined }); runScreener(); } });
+        if (screenerFilters.min_psy_20 != null) chips.push({ label: `PSY ≥ ${screenerFilters.min_psy_20}`, onRemove: () => { setScreenerFilters({ min_psy_20: undefined }); runScreener(); } });
+        if (screenerFilters.max_psy_20 != null) chips.push({ label: `PSY ≤ ${screenerFilters.max_psy_20}`, onRemove: () => { setScreenerFilters({ max_psy_20: undefined }); runScreener(); } });
         if (screenerFilters.min_rsi != null) chips.push({ label: `RSI ≥ ${screenerFilters.min_rsi}`, onRemove: () => { setScreenerFilters({ min_rsi: undefined }); runScreener(); } });
         if (screenerFilters.max_rsi != null) chips.push({ label: `RSI ≤ ${screenerFilters.max_rsi}`, onRemove: () => { setScreenerFilters({ max_rsi: undefined }); runScreener(); } });
         if (screenerFilters.sma_200_cross) chips.push({ label: `SMA200 ${screenerFilters.sma_200_cross}`, onRemove: () => { setScreenerFilters({ sma_200_cross: undefined }); runScreener(); } });
@@ -823,26 +950,38 @@ export const ScreenerPanel: React.FC = () => {
               border-right: none;
             }
             
-            /* Pinned Columns logic (first column: Ticker, second column: Company) */
+            /* Pinned Columns: col 1 = Actions, col 2 = Ticker, col 3 = Company */
             .screener-grid th:nth-child(1),
             .screener-grid td:nth-child(1) {
               position: sticky;
               left: 0;
+              z-index: 5;
+              width: 160px;
+              min-width: 160px;
+              max-width: 160px;
+              overflow: visible;
+              border-right: 2px solid rgba(139, 92, 246, 0.4);
+              box-shadow: 4px 0 8px -3px rgba(0, 0, 0, 0.6);
+            }
+            .screener-grid th:nth-child(2),
+            .screener-grid td:nth-child(2) {
+              position: sticky;
+              left: 160px;
               z-index: 5;
               width: 90px;
               min-width: 90px;
               max-width: 90px;
               border-right: 1px solid rgba(51, 65, 85, 0.4);
             }
-            .screener-grid th:nth-child(2),
-            .screener-grid td:nth-child(2) {
+            .screener-grid th:nth-child(3),
+            .screener-grid td:nth-child(3) {
               position: sticky;
-              left: 90px;
+              left: 250px;
               z-index: 5;
               width: 140px;
               min-width: 140px;
               max-width: 140px;
-              border-right: 2px solid rgba(139, 92, 246, 0.4); /* Highlight end of pinned columns */
+              border-right: 2px solid rgba(139, 92, 246, 0.4);
               box-shadow: 4px 0 8px -3px rgba(0, 0, 0, 0.6);
             }
 
@@ -865,10 +1004,10 @@ export const ScreenerPanel: React.FC = () => {
             /* Sticky overrides for headers of pinned columns */
             .screener-grid thead th:nth-child(1) { z-index: 25; background-color: var(--bg-surface) !important; }
             .screener-grid thead th:nth-child(2) { z-index: 25; background-color: var(--bg-surface) !important; }
-            .screener-grid thead th:nth-child(47) { z-index: 25; background-color: var(--bg-surface) !important; }
+            .screener-grid thead th:nth-child(3) { z-index: 25; background-color: var(--bg-surface) !important; }
             .screener-grid thead tr:nth-child(2) td:nth-child(1) { z-index: 25; background-color: var(--bg-surface) !important; }
             .screener-grid thead tr:nth-child(2) td:nth-child(2) { z-index: 25; background-color: var(--bg-surface) !important; }
-            .screener-grid thead tr:nth-child(2) td:nth-child(47) { z-index: 25; background-color: var(--bg-surface) !important; }
+            .screener-grid thead tr:nth-child(2) td:nth-child(3) { z-index: 25; background-color: var(--bg-surface) !important; }
 
             /* Zebra striping backgrounds for scrollable cells */
             .screener-grid tbody tr:nth-child(odd) td {
@@ -878,21 +1017,15 @@ export const ScreenerPanel: React.FC = () => {
               background-color: var(--bg-surface);
             }
 
-            /* Pinned cell backgrounds (left columns) */
+            /* Pinned cell backgrounds (Actions + Ticker + Company) */
             .screener-grid tbody tr:nth-child(odd) td:nth-child(1),
-            .screener-grid tbody tr:nth-child(odd) td:nth-child(2) {
+            .screener-grid tbody tr:nth-child(odd) td:nth-child(2),
+            .screener-grid tbody tr:nth-child(odd) td:nth-child(3) {
               background-color: var(--bg-base) !important;
             }
             .screener-grid tbody tr:nth-child(even) td:nth-child(1),
-            .screener-grid tbody tr:nth-child(even) td:nth-child(2) {
-              background-color: var(--bg-surface) !important;
-            }
-
-            /* Pinned cell backgrounds (right Actions column) */
-            .screener-grid tbody tr:nth-child(odd) td:nth-child(47) {
-              background-color: var(--bg-base) !important;
-            }
-            .screener-grid tbody tr:nth-child(even) td:nth-child(47) {
+            .screener-grid tbody tr:nth-child(even) td:nth-child(2),
+            .screener-grid tbody tr:nth-child(even) td:nth-child(3) {
               background-color: var(--bg-surface) !important;
             }
 
@@ -901,66 +1034,62 @@ export const ScreenerPanel: React.FC = () => {
               background-color: rgba(139, 92, 246, 0.15) !important;
             }
 
-            /* Column widths for other cells */
-            .screener-grid th:nth-child(3), .screener-grid td:nth-child(3) { width: 100px; min-width: 100px; } /* Price */
-            .screener-grid th:nth-child(4), .screener-grid td:nth-child(4) { width: 85px; min-width: 85px; } /* Chg% */
-            .screener-grid th:nth-child(5), .screener-grid td:nth-child(5) { width: 105px; min-width: 105px; } /* Avg Vol */
-            .screener-grid th:nth-child(6), .screener-grid td:nth-child(6) { width: 95px; min-width: 95px; } /* Bias */
-            .screener-grid th:nth-child(7), .screener-grid td:nth-child(7),
+            /* Column widths for data cells (Actions=1, Ticker=2, Company=3, data starts at 4) */
+            .screener-grid th:nth-child(4), .screener-grid td:nth-child(4) { width: 100px; min-width: 100px; } /* Price */
+            .screener-grid th:nth-child(5), .screener-grid td:nth-child(5) { width: 85px; min-width: 85px; } /* Chg% */
+            .screener-grid th:nth-child(6), .screener-grid td:nth-child(6) { width: 105px; min-width: 105px; } /* Avg Vol */
+            .screener-grid th:nth-child(7), .screener-grid td:nth-child(7) { width: 95px; min-width: 95px; } /* Bias */
             .screener-grid th:nth-child(8), .screener-grid td:nth-child(8),
             .screener-grid th:nth-child(9), .screener-grid td:nth-child(9),
-            .screener-grid th:nth-child(10), .screener-grid td:nth-child(10) { width: 75px; min-width: 75px; } /* 1W-4W */
-            .screener-grid th:nth-child(11), .screener-grid td:nth-child(11),
+            .screener-grid th:nth-child(10), .screener-grid td:nth-child(10),
+            .screener-grid th:nth-child(11), .screener-grid td:nth-child(11) { width: 75px; min-width: 75px; } /* 1W-4W */
             .screener-grid th:nth-child(12), .screener-grid td:nth-child(12),
             .screener-grid th:nth-child(13), .screener-grid td:nth-child(13),
-            .screener-grid th:nth-child(14), .screener-grid td:nth-child(14) { width: 95px; min-width: 95px; } /* Stop/T1/T2/T3 */
-            .screener-grid th:nth-child(15), .screener-grid td:nth-child(15) { width: 90px; min-width: 90px; } /* Upside */
-            .screener-grid th:nth-child(16), .screener-grid td:nth-child(16) { width: 75px; min-width: 75px; } /* R:R */
-            .screener-grid th:nth-child(17), .screener-grid td:nth-child(17) { width: 80px; min-width: 80px; } /* TQS */
-            .screener-grid th:nth-child(18), .screener-grid td:nth-child(18) { width: 100px; min-width: 100px; } /* Shares */
-            .screener-grid th:nth-child(19), .screener-grid td:nth-child(19) { width: 90px; min-width: 90px; } /* Vol Brk */
-            .screener-grid th:nth-child(20), .screener-grid td:nth-child(20) { width: 85px; min-width: 85px; } /* RSI */
-            .screener-grid th:nth-child(21), .screener-grid td:nth-child(21) { width: 75px; min-width: 75px; } /* CMF */
-            .screener-grid th:nth-child(22), .screener-grid td:nth-child(22) { width: 65px; min-width: 65px; } /* StoK */
-            .screener-grid th:nth-child(23), .screener-grid td:nth-child(23) { width: 65px; min-width: 65px; } /* StoD */
-            .screener-grid th:nth-child(24), .screener-grid td:nth-child(24),
+            .screener-grid th:nth-child(14), .screener-grid td:nth-child(14),
+            .screener-grid th:nth-child(15), .screener-grid td:nth-child(15) { width: 95px; min-width: 95px; } /* Stop/T1/T2/T3 */
+            .screener-grid th:nth-child(16), .screener-grid td:nth-child(16) { width: 90px; min-width: 90px; } /* Upside */
+            .screener-grid th:nth-child(17), .screener-grid td:nth-child(17) { width: 75px; min-width: 75px; } /* R:R */
+            .screener-grid th:nth-child(18), .screener-grid td:nth-child(18) { width: 80px; min-width: 80px; } /* TQS */
+            .screener-grid th:nth-child(19), .screener-grid td:nth-child(19) { width: 100px; min-width: 100px; } /* Shares */
+            .screener-grid th:nth-child(20), .screener-grid td:nth-child(20) { width: 90px; min-width: 90px; } /* Vol Brk */
+            .screener-grid th:nth-child(21), .screener-grid td:nth-child(21) { width: 85px; min-width: 85px; } /* RSI */
+            .screener-grid th:nth-child(22), .screener-grid td:nth-child(22) { width: 75px; min-width: 75px; } /* CMF */
+            .screener-grid th:nth-child(23), .screener-grid td:nth-child(23) { width: 65px; min-width: 65px; } /* StoK */
+            .screener-grid th:nth-child(24), .screener-grid td:nth-child(24) { width: 65px; min-width: 65px; } /* StoD */
             .screener-grid th:nth-child(25), .screener-grid td:nth-child(25),
             .screener-grid th:nth-child(26), .screener-grid td:nth-child(26),
             .screener-grid th:nth-child(27), .screener-grid td:nth-child(27),
             .screener-grid th:nth-child(28), .screener-grid td:nth-child(28),
             .screener-grid th:nth-child(29), .screener-grid td:nth-child(29),
-            .screener-grid th:nth-child(30), .screener-grid td:nth-child(30) { width: 70px; min-width: 70px; } /* Averages & Technicals */
-            .screener-grid th:nth-child(31), .screener-grid td:nth-child(31) { width: 90px; min-width: 90px; } /* RS 1M */
-            .screener-grid th:nth-child(32), .screener-grid td:nth-child(32) { width: 150px; min-width: 150px; } /* Patterns */
-            .screener-grid th:nth-child(33), .screener-grid td:nth-child(33) { width: 120px; min-width: 120px; } /* ML Signal */
-            .screener-grid th:nth-child(34), .screener-grid td:nth-child(34) { width: 72px; min-width: 72px; } /* EMA Ribbon */
-            .screener-grid th:nth-child(35), .screener-grid td:nth-child(35) { width: 68px; min-width: 68px; } /* Golden-X */
-            .screener-grid th:nth-child(36), .screener-grid td:nth-child(36) { width: 72px; min-width: 72px; } /* MACD-X */
-            .screener-grid th:nth-child(37), .screener-grid td:nth-child(37) { width: 68px; min-width: 68px; } /* CMF-X */
+            .screener-grid th:nth-child(30), .screener-grid td:nth-child(30),
+            .screener-grid th:nth-child(31), .screener-grid td:nth-child(31) { width: 70px; min-width: 70px; } /* Averages & Technicals */
+            .screener-grid th:nth-child(32), .screener-grid td:nth-child(32) { width: 90px; min-width: 90px; } /* RS 1M */
+            .screener-grid th:nth-child(33), .screener-grid td:nth-child(33) { width: 150px; min-width: 150px; } /* Patterns */
+            .screener-grid th:nth-child(34), .screener-grid td:nth-child(34) { width: 120px; min-width: 120px; } /* ML Signal */
+            .screener-grid th:nth-child(35), .screener-grid td:nth-child(35) { width: 72px; min-width: 72px; } /* EMA Ribbon */
+            .screener-grid th:nth-child(36), .screener-grid td:nth-child(36) { width: 68px; min-width: 68px; } /* Golden-X */
+            .screener-grid th:nth-child(37), .screener-grid td:nth-child(37) { width: 72px; min-width: 72px; } /* MACD-X */
+            .screener-grid th:nth-child(38), .screener-grid td:nth-child(38) { width: 68px; min-width: 68px; } /* CMF-X */
+            /* New indicator columns */
+            .screener-grid th:nth-child(39), .screener-grid td:nth-child(39) { width: 68px; min-width: 68px; } /* HM Signal */
+            .screener-grid th:nth-child(40), .screener-grid td:nth-child(40) { width: 68px; min-width: 68px; } /* RSI Div */
+            .screener-grid th:nth-child(41), .screener-grid td:nth-child(41) { width: 68px; min-width: 68px; } /* MACD Div */
+            .screener-grid th:nth-child(42), .screener-grid td:nth-child(42) { width: 68px; min-width: 68px; } /* ZLEMA Pos */
+            .screener-grid th:nth-child(43), .screener-grid td:nth-child(43) { width: 70px; min-width: 70px; } /* Candle */
+            .screener-grid th:nth-child(44), .screener-grid td:nth-child(44) { width: 90px; min-width: 90px; } /* CPR Daily */
+            .screener-grid th:nth-child(45), .screener-grid td:nth-child(45) { width: 80px; min-width: 80px; } /* CPR Weekly */
+            .screener-grid th:nth-child(46), .screener-grid td:nth-child(46) { width: 62px; min-width: 62px; } /* PSY */
+            .screener-grid th:nth-child(47), .screener-grid td:nth-child(47) { width: 68px; min-width: 68px; } /* AVWAP */
             /* Fundamental columns */
-            .screener-grid th:nth-child(38), .screener-grid td:nth-child(38) { width: 110px; min-width: 110px; } /* Mkt Cap */
-            .screener-grid th:nth-child(39), .screener-grid td:nth-child(39) { width: 70px; min-width: 70px; }  /* P/E */
-            .screener-grid th:nth-child(40), .screener-grid td:nth-child(40) { width: 70px; min-width: 70px; }  /* P/B */
-            .screener-grid th:nth-child(41), .screener-grid td:nth-child(41) { width: 90px; min-width: 90px; }  /* EV/EBITDA */
-            .screener-grid th:nth-child(42), .screener-grid td:nth-child(42) { width: 75px; min-width: 75px; }  /* ROE */
-            .screener-grid th:nth-child(43), .screener-grid td:nth-child(43) { width: 70px; min-width: 70px; }  /* D/E */
-            .screener-grid th:nth-child(44), .screener-grid td:nth-child(44) { width: 85px; min-width: 85px; }  /* Net Mgn */
-            .screener-grid th:nth-child(45), .screener-grid td:nth-child(45) { width: 75px; min-width: 75px; }  /* EPS */
-            .screener-grid th:nth-child(46), .screener-grid td:nth-child(46) { width: 140px; min-width: 140px; } /* Sector */
-
-            /* Pin Actions column (47th column) to the right */
-            .screener-grid th:nth-child(47),
-            .screener-grid td:nth-child(47) {
-              position: sticky;
-              right: 0;
-              z-index: 5;
-              width: 120px;
-              min-width: 120px;
-              max-width: 120px;
-              border-left: 2px solid rgba(139, 92, 246, 0.4) !important;
-              border-right: none;
-              box-shadow: -4px 0 8px -3px rgba(0, 0, 0, 0.6);
-            }
+            .screener-grid th:nth-child(48), .screener-grid td:nth-child(48) { width: 110px; min-width: 110px; } /* Mkt Cap */
+            .screener-grid th:nth-child(49), .screener-grid td:nth-child(49) { width: 70px; min-width: 70px; }  /* P/E */
+            .screener-grid th:nth-child(50), .screener-grid td:nth-child(50) { width: 70px; min-width: 70px; }  /* P/B */
+            .screener-grid th:nth-child(51), .screener-grid td:nth-child(51) { width: 90px; min-width: 90px; }  /* EV/EBITDA */
+            .screener-grid th:nth-child(52), .screener-grid td:nth-child(52) { width: 75px; min-width: 75px; }  /* ROE */
+            .screener-grid th:nth-child(53), .screener-grid td:nth-child(53) { width: 70px; min-width: 70px; }  /* D/E */
+            .screener-grid th:nth-child(54), .screener-grid td:nth-child(54) { width: 85px; min-width: 85px; }  /* Net Mgn */
+            .screener-grid th:nth-child(55), .screener-grid td:nth-child(55) { width: 75px; min-width: 75px; }  /* EPS */
+            .screener-grid th:nth-child(56), .screener-grid td:nth-child(56) { width: 140px; min-width: 140px; } /* Sector */
 
             /* Compact active indicators */
             .screener-grid input:focus, .screener-grid select:focus {
@@ -979,6 +1108,7 @@ export const ScreenerPanel: React.FC = () => {
           <table className="screener-grid min-w-max w-full border-collapse text-left text-xs text-slate-300">
             <thead>
               <tr className="border-b border-slate-800 text-xs text-slate-400 uppercase tracking-wider font-mono select-none whitespace-nowrap">
+                <th className="py-2 px-2 text-left">Actions</th>
                 <th className="py-2 px-1.5 cursor-pointer hover:text-text-main transition" onClick={() => handleSort('symbol')}>
                   Ticker {renderSortIcon('symbol')}
                 </th>
@@ -1091,6 +1221,33 @@ export const ScreenerPanel: React.FC = () => {
                 <th className="py-2 px-1.5 text-center cursor-pointer hover:text-text-main transition" title="Days since CMF crossed above zero" onClick={() => handleSort('days_since_cmf_bull')}>
                   CMF-X {renderSortIcon('days_since_cmf_bull')}
                 </th>
+                <th className="py-2 px-1 text-center cursor-pointer hover:text-text-main transition" title="Hilega-Milega: BUY = RSI currently above its 21-WMA (bullish momentum), SELL = below" onClick={() => handleSort('hilega_milega_signal' as any)}>
+                  HM {renderSortIcon('hilega_milega_signal' as any)}
+                </th>
+                <th className="py-2 px-1 text-center cursor-pointer hover:text-text-main transition" title="RSI Divergence: BULLISH (lower price low, higher RSI low) or BEARISH" onClick={() => handleSort('rsi_divergence' as any)}>
+                  RSI Div {renderSortIcon('rsi_divergence' as any)}
+                </th>
+                <th className="py-2 px-1 text-center cursor-pointer hover:text-text-main transition" title="MACD Histogram Divergence: BULLISH or BEARISH" onClick={() => handleSort('macd_divergence' as any)}>
+                  MACD Div {renderSortIcon('macd_divergence' as any)}
+                </th>
+                <th className="py-2 px-1 text-center cursor-pointer hover:text-text-main transition" title="Zero-Lag EMA(21) position — ABOVE or BELOW" onClick={() => handleSort('price_vs_zlema21' as any)}>
+                  ZLEMA {renderSortIcon('price_vs_zlema21' as any)}
+                </th>
+                <th className="py-2 px-1 text-center" title="Candle type: 😴 Boring (wicks > body) / 💥 Explosive (≥1.5× prior boring range)">
+                  Candle
+                </th>
+                <th className="py-2 px-1 text-center cursor-pointer hover:text-text-main transition" title="Daily CPR Pivot (PP). Narrow badge if CPR range < 0.5% of price" onClick={() => handleSort('cpr_daily_pivot' as any)}>
+                  CPR D {renderSortIcon('cpr_daily_pivot' as any)}
+                </th>
+                <th className="py-2 px-1 text-center cursor-pointer hover:text-text-main transition" title="Weekly CPR Pivot (PP)" onClick={() => handleSort('cpr_weekly_pivot' as any)}>
+                  CPR W {renderSortIcon('cpr_weekly_pivot' as any)}
+                </th>
+                <th className="py-2 px-1 text-center cursor-pointer hover:text-text-main transition" title="Psychological Line (20-day): % of days where close > prev close" onClick={() => handleSort('psy_20' as any)}>
+                  PSY {renderSortIcon('psy_20' as any)}
+                </th>
+                <th className="py-2 px-1 text-center cursor-pointer hover:text-text-main transition" title="Anchored VWAP (from last gap-up candle): ABOVE or BELOW" onClick={() => handleSort('price_vs_avwap' as any)}>
+                  AVWAP {renderSortIcon('price_vs_avwap' as any)}
+                </th>
                 <th className="py-2 px-1.5 text-right cursor-pointer hover:text-text-main transition" title="Market Capitalisation" onClick={() => handleSort('market_cap' as any)}>
                   Mkt Cap {renderSortIcon('market_cap' as any)}
                 </th>
@@ -1118,10 +1275,11 @@ export const ScreenerPanel: React.FC = () => {
                 <th className="py-2 px-1.5 cursor-pointer hover:text-text-main transition" title="Sector" onClick={() => handleSort('sector' as any)}>
                   Sector {renderSortIcon('sector' as any)}
                 </th>
-                <th className="py-2 px-1.5 text-right">Actions</th>
               </tr>
               {showColFilters && (
                 <tr className="border-b border-border-subtle bg-bg-base/40 whitespace-nowrap filter-row">
+                  {/* Actions — empty, no filter */}
+                  <td className="py-1 px-2" />
                   {/* Ticker */}
                   <td className="py-1 px-1.5">
                     <input
@@ -1563,6 +1721,116 @@ export const ScreenerPanel: React.FC = () => {
                     />
                   </td>
 
+                  {/* HM Signal — days in buy zone */}
+                  <td className="py-1 px-1.5 text-center">
+                    <input
+                      type="text"
+                      placeholder="<10"
+                      title="Days since RSI crossed above WMA. Filter: <5 (fresh), >0 (any buy zone)"
+                      value={colFilters.hilega_milega_signal}
+                      onChange={(e) => setColFilters({ ...colFilters, hilega_milega_signal: e.target.value })}
+                      className="w-full min-w-[40px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-purple-500 focus:text-text-main text-center transition font-mono"
+                    />
+                  </td>
+
+                  {/* RSI Div — days since bullish divergence */}
+                  <td className="py-1 px-1.5 text-center">
+                    <input
+                      type="text"
+                      placeholder="<7"
+                      title="Days since bullish RSI divergence swing low. NULL = no bullish divergence."
+                      value={colFilters.rsi_divergence}
+                      onChange={(e) => setColFilters({ ...colFilters, rsi_divergence: e.target.value })}
+                      className="w-full min-w-[40px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-purple-500 focus:text-text-main text-center transition font-mono"
+                    />
+                  </td>
+
+                  {/* MACD Div — days since bullish divergence */}
+                  <td className="py-1 px-1.5 text-center">
+                    <input
+                      type="text"
+                      placeholder="<7"
+                      title="Days since bullish MACD divergence swing low. NULL = no bullish divergence."
+                      value={colFilters.macd_divergence}
+                      onChange={(e) => setColFilters({ ...colFilters, macd_divergence: e.target.value })}
+                      className="w-full min-w-[40px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-purple-500 focus:text-text-main text-center transition font-mono"
+                    />
+                  </td>
+
+                  {/* ZLEMA Position */}
+                  <td className="py-1 px-1.5 text-center">
+                    <select
+                      value={colFilters.price_vs_zlema21}
+                      onChange={(e) => setColFilters({ ...colFilters, price_vs_zlema21: e.target.value })}
+                      className="w-full min-w-[52px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 focus:outline-none focus:border-purple-500 focus:text-text-main transition"
+                    >
+                      <option value="">All</option>
+                      <option value="ABOVE">ABOVE</option>
+                      <option value="BELOW">BELOW</option>
+                    </select>
+                  </td>
+
+                  {/* Candle */}
+                  <td className="py-1 px-1.5 text-center">
+                    <select
+                      value={colFilters.candle_type}
+                      onChange={(e) => setColFilters({ ...colFilters, candle_type: e.target.value })}
+                      className="w-full min-w-[52px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 focus:outline-none focus:border-purple-500 focus:text-text-main transition"
+                    >
+                      <option value="">All</option>
+                      <option value="BORING">😴 Boring</option>
+                      <option value="EXPLOSIVE">💥 Explos</option>
+                    </select>
+                  </td>
+
+                  {/* CPR Daily */}
+                  <td className="py-1 px-1.5 text-center">
+                    <select
+                      value={colFilters.cpr_daily_narrow}
+                      onChange={(e) => setColFilters({ ...colFilters, cpr_daily_narrow: e.target.value })}
+                      className="w-full min-w-[52px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 focus:outline-none focus:border-purple-500 focus:text-text-main transition"
+                    >
+                      <option value="">All</option>
+                      <option value="NARROW">Narrow</option>
+                    </select>
+                  </td>
+
+                  {/* CPR Weekly */}
+                  <td className="py-1 px-1.5 text-center">
+                    <select
+                      value={colFilters.cpr_weekly_narrow}
+                      onChange={(e) => setColFilters({ ...colFilters, cpr_weekly_narrow: e.target.value })}
+                      className="w-full min-w-[52px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 focus:outline-none focus:border-purple-500 focus:text-text-main transition"
+                    >
+                      <option value="">All</option>
+                      <option value="NARROW">Narrow</option>
+                    </select>
+                  </td>
+
+                  {/* PSY-20 */}
+                  <td className="py-1 px-1.5 text-center">
+                    <input
+                      type="text"
+                      placeholder=">50"
+                      value={colFilters.psy_20}
+                      onChange={(e) => setColFilters({ ...colFilters, psy_20: e.target.value })}
+                      className="w-full min-w-[40px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 placeholder-slate-650 focus:outline-none focus:border-purple-500 focus:text-text-main text-center transition font-mono"
+                    />
+                  </td>
+
+                  {/* AVWAP Position */}
+                  <td className="py-1 px-1.5 text-center">
+                    <select
+                      value={colFilters.price_vs_avwap}
+                      onChange={(e) => setColFilters({ ...colFilters, price_vs_avwap: e.target.value })}
+                      className="w-full min-w-[52px] px-1 py-0.5 text-[10px] rounded bg-slate-950 border border-slate-800 text-slate-300 focus:outline-none focus:border-purple-500 focus:text-text-main transition"
+                    >
+                      <option value="">All</option>
+                      <option value="ABOVE">ABOVE</option>
+                      <option value="BELOW">BELOW</option>
+                    </select>
+                  </td>
+
                   {/* Mkt Cap */}
                   <td className="py-1 px-1.5 text-right">
                     <input
@@ -1662,10 +1930,6 @@ export const ScreenerPanel: React.FC = () => {
                     />
                   </td>
 
-                  {/* Actions */}
-                  <td className="py-1 px-1.5 text-right">
-                    {/* Empty space matching actions column */}
-                  </td>
                 </tr>
               )}
             </thead>
@@ -1695,6 +1959,38 @@ export const ScreenerPanel: React.FC = () => {
                   
                   return (
                     <tr key={row.symbol_id} className="hover:bg-slate-900/40 transition whitespace-nowrap text-xs">
+                      {/* Actions — pinned left */}
+                      <td className="py-2 px-2">
+                        <div className="flex items-center gap-1 flex-nowrap">
+                          <button
+                            onClick={() => handleAddToWatchlist(row.symbol)}
+                            title="Add to Watchlist"
+                            className="p-1 rounded bg-bg-surface border border-border-subtle hover:border-indigo-500/80 text-text-muted hover:text-indigo-400 flex items-center transition cursor-pointer shrink-0"
+                          >
+                            <Bookmark className="w-3 h-3" />
+                          </button>
+                          <button
+                            onClick={() => handleOpenChartModal(row.symbol)}
+                            title="Quick Chart View"
+                            className="py-1 px-2 rounded bg-bg-surface border border-border-subtle hover:border-indigo-500/80 text-text-muted hover:text-text-main text-[11px] flex items-center gap-1 transition cursor-pointer shrink-0"
+                          >
+                            <TrendingUp className="w-3 h-3" />
+                            Chart
+                          </button>
+                          <button
+                            onClick={() => addToQualifyQueue(row.symbol)}
+                            title="Add to Swing Pick qualifier"
+                            className={`py-1 px-2 rounded border text-[11px] flex items-center gap-1 transition cursor-pointer shrink-0 ${
+                              qualifyQueue.includes(row.symbol)
+                                ? 'bg-purple-900/40 border-purple-600/60 text-purple-300'
+                                : 'bg-bg-surface border-border-subtle hover:border-purple-500/80 text-text-muted hover:text-purple-400'
+                            }`}
+                          >
+                            <Zap className="w-3 h-3" />
+                            {qualifyQueue.includes(row.symbol) ? '✓' : 'Pick'}
+                          </button>
+                        </div>
+                      </td>
                       {/* Ticker */}
                       <td className="py-2 px-1.5 font-bold text-text-main font-mono">
                         <div className="flex flex-col gap-0.5">
@@ -2144,6 +2440,116 @@ export const ScreenerPanel: React.FC = () => {
                         ) : <span className="text-slate-700">—</span>}
                       </td>
 
+                      {/* Hilega-Milega — days since RSI crossed above WMA */}
+                      <td className="py-2 px-1 text-center">
+                        {row.hilega_milega_signal != null ? (
+                          <span className={`text-[10px] font-bold px-1.5 py-px rounded border leading-none ${
+                            row.hilega_milega_signal <= 3
+                              ? 'text-emerald-200 bg-emerald-950/40 border-emerald-600/50'
+                              : row.hilega_milega_signal <= 10
+                              ? 'text-emerald-400 bg-emerald-950/20 border-emerald-700/30'
+                              : 'text-emerald-600 bg-emerald-950/10 border-emerald-800/20'
+                          }`} title={`HM: RSI in buy zone for ${row.hilega_milega_signal} day(s) since crossover above 21-WMA`}>
+                            {row.hilega_milega_signal}d
+                          </span>
+                        ) : <span className="text-slate-700">—</span>}
+                      </td>
+
+                      {/* RSI Divergence — days since bullish divergence */}
+                      <td className="py-2 px-1 text-center">
+                        {row.rsi_divergence != null ? (
+                          <span className={`text-[10px] font-bold px-1 py-px rounded border leading-none ${
+                            row.rsi_divergence <= 5
+                              ? 'text-violet-200 bg-violet-950/40 border-violet-600/50'
+                              : row.rsi_divergence <= 14
+                              ? 'text-violet-400 bg-violet-950/20 border-violet-700/30'
+                              : 'text-violet-600 bg-violet-950/10 border-violet-800/20'
+                          }`} title={`RSI bullish divergence: swing low formed ${row.rsi_divergence} day(s) ago`}>
+                            {row.rsi_divergence}d
+                          </span>
+                        ) : <span className="text-slate-700">—</span>}
+                      </td>
+
+                      {/* MACD Divergence — days since bullish divergence */}
+                      <td className="py-2 px-1 text-center">
+                        {row.macd_divergence != null ? (
+                          <span className={`text-[10px] font-bold px-1 py-px rounded border leading-none ${
+                            row.macd_divergence <= 5
+                              ? 'text-amber-200 bg-amber-950/40 border-amber-600/50'
+                              : row.macd_divergence <= 14
+                              ? 'text-amber-400 bg-amber-950/20 border-amber-700/30'
+                              : 'text-amber-600 bg-amber-950/10 border-amber-800/20'
+                          }`} title={`MACD bullish divergence: swing low formed ${row.macd_divergence} day(s) ago`}>
+                            {row.macd_divergence}d
+                          </span>
+                        ) : <span className="text-slate-700">—</span>}
+                      </td>
+
+                      {/* ZLEMA-21 Position */}
+                      <td className="py-2 px-1 text-center">
+                        {row.price_vs_zlema21 ? (
+                          <span className={`text-[10px] font-bold px-1 py-px rounded border leading-none ${
+                            row.price_vs_zlema21 === 'ABOVE'
+                              ? 'text-cyan-300 bg-cyan-950/20 border-cyan-700/30'
+                              : 'text-slate-400 bg-slate-900/30 border-slate-700/30'
+                          }`} title={`Price vs ZLEMA(21): ${row.price_vs_zlema21}${row.zlema_21 != null ? ` (${row.zlema_21.toFixed(2)})` : ''}`}>
+                            {row.price_vs_zlema21 === 'ABOVE' ? '▲' : '▼'}
+                          </span>
+                        ) : <span className="text-slate-700">—</span>}
+                      </td>
+
+                      {/* Boring / Explosive Candle */}
+                      <td className="py-2 px-1 text-center">
+                        {row.is_explosive_candle ? (
+                          <span className="text-[10px] font-bold px-1 py-px rounded border text-amber-300 bg-amber-950/30 border-amber-700/40 leading-none" title="Explosive candle: range ≥1.5× prior boring candle">💥</span>
+                        ) : row.is_boring_candle ? (
+                          <span className="text-[10px] font-bold px-1 py-px rounded border text-slate-400 bg-slate-900/30 border-slate-700/30 leading-none" title="Boring candle: wicks > body (demand/supply compression)">😴</span>
+                        ) : <span className="text-slate-700">—</span>}
+                      </td>
+
+                      {/* CPR Daily */}
+                      <td className="py-2 px-1 text-center">
+                        {row.cpr_daily_pivot != null ? (
+                          <span className="font-mono text-[10px] text-slate-300" title={`Daily CPR — PP: ${row.cpr_daily_pivot?.toFixed(2)} · TC: ${row.cpr_daily_tc?.toFixed(2)} · BC: ${row.cpr_daily_bc?.toFixed(2)}${row.cpr_daily_narrow ? ' · Narrow (trend day)' : ''}`}>
+                            {row.cpr_daily_pivot.toFixed(1)}
+                            {row.cpr_daily_narrow && <span className="ml-0.5 text-[9px] text-purple-300 font-bold">N</span>}
+                          </span>
+                        ) : <span className="text-slate-700">—</span>}
+                      </td>
+
+                      {/* CPR Weekly */}
+                      <td className="py-2 px-1 text-center">
+                        {row.cpr_weekly_pivot != null ? (
+                          <span className="font-mono text-[10px] text-slate-300" title={`Weekly CPR — PP: ${row.cpr_weekly_pivot?.toFixed(2)} · TC: ${row.cpr_weekly_tc?.toFixed(2)} · BC: ${row.cpr_weekly_bc?.toFixed(2)}`}>
+                            {row.cpr_weekly_pivot.toFixed(1)}
+                          </span>
+                        ) : <span className="text-slate-700">—</span>}
+                      </td>
+
+                      {/* PSY-20 */}
+                      <td className="py-2 px-1 text-center">
+                        {row.psy_20 != null ? (
+                          <span className={`font-mono text-xs ${
+                            row.psy_20 >= 60 ? 'text-emerald-400' : row.psy_20 <= 40 ? 'text-rose-400' : 'text-slate-300'
+                          }`} title={`Psychological Line (20d): ${row.psy_20.toFixed(0)}% of days closed up`}>
+                            {row.psy_20.toFixed(0)}%
+                          </span>
+                        ) : <span className="text-slate-700">—</span>}
+                      </td>
+
+                      {/* AVWAP Position */}
+                      <td className="py-2 px-1 text-center">
+                        {row.price_vs_avwap ? (
+                          <span className={`text-[10px] font-bold px-1 py-px rounded border leading-none ${
+                            row.price_vs_avwap === 'ABOVE'
+                              ? 'text-blue-300 bg-blue-950/20 border-blue-700/30'
+                              : 'text-slate-400 bg-slate-900/30 border-slate-700/30'
+                          }`} title={`Price vs AVWAP (anchored from last gap-up): ${row.price_vs_avwap}${row.avwap != null ? ` (${row.avwap.toFixed(2)})` : ''}`}>
+                            {row.price_vs_avwap === 'ABOVE' ? '▲' : '▼'}
+                          </span>
+                        ) : <span className="text-slate-700">—</span>}
+                      </td>
+
                       {/* Mkt Cap */}
                       <td className="py-2 px-1.5 text-right font-mono text-xs text-slate-350">
                         {row.market_cap != null ? formatTradedValue(row.market_cap) : <span className="text-slate-700">—</span>}
@@ -2217,33 +2623,6 @@ export const ScreenerPanel: React.FC = () => {
                         {row.sector ?? <span className="text-slate-700">—</span>}
                       </td>
 
-                      {/* Actions */}
-                      <td className="py-2 px-1.5 text-right">
-                        <div className="flex items-center gap-1 justify-end">
-                          <button
-                            onClick={() => handleAddToWatchlist(row.symbol)}
-                            title="Add to Watchlist"
-                            className="p-0.5 px-1 rounded bg-slate-900 border border-slate-800 hover:border-indigo-500/80 text-slate-500 hover:text-indigo-400 text-xs flex items-center transition cursor-pointer"
-                          >
-                            <Bookmark className="w-2.5 h-2.5" />
-                          </button>
-                          <button
-                            onClick={() => handleSelectScreenerMatch(row.symbol)}
-                            className="p-0.5 px-1.5 rounded bg-slate-900 border border-slate-800 hover:border-purple-500/80 text-slate-400 hover:text-text-main text-xs flex items-center gap-1 transition cursor-pointer"
-                          >
-                            <Eye className="w-3 h-3" />
-                            Inspect
-                          </button>
-                          <button
-                            onClick={() => handleOpenChartModal(row.symbol)}
-                            title="Quick Chart View"
-                            className="p-0.5 px-1.5 rounded bg-slate-900 border border-slate-800 hover:border-indigo-500/80 text-slate-400 hover:text-text-main text-xs flex items-center gap-1 transition cursor-pointer"
-                          >
-                            <TrendingUp className="w-3 h-3" />
-                            Chart
-                          </button>
-                        </div>
-                      </td>
                     </tr>
                   );
                 })
@@ -2297,7 +2676,7 @@ export const ScreenerPanel: React.FC = () => {
               <section>
                 <h3 className="text-xs font-bold uppercase tracking-widest text-accent-primary mb-3">How to Use</h3>
                 <div className="space-y-2 text-[13px] leading-relaxed">
-                  <p><span className="text-text-main font-semibold">1. Pick a Preset</span> — Click any scan card (Breakout, Momentum, VajraTurn, etc.) to instantly filter stocks matching that strategy's criteria. The active preset highlights in purple.</p>
+                  <p><span className="text-text-main font-semibold">1. Pick a Preset</span> — Click the <strong>Presets</strong> button to open the dropdown and choose a scan (Breakout, Momentum, VajraTurn, HM Buy, etc.). The active preset is highlighted and shown on the button itself.</p>
                   <p><span className="text-text-main font-semibold">2. Clear All</span> — Resets all filters and loads the full stock universe.</p>
                   <p><span className="text-text-main font-semibold">3. Active Filter Chips</span> — Pills shown below the presets confirm which filters are live. Click ✕ on any chip to remove that filter individually.</p>
                   <p><span className="text-text-main font-semibold">4. Column Filters</span> — The input row under the header lets you narrow results further (e.g. <code className="bg-bg-base px-1 rounded text-xs text-text-main">&gt;60</code> in TQS, <code className="bg-bg-base px-1 rounded text-xs text-text-main">&lt;30</code> in RSI). Supports <code className="bg-bg-base px-1 rounded text-xs text-text-main">&gt;</code> <code className="bg-bg-base px-1 rounded text-xs text-text-main">&lt;</code> <code className="bg-bg-base px-1 rounded text-xs text-text-main">=</code> operators.</p>
@@ -2357,6 +2736,13 @@ export const ScreenerPanel: React.FC = () => {
                     ['ML Signal', 'VajraML triple-barrier classifier: Strong Buy / Buy / Watch / Avoid / Market Risk.'],
                     ['EMA Ribbon', 'Days since EMA9 crossed above EMA20 (ribbon flip to bullish).'],
                     ['GX / MACD Xover / CMF Xover', 'Days since Golden Cross (SMA20>SMA50), MACD bullish crossover, CMF crossed above zero.'],
+                    ['HM', 'Hilega-Milega: current RSI position vs its 21-period WMA. BUY = RSI above WMA (bullish momentum), SELL = RSI below WMA.'],
+                    ['RSI Div / MACD Div', 'Divergence detection (14-bar lookback). BULLISH = lower price low, higher indicator low. BEARISH = opposite.'],
+                    ['ZLEMA', 'Zero-Lag EMA(21) position. ▲=price above, ▼=price below. Hover shows ZLEMA value.'],
+                    ['Candle', '😴 Boring candle = wicks > body (compression). 💥 Explosive = today range ≥1.5× prior boring candle range.'],
+                    ['CPR D / CPR W', 'Central Pivot Range pivot point (PP). N badge = narrow CPR (<0.5% of price) = trending day expected.'],
+                    ['PSY', 'Psychological Line (20-day). % of days where close > previous close. >60%=bullish, <40%=bearish.'],
+                    ['AVWAP', 'Anchored VWAP from last gap-up candle (open >1% above prev close). ▲=price above, ▼=price below.'],
                     ['Mkt Cap', 'Market capitalisation in crores (₹).'],
                     ['P/E · P/B · EV/EBITDA', 'Fundamental valuation multiples.'],
                     ['ROE · D/E · Margin · EPS', 'Profitability and leverage metrics.'],

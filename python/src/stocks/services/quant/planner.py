@@ -103,8 +103,8 @@ class TradePlannerService:
         if stop_loss >= latest_price:
             stop_loss = latest_price - (2.0 * atr_14)
 
-        entry_lower = round(latest_price * 0.99, 2)
-        entry_upper = round(latest_price * 1.005, 2)
+        entry_lower = round(latest_price - 0.5 * atr_14, 2)
+        entry_upper = round(latest_price + 0.25 * atr_14, 2)
         entry_zone = f"{entry_lower:.2f} - {entry_upper:.2f}"
 
         mid_entry = (entry_lower + entry_upper) / 2.0

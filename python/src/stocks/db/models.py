@@ -202,6 +202,13 @@ class DailyIndicator(Base):
     stochrsi_bullish_xover: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     stochrsi_bearish_xover: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
 
+    # Zero Lag EMA (21)
+    zlema_21: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    # Hilega-Milega: 21-WMA of RSI and 3-EMA of that WMA
+    hm_rsi_wma21: Mapped[float | None] = mapped_column(Float, nullable=True)
+    hm_rsi_ema3: Mapped[float | None] = mapped_column(Float, nullable=True)
+
     # Relationships
     symbol_obj: Mapped["Symbol"] = relationship("Symbol", back_populates="indicators")
 
@@ -404,6 +411,43 @@ class ScreeningSnapshot(Base):
 
     # Weinstein Stage (1-4): based on price vs rising/flat/falling SMA200
     weinstein_stage: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    # ── New Indicators ────────────────────────────────────────────────────────
+
+    # Hilega-Milega: days since RSI crossed above WMA-21 (NULL when RSI is below WMA)
+    hilega_milega_signal: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    # RSI & MACD divergence: days since bullish divergence swing low formed (NULL = no bullish divergence)
+    rsi_divergence: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    macd_divergence: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    # Zero Lag EMA (21) value and price position relative to it
+    zlema_21: Mapped[float | None] = mapped_column(Float, nullable=True)
+    price_vs_zlema21: Mapped[str | None] = mapped_column(String(5), nullable=True)       # ABOVE / BELOW
+
+    # Supply & Demand candle patterns
+    is_boring_candle: Mapped[bool | None] = mapped_column(Boolean, nullable=True)        # wicks > body
+    is_explosive_candle: Mapped[bool | None] = mapped_column(Boolean, nullable=True)     # ≥1.5× size of prior boring candle
+
+    # Central Pivot Range — Daily (from previous day's H/L/C)
+    cpr_daily_pivot: Mapped[float | None] = mapped_column(Float, nullable=True)
+    cpr_daily_tc: Mapped[float | None] = mapped_column(Float, nullable=True)
+    cpr_daily_bc: Mapped[float | None] = mapped_column(Float, nullable=True)
+    cpr_daily_narrow: Mapped[bool | None] = mapped_column(Boolean, nullable=True)        # CPR range < 0.5% of price → trend day likely
+
+    # Central Pivot Range — Weekly (from previous week's H/L/C)
+    cpr_weekly_pivot: Mapped[float | None] = mapped_column(Float, nullable=True)
+    cpr_weekly_tc: Mapped[float | None] = mapped_column(Float, nullable=True)
+    cpr_weekly_bc: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    # Psychological Line (20-period): % of last 20 days where close > prev close
+    psy_20: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    # Anchored VWAP (anchored to most recent gap-up candle within ~90 trading days)
+    avwap: Mapped[float | None] = mapped_column(Float, nullable=True)
+    avwap_upper_1sd: Mapped[float | None] = mapped_column(Float, nullable=True)
+    avwap_lower_1sd: Mapped[float | None] = mapped_column(Float, nullable=True)
+    price_vs_avwap: Mapped[str | None] = mapped_column(String(5), nullable=True)         # ABOVE / BELOW
 
     updated_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now())
 
@@ -849,4 +893,16 @@ class EodStagingData(Base):
 
     __table_args__ = (
         Index("ix_eod_staging_job_date", "job_id", "file_date"),
+    )
+
+
+class SwingPickNote(Base):
+    """User-authored catalyst notes for swing pick symbols, persisted in the DB."""
+
+    __tablename__ = "swing_pick_notes"
+
+    symbol: Mapped[str] = mapped_column(String(50), primary_key=True)
+    catalyst_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime, default=func.now(), onupdate=func.now()
     )

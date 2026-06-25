@@ -213,6 +213,17 @@ class ScreeningParams(BaseModel):
     only_bb_squeeze: bool = False
     min_tqs: float | None = None
     only_weinstein_stage2: bool = False
+    # New indicator filters
+    only_hilega_buy: bool = False
+    only_rsi_bullish_div: bool = False
+    only_macd_bullish_div: bool = False
+    only_boring_candle: bool = False
+    only_explosive_candle: bool = False
+    min_psy_20: float | None = None
+    max_psy_20: float | None = None
+    price_above_avwap: bool | None = None
+    price_above_zlema21: bool | None = None
+    only_cpr_narrow: bool = False
     limit: int = 2500
 
 
@@ -301,6 +312,26 @@ class ScreenerRowResponse(BaseModel):
     is_bb_squeeze:               bool | None = None
     tqs:                         float | None = None
     weinstein_stage:             int | None = None
+    # New indicators
+    hilega_milega_signal:  int | None = None
+    rsi_divergence:        int | None = None
+    macd_divergence:       int | None = None
+    zlema_21:              float | None = None
+    price_vs_zlema21:      str | None = None
+    is_boring_candle:      bool | None = None
+    is_explosive_candle:   bool | None = None
+    cpr_daily_pivot:       float | None = None
+    cpr_daily_tc:          float | None = None
+    cpr_daily_bc:          float | None = None
+    cpr_daily_narrow:      bool | None = None
+    cpr_weekly_pivot:      float | None = None
+    cpr_weekly_tc:         float | None = None
+    cpr_weekly_bc:         float | None = None
+    psy_20:                float | None = None
+    avwap:                 float | None = None
+    avwap_upper_1sd:       float | None = None
+    avwap_lower_1sd:       float | None = None
+    price_vs_avwap:        str | None = None
     # Fundamentals
     market_cap:       float | None = None
     enterprise_value: float | None = None
@@ -486,6 +517,26 @@ def _build_row(r, confl_by_symbol_id: dict, risk_per_trade: float, strat_by_symb
         "is_bb_squeeze":               getattr(r, "is_bb_squeeze", None),
         "tqs":                         getattr(r, "tqs", None),
         "weinstein_stage":             getattr(r, "weinstein_stage", None),
+        # New indicators
+        "hilega_milega_signal":        getattr(r, "hilega_milega_signal", None),
+        "rsi_divergence":              getattr(r, "rsi_divergence", None),
+        "macd_divergence":             getattr(r, "macd_divergence", None),
+        "zlema_21":                    getattr(r, "zlema_21", None),
+        "price_vs_zlema21":            getattr(r, "price_vs_zlema21", None),
+        "is_boring_candle":            getattr(r, "is_boring_candle", None),
+        "is_explosive_candle":         getattr(r, "is_explosive_candle", None),
+        "cpr_daily_pivot":             getattr(r, "cpr_daily_pivot", None),
+        "cpr_daily_tc":                getattr(r, "cpr_daily_tc", None),
+        "cpr_daily_bc":                getattr(r, "cpr_daily_bc", None),
+        "cpr_daily_narrow":            getattr(r, "cpr_daily_narrow", None),
+        "cpr_weekly_pivot":            getattr(r, "cpr_weekly_pivot", None),
+        "cpr_weekly_tc":               getattr(r, "cpr_weekly_tc", None),
+        "cpr_weekly_bc":               getattr(r, "cpr_weekly_bc", None),
+        "psy_20":                      getattr(r, "psy_20", None),
+        "avwap":                       getattr(r, "avwap", None),
+        "avwap_upper_1sd":             getattr(r, "avwap_upper_1sd", None),
+        "avwap_lower_1sd":             getattr(r, "avwap_lower_1sd", None),
+        "price_vs_avwap":              getattr(r, "price_vs_avwap", None),
     }
 
 
@@ -522,6 +573,16 @@ def get_screening_results_get(
     only_bb_squeeze: bool = False,
     min_tqs: float | None = None,
     only_weinstein_stage2: bool = False,
+    only_hilega_buy: bool = False,
+    only_rsi_bullish_div: bool = False,
+    only_macd_bullish_div: bool = False,
+    only_boring_candle: bool = False,
+    only_explosive_candle: bool = False,
+    min_psy_20: float | None = None,
+    max_psy_20: float | None = None,
+    price_above_avwap: bool | None = None,
+    price_above_zlema21: bool | None = None,
+    only_cpr_narrow: bool = False,
     limit: int = 2500,
     db: Session = Depends(get_db),
 ):
@@ -559,6 +620,16 @@ def get_screening_results_get(
         only_bb_squeeze=only_bb_squeeze,
         min_tqs=min_tqs,
         only_weinstein_stage2=only_weinstein_stage2,
+        only_hilega_buy=only_hilega_buy,
+        only_rsi_bullish_div=only_rsi_bullish_div,
+        only_macd_bullish_div=only_macd_bullish_div,
+        only_boring_candle=only_boring_candle,
+        only_explosive_candle=only_explosive_candle,
+        min_psy_20=min_psy_20,
+        max_psy_20=max_psy_20,
+        price_above_avwap=price_above_avwap,
+        price_above_zlema21=price_above_zlema21,
+        only_cpr_narrow=only_cpr_narrow,
         limit=limit,
     )
 
@@ -606,6 +677,16 @@ def get_screening_results_post(params: ScreeningParams, db: Session = Depends(ge
         only_bb_squeeze=params.only_bb_squeeze,
         min_tqs=params.min_tqs,
         only_weinstein_stage2=params.only_weinstein_stage2,
+        only_hilega_buy=params.only_hilega_buy,
+        only_rsi_bullish_div=params.only_rsi_bullish_div,
+        only_macd_bullish_div=params.only_macd_bullish_div,
+        only_boring_candle=params.only_boring_candle,
+        only_explosive_candle=params.only_explosive_candle,
+        min_psy_20=params.min_psy_20,
+        max_psy_20=params.max_psy_20,
+        price_above_avwap=params.price_above_avwap,
+        price_above_zlema21=params.price_above_zlema21,
+        only_cpr_narrow=params.only_cpr_narrow,
         limit=params.limit,
     )
 

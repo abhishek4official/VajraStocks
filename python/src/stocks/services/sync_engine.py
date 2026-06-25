@@ -110,6 +110,9 @@ def calculate_derived_data_in_memory(
             "stochrsi_d":             _f(row.get("stochrsi_d")),
             "stochrsi_bullish_xover": _b(row.get("stochrsi_bullish_xover")),
             "stochrsi_bearish_xover": _b(row.get("stochrsi_bearish_xover")),
+            "zlema_21":               _f(row.get("zlema_21")),
+            "hm_rsi_wma21":           _f(row.get("hm_rsi_wma21")),
+            "hm_rsi_ema3":            _f(row.get("hm_rsi_ema3")),
         })
 
     # Cold-start: full historical price series is always passed for recalculate
@@ -241,6 +244,47 @@ class SyncEngine:
             )
 
             if total_pending == 0:
+                # When a specific symbol is manually requested, still force-refresh its
+                # derived indicators and screening snapshot even if prices are current.
+                if specific_symbols:
+                    logger.info(
+                        f"Manual sync requested for {specific_symbols} — prices already current. "
+                        f"Force-refreshing derived data and screening snapshot."
+                    )
+                    try:
+                        from stocks.services.screening import ScreeningService
+                        screening_service = ScreeningService(self.config, session)
+                        nifty_21d_return = screening_service._get_nifty_21d_return()
+
+                        for sym_obj in active_symbols:
+                            # Recalculate indicators from the full 300-day sliding window so
+                            # any newly added indicator columns get backfilled.
+                            sliding_start = datetime.date.today() - datetime.timedelta(days=300)
+                            db_prices = db_service.get_prices_for_window(sym_obj.id, sliding_start)
+                            if db_prices:
+                                # Pass all prices as clean_prices so every date gets overwritten.
+                                self.calculate_and_save_derived_data(
+                                    db_service, sym_obj, db_prices, commit=True
+                                )
+                                # Expire session cache so snapshot refresh reads freshly committed rows.
+                                session.expire_all()
+                            # Refresh the screening snapshot with the freshly computed indicators.
+                            screening_service.refresh_snapshot_for_symbol(
+                                sym_obj.id, nifty_21d_return=nifty_21d_return
+                            )
+                    except Exception as force_err:
+                        logger.error(f"Force-refresh failed: {force_err}")
+
+                    db_service.finalize_sync_job(job.id, total_symbols, processed_symbols, 0, "SUCCESS")
+                    return {
+                        "status": "SUCCESS",
+                        "job_id": job.run_id,
+                        "total_symbols": total_symbols,
+                        "processed_symbols": processed_symbols,
+                        "failed_symbols": 0,
+                        "records_inserted": 0,
+                    }
+
                 logger.info("All active symbols are fully up-to-date. Sync process completed.")
                 db_service.finalize_sync_job(job.id, total_symbols, processed_symbols, 0, "SUCCESS")
                 return {
@@ -552,6 +596,10 @@ class SyncEngine:
                 "stochrsi_d": None if pd.isna(row.get("stochrsi_d")) else float(row["stochrsi_d"]),
                 "stochrsi_bullish_xover": None if pd.isna(row.get("stochrsi_bullish_xover")) else bool(row["stochrsi_bullish_xover"]),
                 "stochrsi_bearish_xover": None if pd.isna(row.get("stochrsi_bearish_xover")) else bool(row["stochrsi_bearish_xover"]),
+                # New indicators
+                "zlema_21":     None if pd.isna(row.get("zlema_21"))     else float(row["zlema_21"]),
+                "hm_rsi_wma21": None if pd.isna(row.get("hm_rsi_wma21")) else float(row["hm_rsi_wma21"]),
+                "hm_rsi_ema3":  None if pd.isna(row.get("hm_rsi_ema3"))  else float(row["hm_rsi_ema3"]),
             }
             indicators_to_save.append(ind_dict)
 

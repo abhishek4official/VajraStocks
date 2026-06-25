@@ -18,6 +18,81 @@ from stocks.services.quant.planner import TradePlannerService
 from stocks.services.settings_service import SettingsService
 
 
+def _detect_divergence(ind_rows: list, prices_by_date: dict, indicator_field: str) -> int | None:
+    """Detect bullish divergence between close price and an indicator over the last ~16 bars.
+
+    Bullish: price makes lower low but indicator makes higher low.
+    Returns days since the second (more recent) swing low formed, or None if no bullish divergence.
+    """
+    import datetime as _dt
+    pairs = []
+    for row in reversed(ind_rows[:16]):  # oldest → newest
+        close = prices_by_date.get(row.trading_date)
+        val = getattr(row, indicator_field, None)
+        if close is not None and val is not None:
+            pairs.append((float(close), float(val), row.trading_date))
+
+    if len(pairs) < 6:
+        return None
+
+    # Swing lows → bullish divergence
+    lows = [
+        (i, pairs[i][0], pairs[i][1], pairs[i][2])
+        for i in range(1, len(pairs) - 1)
+        if pairs[i][0] <= pairs[i - 1][0] and pairs[i][0] <= pairs[i + 1][0]
+    ]
+    if len(lows) >= 2:
+        l1, l2 = lows[-2], lows[-1]
+        if l2[1] < l1[1] and l2[2] > l1[2]:
+            # l2[3] is the date the second swing low formed
+            return (_dt.date.today() - l2[3]).days
+
+    return None
+
+
+def _compute_avwap(price_rows: list) -> tuple[float | None, float | None, float | None]:
+    """Compute Anchored VWAP from the most recent gap-up candle (open > prev close by >1%).
+
+    price_rows: DailyPrice objects ordered newest→oldest.
+    Returns (avwap, upper_1sd, lower_1sd) or (None, None, None).
+    """
+    if len(price_rows) < 3:
+        return None, None, None
+
+    gap_up_idx = None
+    for i in range(len(price_rows) - 1):
+        curr = price_rows[i]
+        prev = price_rows[i + 1]
+        pc = float(prev.close)
+        co = float(curr.open)
+        if pc > 0 and (co - pc) / pc > 0.01:
+            gap_up_idx = i
+            break
+
+    if gap_up_idx is None:
+        return None, None, None
+
+    window = price_rows[: gap_up_idx + 1]
+    cum_tp_vol = 0.0
+    cum_vol = 0.0
+    for p in window:
+        tp = (float(p.high) + float(p.low) + float(p.close)) / 3
+        vol = float(p.volume)
+        cum_tp_vol += tp * vol
+        cum_vol += vol
+
+    if cum_vol <= 0:
+        return None, None, None
+
+    avwap = cum_tp_vol / cum_vol
+    variance_sum = sum(
+        float(p.volume) * (((float(p.high) + float(p.low) + float(p.close)) / 3) - avwap) ** 2
+        for p in window
+    )
+    std = (variance_sum / cum_vol) ** 0.5
+    return round(avwap, 2), round(avwap + std, 2), round(avwap - std, 2)
+
+
 class ScreeningService:
     """Service to maintain the screening_snapshots table for high-performance stock sweeps."""
 
@@ -114,6 +189,14 @@ class ScreeningService:
                 select(DailyPrice).filter_by(symbol_id=symbol_id).order_by(DailyPrice.trading_date.desc()).limit(21)
             ).all()
 
+            # Extended price history for AVWAP / weekly CPR (up to ~90 trading days).
+            avwap_prices = _prefetch.get("avwap_prices") if _prefetch else self.db.scalars(
+                select(DailyPrice)
+                .filter_by(symbol_id=symbol_id)
+                .order_by(DailyPrice.trading_date.desc())
+                .limit(90)
+            ).all()
+
             if not prices:
                 logger.debug(f"[{symbol_obj.symbol}] No price history found. Skipping snapshot refresh.")
                 return
@@ -194,7 +277,7 @@ class ScreeningService:
                 select(DailyIndicator)
                 .filter_by(symbol_id=symbol_id)
                 .order_by(DailyIndicator.trading_date.desc())
-                .limit(22)
+                .limit(45)
             ).all()
             ind = ind_rows[0] if ind_rows else None
             ind_prev = ind_rows[1] if len(ind_rows) > 1 else None
@@ -582,6 +665,101 @@ class ScreeningService:
                     else:
                         weinstein_stage = 1   # Basing — price below flat/slightly-rising SMA200
 
+            # 6i. New indicators: HM signal, divergence, ZLEMA, boring/explosive, CPR, PSY, AVWAP
+
+            # Hilega-Milega: days since RSI crossed above its 21-WMA (NULL when RSI is below WMA)
+            hilega_milega_signal = None
+            if ind:
+                rsi_c = getattr(ind, "rsi_14", None)
+                wma_c = getattr(ind, "hm_rsi_wma21", None)
+                if rsi_c is not None and wma_c is not None and float(rsi_c) > float(wma_c):
+                    # In buy zone — scan back to find the crossover day
+                    for i in range(1, len(ind_rows)):
+                        rp = getattr(ind_rows[i], "rsi_14", None)
+                        wp = getattr(ind_rows[i], "hm_rsi_wma21", None)
+                        if rp is None or wp is None:
+                            hilega_milega_signal = i  # data gap; use index as approx days
+                            break
+                        if float(rp) <= float(wp):
+                            # ind_rows[i] was below WMA → crossover happened at ind_rows[i-1]
+                            hilega_milega_signal = i  # i trading days since the crossover bar
+                            break
+                    else:
+                        # RSI has been above WMA for the entire window
+                        hilega_milega_signal = len(ind_rows)
+
+            # RSI and MACD divergence
+            rsi_divergence = _detect_divergence(ind_rows, prices_by_date, "rsi_14")
+            macd_divergence = _detect_divergence(ind_rows, prices_by_date, "macd_histogram")
+
+            # ZLEMA(21) snapshot
+            zlema_21_snap = float(ind.zlema_21) if ind and getattr(ind, "zlema_21", None) is not None else None
+            price_vs_zlema21 = None
+            if zlema_21_snap is not None:
+                price_vs_zlema21 = "ABOVE" if close_price >= zlema_21_snap else "BELOW"
+
+            # Boring candle (today) and Explosive candle (today follows a boring candle at ≥1.5×)
+            is_boring_candle = None
+            is_explosive_candle = None
+            if prices:
+                p0 = prices[0]
+                p0_range = float(p0.high) - float(p0.low)
+                p0_body = abs(float(p0.close) - float(p0.open))
+                p0_wick = p0_range - p0_body
+                is_boring_candle = bool(p0_wick > p0_body) if p0_range > 0 else False
+                if len(prices) >= 2:
+                    p1 = prices[1]
+                    p1_range = float(p1.high) - float(p1.low)
+                    p1_body = abs(float(p1.close) - float(p1.open))
+                    p1_wick = p1_range - p1_body
+                    prev_boring = bool(p1_wick > p1_body) if p1_range > 0 else False
+                    if prev_boring and p1_range > 0:
+                        is_explosive_candle = bool(p0_range >= 1.5 * p1_range)
+
+            # CPR Daily (from previous day's H/L/C)
+            cpr_daily_pivot = cpr_daily_tc = cpr_daily_bc = None
+            cpr_daily_narrow = None
+            if len(prices) >= 2:
+                p1 = prices[1]
+                dh, dl, dc = float(p1.high), float(p1.low), float(p1.close)
+                cpr_daily_pivot = round((dh + dl + dc) / 3, 2)
+                cpr_daily_tc = round((dh + dl) / 2, 2)
+                cpr_daily_bc = round(cpr_daily_pivot * 2 - cpr_daily_tc, 2)
+                if dc > 0:
+                    cpr_daily_narrow = abs(cpr_daily_tc - cpr_daily_bc) / dc * 100 < 0.5
+
+            # CPR Weekly (from previous week's H/L/C using avwap_prices)
+            cpr_weekly_pivot = cpr_weekly_tc = cpr_weekly_bc = None
+            if avwap_prices and len(avwap_prices) >= 5:
+                from collections import defaultdict as _dd
+                week_groups: dict = _dd(list)
+                for p in avwap_prices:
+                    iso = p.trading_date.isocalendar()
+                    week_groups[(iso[0], iso[1])].append(p)
+                sorted_weeks = sorted(week_groups.keys())
+                if len(sorted_weeks) >= 2:
+                    prev_week_bars = week_groups[sorted_weeks[-2]]
+                    wh = max(float(p.high) for p in prev_week_bars)
+                    wl = min(float(p.low) for p in prev_week_bars)
+                    wc = float(max(prev_week_bars, key=lambda p: p.trading_date).close)
+                    cpr_weekly_pivot = round((wh + wl + wc) / 3, 2)
+                    cpr_weekly_tc = round((wh + wl) / 2, 2)
+                    cpr_weekly_bc = round(cpr_weekly_pivot * 2 - cpr_weekly_tc, 2)
+
+            # Psychological Line (20) — % of last 20 sessions where close > prev close
+            psy_20 = None
+            if len(prices) >= 21:
+                up_days = sum(
+                    1 for i in range(20) if float(prices[i].close) > float(prices[i + 1].close)
+                )
+                psy_20 = round(up_days / 20 * 100, 1)
+
+            # Anchored VWAP
+            avwap_val, avwap_upper_1sd, avwap_lower_1sd = _compute_avwap(avwap_prices or prices)
+            price_vs_avwap = None
+            if avwap_val is not None:
+                price_vs_avwap = "ABOVE" if close_price >= avwap_val else "BELOW"
+
             # 7. Upsert the ScreeningSnapshot
             snapshot = _prefetch.get("snapshot") if _prefetch else self.db.scalar(
                 select(ScreeningSnapshot).filter_by(symbol_id=symbol_id)
@@ -659,6 +837,26 @@ class ScreeningService:
                     is_bb_squeeze=is_bb_squeeze,
                     tqs=tqs,
                     weinstein_stage=weinstein_stage,
+                    # New indicators
+                    hilega_milega_signal=hilega_milega_signal,
+                    rsi_divergence=rsi_divergence,
+                    macd_divergence=macd_divergence,
+                    zlema_21=zlema_21_snap,
+                    price_vs_zlema21=price_vs_zlema21,
+                    is_boring_candle=is_boring_candle,
+                    is_explosive_candle=is_explosive_candle,
+                    cpr_daily_pivot=cpr_daily_pivot,
+                    cpr_daily_tc=cpr_daily_tc,
+                    cpr_daily_bc=cpr_daily_bc,
+                    cpr_daily_narrow=cpr_daily_narrow,
+                    cpr_weekly_pivot=cpr_weekly_pivot,
+                    cpr_weekly_tc=cpr_weekly_tc,
+                    cpr_weekly_bc=cpr_weekly_bc,
+                    psy_20=psy_20,
+                    avwap=avwap_val,
+                    avwap_upper_1sd=avwap_upper_1sd,
+                    avwap_lower_1sd=avwap_lower_1sd,
+                    price_vs_avwap=price_vs_avwap,
                 )
                 self.db.add(snapshot)
             else:
@@ -730,6 +928,26 @@ class ScreeningService:
                 snapshot.is_bb_squeeze               = is_bb_squeeze
                 snapshot.tqs                         = tqs
                 snapshot.weinstein_stage             = weinstein_stage
+                # New indicators
+                snapshot.hilega_milega_signal        = hilega_milega_signal
+                snapshot.rsi_divergence              = rsi_divergence
+                snapshot.macd_divergence             = macd_divergence
+                snapshot.zlema_21                    = zlema_21_snap
+                snapshot.price_vs_zlema21            = price_vs_zlema21
+                snapshot.is_boring_candle            = is_boring_candle
+                snapshot.is_explosive_candle         = is_explosive_candle
+                snapshot.cpr_daily_pivot             = cpr_daily_pivot
+                snapshot.cpr_daily_tc                = cpr_daily_tc
+                snapshot.cpr_daily_bc                = cpr_daily_bc
+                snapshot.cpr_daily_narrow            = cpr_daily_narrow
+                snapshot.cpr_weekly_pivot            = cpr_weekly_pivot
+                snapshot.cpr_weekly_tc               = cpr_weekly_tc
+                snapshot.cpr_weekly_bc               = cpr_weekly_bc
+                snapshot.psy_20                      = psy_20
+                snapshot.avwap                       = avwap_val
+                snapshot.avwap_upper_1sd             = avwap_upper_1sd
+                snapshot.avwap_lower_1sd             = avwap_lower_1sd
+                snapshot.price_vs_avwap              = price_vs_avwap
             if commit:
                 self.db.commit()
         except Exception as e:
@@ -788,9 +1006,9 @@ class ScreeningService:
             mtf = self._mtf_thresholds()
             weekly_ema_len = mtf["weekly_ema"]
 
-            # ── Bulk load 1: Prices — last 45 calendar days covers 21+ trading days
-            #    and the 35-day RS window in a single query.
-            price_cutoff = dt.date.today() - dt.timedelta(days=45)
+            # ── Bulk load 1: Prices — 130 calendar days covers AVWAP anchor search (~90 trading days),
+            #    RS window, NR7, and all rolling-return windows in a single query.
+            price_cutoff = dt.date.today() - dt.timedelta(days=130)
             rs_cutoff    = dt.date.today() - dt.timedelta(days=35)
             raw_prices = []
             for chunk in self._id_chunks(symbol_ids):
@@ -810,7 +1028,8 @@ class ScreeningService:
             for p in raw_prices:
                 all_prices_by_symbol[p.symbol_id].append(p)
 
-            prices_by_symbol   = {sid: rows[:21] for sid, rows in all_prices_by_symbol.items()}
+            prices_by_symbol      = {sid: rows[:21] for sid, rows in all_prices_by_symbol.items()}
+            avwap_prices_by_symbol = {sid: rows for sid, rows in all_prices_by_symbol.items()}
             rs_oldest_by_symbol: dict[int, object] = {}
             for sid, price_list in all_prices_by_symbol.items():
                 eligible = [p for p in price_list if p.trading_date >= rs_cutoff]
@@ -818,7 +1037,7 @@ class ScreeningService:
                     rs_oldest_by_symbol[sid] = eligible[-1]  # oldest = last in desc-ordered list
 
             # ── Bulk load 2: Indicators — last 35 calendar days covers 22+ trading days
-            ind_cutoff = dt.date.today() - dt.timedelta(days=35)
+            ind_cutoff = dt.date.today() - dt.timedelta(days=60)  # 60d window for HM crossover lookback
             raw_indicators = []
             for chunk in self._id_chunks(symbol_ids):
                 raw_indicators.extend(
@@ -834,7 +1053,7 @@ class ScreeningService:
             indicators_by_symbol: dict[int, list] = defaultdict(list)
             for ind in raw_indicators:
                 indicators_by_symbol[ind.symbol_id].append(ind)
-            indicators_by_symbol = {sid: rows[:22] for sid, rows in indicators_by_symbol.items()}
+            indicators_by_symbol = {sid: rows[:45] for sid, rows in indicators_by_symbol.items()}
 
             # ── Bulk load 3: Latest Heikin-Ashi candle per symbol
             ha_by_symbol: dict = {}
@@ -942,6 +1161,7 @@ class ScreeningService:
                             _prefetch={
                                 "symbol":       sym,
                                 "prices":       prices_by_symbol.get(sym.id, []),
+                                "avwap_prices": avwap_prices_by_symbol.get(sym.id, []),
                                 "rs_oldest":    rs_oldest_by_symbol.get(sym.id),
                                 "ha":           ha_by_symbol.get(sym.id),
                                 "ind_rows":     indicators_by_symbol.get(sym.id, []),
@@ -998,6 +1218,17 @@ class ScreeningService:
         only_bb_squeeze: bool = False,
         min_tqs: float | None = None,
         only_weinstein_stage2: bool = False,
+        # New indicator filters
+        only_hilega_buy: bool = False,
+        only_rsi_bullish_div: bool = False,
+        only_macd_bullish_div: bool = False,
+        only_boring_candle: bool = False,
+        only_explosive_candle: bool = False,
+        min_psy_20: float | None = None,
+        max_psy_20: float | None = None,
+        price_above_avwap: bool | None = None,
+        price_above_zlema21: bool | None = None,
+        only_cpr_narrow: bool = False,
         limit: int = 2500,
     ) -> list[ScreeningSnapshot]:
         """Runs high-speed query sweeps directly against the narrow screening_snapshots table."""
@@ -1082,6 +1313,30 @@ class ScreeningService:
             stmt = stmt.where(ScreeningSnapshot.tqs >= min_tqs, ScreeningSnapshot.tqs.is_not(None))
         if only_weinstein_stage2:
             stmt = stmt.where(ScreeningSnapshot.weinstein_stage == 2)
+        if only_hilega_buy:
+            stmt = stmt.where(ScreeningSnapshot.hilega_milega_signal == "BUY")
+        if only_rsi_bullish_div:
+            stmt = stmt.where(ScreeningSnapshot.rsi_divergence == "BULLISH")
+        if only_macd_bullish_div:
+            stmt = stmt.where(ScreeningSnapshot.macd_divergence == "BULLISH")
+        if only_boring_candle:
+            stmt = stmt.where(ScreeningSnapshot.is_boring_candle == True)  # noqa: E712
+        if only_explosive_candle:
+            stmt = stmt.where(ScreeningSnapshot.is_explosive_candle == True)  # noqa: E712
+        if min_psy_20 is not None:
+            stmt = stmt.where(ScreeningSnapshot.psy_20 >= min_psy_20, ScreeningSnapshot.psy_20.is_not(None))
+        if max_psy_20 is not None:
+            stmt = stmt.where(ScreeningSnapshot.psy_20 <= max_psy_20, ScreeningSnapshot.psy_20.is_not(None))
+        if price_above_avwap is True:
+            stmt = stmt.where(ScreeningSnapshot.price_vs_avwap == "ABOVE")
+        elif price_above_avwap is False:
+            stmt = stmt.where(ScreeningSnapshot.price_vs_avwap == "BELOW")
+        if price_above_zlema21 is True:
+            stmt = stmt.where(ScreeningSnapshot.price_vs_zlema21 == "ABOVE")
+        elif price_above_zlema21 is False:
+            stmt = stmt.where(ScreeningSnapshot.price_vs_zlema21 == "BELOW")
+        if only_cpr_narrow:
+            stmt = stmt.where(ScreeningSnapshot.cpr_daily_narrow == True)  # noqa: E712
 
         stmt = stmt.order_by(ScreeningSnapshot.symbol.asc())
 

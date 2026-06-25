@@ -145,7 +145,7 @@ def predict_latest_v2() -> pd.DataFrame:
     results["signal_grade"] = results.apply(
         lambda r: _grade(r, regime_ok), axis=1
     )
-    results["ev_rank"] = results["ev_score"].rank(ascending=False).astype(int)
+    results["ev_rank"] = results["ev_score"].rank(ascending=False, na_option="bottom").astype(int)
 
     results = results.sort_values("ev_rank").reset_index(drop=True)
     return results
@@ -239,13 +239,18 @@ def run_ml2_snapshot_update(engine) -> int:
     result["volume_ok"]   = result["volume_ratio_20d"] >= VOLUME_MIN_RATIO
 
     result["ml2_signal"] = result.apply(lambda r: _grade(r, regime_ok), axis=1)
-    result["ml2_rank"]   = result["ev_score"].rank(ascending=False).astype(int)
+    # na_option='bottom' ensures NaN ev_scores get last rank (no NaN in output → safe int cast)
+    result["ml2_rank"]   = result["ev_score"].rank(ascending=False, na_option="bottom").astype(int)
 
     # ── Bulk write to screening_snapshots ─────────────────────────────────────
     # V2 is the primary ML signal — writes to both ml2_* and the shared ml_* columns.
     updated = 0
     with engine.begin() as conn:
         for _, row in result.iterrows():
+            import math as _math
+            ev_val = row["ev_score"]
+            if _math.isnan(ev_val) or _math.isinf(ev_val):
+                continue
             conn.execute(
                 text("""
                     UPDATE screening_snapshots
@@ -259,7 +264,7 @@ def run_ml2_snapshot_update(engine) -> int:
                 {
                     "p_tp":   float(row["p_tp"]),
                     "p_sl":   float(row["p_sl"]),
-                    "ev":     float(row["ev_score"]),
+                    "ev":     float(ev_val),
                     "rank":   int(row["ml2_rank"]),
                     "signal": str(row["ml2_signal"]),
                     "sid":    int(row["symbol_id"]),

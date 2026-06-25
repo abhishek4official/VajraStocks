@@ -53,6 +53,16 @@ interface ScreenerFilters {
   only_bb_squeeze?: boolean;
   min_tqs?: number;
   only_weinstein_stage2?: boolean;
+  only_hilega_buy?: boolean;
+  only_rsi_bullish_div?: boolean;
+  only_macd_bullish_div?: boolean;
+  only_boring_candle?: boolean;
+  only_explosive_candle?: boolean;
+  min_psy_20?: number;
+  max_psy_20?: number;
+  price_above_avwap?: boolean;
+  price_above_zlema21?: boolean;
+  only_cpr_narrow?: boolean;
   limit?: number;
 }
 
@@ -80,7 +90,7 @@ export interface WatchlistAlert {
   createdAt: string;
 }
 
-type TabId = 'explorer' | 'screener' | 'strategy' | 'sync' | 'ai-research' | 'portfolio' | 'watchlist' | 'compare' | 'settings' | 'about' | 'ml2-training';
+type TabId = 'explorer' | 'screener' | 'strategy' | 'sync' | 'ai-research' | 'portfolio' | 'watchlist' | 'compare' | 'swing-picks' | 'settings' | 'about' | 'ml2-training';
 type ChartTimeframe = '1W' | '1M' | '3M' | '6M' | '1Y' | 'MAX';
 
 // ─── Store shape ──────────────────────────────────────────────────────────────
@@ -167,6 +177,12 @@ interface StockState {
   removeAlert: (id: string) => void;
   checkAlerts: () => void;
 
+  // Qualify queue (Screener → Picks)
+  qualifyQueue: string[];
+  addToQualifyQueue: (symbol: string) => void;
+  removeFromQualifyQueue: (symbol: string) => void;
+  clearQualifyQueue: () => void;
+
   // Async
   fetchSymbols: (activeOnly?: boolean) => Promise<void>;
   setSelectedSymbol: (symbol: string) => Promise<void>;
@@ -214,7 +230,7 @@ function saveAlerts(a: WatchlistAlert[]) {
 
 function getInitialTab(): TabId {
   const path = window.location.pathname.replace(/^\/+/, '').split('/')[0];
-  const valid: TabId[] = ['explorer', 'screener', 'strategy', 'sync', 'ai-research', 'portfolio', 'watchlist', 'compare', 'settings', 'about', 'ml2-training'];
+  const valid: TabId[] = ['explorer', 'screener', 'strategy', 'sync', 'ai-research', 'portfolio', 'watchlist', 'compare', 'swing-picks', 'settings', 'about', 'ml2-training'];
   return valid.includes(path as TabId) ? (path as TabId) : 'explorer';
 }
 
@@ -346,6 +362,15 @@ export const useStockStore = create<StockState>((set, get) => ({
   isLoading: false,
   isSyncing: false,
   error: null,
+
+  qualifyQueue: [],
+  addToQualifyQueue: (symbol) => set(s => ({
+    qualifyQueue: s.qualifyQueue.includes(symbol) ? s.qualifyQueue : [...s.qualifyQueue, symbol],
+  })),
+  removeFromQualifyQueue: (symbol) => set(s => ({
+    qualifyQueue: s.qualifyQueue.filter(x => x !== symbol),
+  })),
+  clearQualifyQueue: () => set({ qualifyQueue: [] }),
 
   // ── Basic setters ──────────────────────────────────────────────────────────
 

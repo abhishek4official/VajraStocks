@@ -279,17 +279,24 @@ class ConfluenceService:
         return saved_entities
 
     @staticmethod
-    def select_best_resistance(resistances: list, current_price: float, atr_abs: float = 0.0):
-        """Pick the highest-strength resistance that is meaningfully above current_price.
+    def select_best_resistance(
+        resistances: list,
+        current_price: float,
+        atr_abs: float = 0.0,
+        min_strength: int = 30,
+    ):
+        """Pick the nearest resistance that is meaningfully above current_price.
 
-        Filters out levels within 0.5×ATR of price (prevents R:R collapse at breakout),
-        then selects by strength_score DESC (tiebreak: nearest price).
-        Falls back to the nearest resistance if all levels are filtered out.
-        Returns None when the input list is empty.
+        Filters out levels within 0.5×ATR of price, then picks the closest
+        level that meets a minimum strength floor (prevents chasing a distant
+        high-score level past an intermediate wall). Falls back to unfiltered
+        nearest if nothing meets the strength floor.
         """
         if not resistances:
             return None
         min_gap = max(atr_abs * 0.5, current_price * 0.005)
         valid = [r for r in resistances if float(r.price) > current_price + min_gap]
         pool = valid if valid else resistances
-        return max(pool, key=lambda r: (r.strength_score, -float(r.price)))
+        strong = [r for r in pool if r.strength_score >= min_strength]
+        candidates = strong if strong else pool
+        return min(candidates, key=lambda r: float(r.price))
