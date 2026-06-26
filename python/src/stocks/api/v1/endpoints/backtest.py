@@ -27,6 +27,7 @@ from stocks.services.quant.backtest.portfolio import run_strategy_backtest
 from stocks.services.quant.backtest.replay import run_symbol_backtest
 from stocks.services.quant.backtest.signals import (
     breakout_signals,
+    ema_crossover_signals,
     get_signal,
     list_signals,
     sma_crossover_signals,
@@ -139,6 +140,8 @@ def _build_signal_fn(signal: str, params: dict[str, Any]):
     params = params or {}
     if signal == "sma_crossover":
         return lambda b: sma_crossover_signals(b, **params)
+    if signal == "ema_crossover":
+        return lambda b: ema_crossover_signals(b, **params)
     if signal == "breakout":
         return lambda b: breakout_signals(b, **params)
     return get_signal(signal)  # raises ValueError for unknown names

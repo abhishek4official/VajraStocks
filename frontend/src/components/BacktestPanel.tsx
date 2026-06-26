@@ -18,6 +18,10 @@ const PARAM_FIELDS: Record<string, { key: string; label: string; def: number }[]
     { key: 'fast', label: 'Fast SMA', def: 20 },
     { key: 'slow', label: 'Slow SMA', def: 50 },
   ],
+  ema_crossover: [
+    { key: 'fast', label: 'Fast EMA', def: 12 },
+    { key: 'slow', label: 'Slow EMA', def: 26 },
+  ],
   breakout: [
     { key: 'entry_lookback', label: 'Entry lookback', def: 20 },
     { key: 'exit_lookback', label: 'Exit lookback', def: 10 },

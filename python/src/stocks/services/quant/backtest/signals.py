@@ -38,6 +38,29 @@ def sma_crossover_signals(
     return cross_up.tolist(), cross_down.tolist()
 
 
+def ema_crossover_signals(
+    bars: pd.DataFrame,
+    fast: int = 12,
+    slow: int = 26,
+) -> tuple[list[bool], list[bool]]:
+    """EMA crossover: enter when the fast EMA crosses above the slow EMA, exit on the cross
+    below. Uses standard (adjust=False) exponential smoothing seeded at the first close, so
+    the first bar carries no signal.
+    """
+    if bars.empty:
+        return [], []
+
+    close = bars["close"].astype(float)
+    fast_ma = close.ewm(span=fast, adjust=False).mean()
+    slow_ma = close.ewm(span=slow, adjust=False).mean()
+
+    above = fast_ma > slow_ma
+    below = fast_ma < slow_ma
+    cross_up = above & ~above.shift(1, fill_value=False)
+    cross_down = below & ~below.shift(1, fill_value=False)
+    return cross_up.tolist(), cross_down.tolist()
+
+
 def breakout_signals(
     bars: pd.DataFrame,
     entry_lookback: int = 20,
@@ -65,6 +88,7 @@ def breakout_signals(
 
 _SIGNAL_REGISTRY: dict[str, SignalFn] = {
     "sma_crossover": sma_crossover_signals,
+    "ema_crossover": ema_crossover_signals,
     "breakout": breakout_signals,
 }
 

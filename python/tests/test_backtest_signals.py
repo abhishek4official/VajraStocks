@@ -7,6 +7,7 @@ import pytest
 
 from stocks.services.quant.backtest.signals import (
     breakout_signals,
+    ema_crossover_signals,
     get_signal,
     list_signals,
     sma_crossover_signals,
@@ -80,6 +81,26 @@ def test_breakout_empty_bars():
     assert exits == []
 
 
+# ── EMA crossover ───────────────────────────────────────────────────────────
+
+
+def test_ema_crossover_single_entry_then_exit():
+    # Flat, then a strong ramp up (fast EMA crosses above), then a ramp down (crosses below).
+    closes = [10, 10, 10, 10, 10, 12, 15, 19, 24, 30, 28, 24, 19, 13, 10]
+    entries, exits = ema_crossover_signals(_bars(closes), fast=3, slow=6)
+    entry_idx = [i for i, e in enumerate(entries) if e]
+    exit_idx = [i for i, x in enumerate(exits) if x]
+    assert len(entry_idx) == 1
+    assert len(exit_idx) == 1
+    assert entry_idx[0] < exit_idx[0]
+
+
+def test_ema_crossover_empty_bars():
+    entries, exits = ema_crossover_signals(_bars([]), fast=3, slow=6)
+    assert entries == []
+    assert exits == []
+
+
 # ── signal registry ─────────────────────────────────────────────────────────
 
 
@@ -87,6 +108,7 @@ def test_registry_lists_builtin_signals():
     names = list_signals()
     assert "sma_crossover" in names
     assert "breakout" in names
+    assert "ema_crossover" in names
 
 
 def test_registry_get_returns_callable():
