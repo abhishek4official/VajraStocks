@@ -71,7 +71,7 @@ def portfolio_backtest(
     dates = list(close.index)
     equity_curve: list[float] = []
     equity = config.initial_capital
-    for i, d in enumerate(dates):
+    for i in range(len(dates)):
         if i == 0:
             equity = config.initial_capital * (1.0 - cost * float(turnover.iloc[0]))
         else:
