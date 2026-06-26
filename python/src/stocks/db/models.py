@@ -969,3 +969,41 @@ class BacktestTrade(Base):
     reason: Mapped[str] = mapped_column(String(20), nullable=False)
 
     run: Mapped["BacktestRun"] = relationship("BacktestRun", back_populates="trades")
+
+
+# ── Trade Journal domain (V2.0 spec M3) — the product's memory of decisions ──
+
+
+class JournalTrade(Base):
+    """A logged trade: planned entry/stop/target, actual entry/exit, thesis, and review.
+
+    One row per trade (single entry/exit). Realized P&L, return, and R-multiple are computed
+    on read from these fields by services.journal.analytics — never stored fabricated.
+    """
+
+    __tablename__ = "journal_trades"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    symbol: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    setup: Mapped[str] = mapped_column(String(60), nullable=False, default="", index=True)
+    side: Mapped[str] = mapped_column(String(10), nullable=False, default="LONG")  # LONG / SHORT
+    status: Mapped[str] = mapped_column(String(10), nullable=False, default="OPEN", index=True)  # OPEN / CLOSED
+
+    # Entry (required) + plan
+    entry_date: Mapped[datetime.date] = mapped_column(Date, nullable=False)
+    entry_price: Mapped[float] = mapped_column(Float, nullable=False)
+    qty: Mapped[float] = mapped_column(Float, nullable=False)
+    stop_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    target_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    # Exit (null while open)
+    exit_date: Mapped[datetime.date | None] = mapped_column(Date, nullable=True)
+    exit_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    fees: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+
+    # Journaling
+    thesis: Mapped[str | None] = mapped_column(Text, nullable=True)
+    mistake_tags: Mapped[str | None] = mapped_column(Text, nullable=True)  # comma-separated
+
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=func.now())
+    updated_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now())
