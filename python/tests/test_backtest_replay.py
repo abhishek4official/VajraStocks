@@ -65,3 +65,10 @@ def test_adjusted_flows_through(store):
     raw = run_symbol_backtest(store, "ACME", _sma, adjusted=False)
     adj = run_symbol_backtest(store, "ACME", _sma, adjusted=True, actions=actions)
     assert adj.equity_curve != raw.equity_curve
+
+
+def test_accepts_signal_name_from_registry(store):
+    store.write_bars("ACME", _ohlc([10, 10, 10, 12, 14, 12, 10, 9]))
+    # Passing a registered name resolves to the signal generator.
+    res = run_symbol_backtest(store, "ACME", "breakout")
+    assert res.metrics.trades >= 0  # runs end-to-end without error
