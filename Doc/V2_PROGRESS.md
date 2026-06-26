@@ -96,7 +96,7 @@
 **M2 #1** — single-name setup replay wired to `BarStore`. It makes the data plane + engine immediately useful (the swing trader's "has this setup worked on this stock?"), then tackle **#2** (swing.py portfolio + walk-forward) for the quant.
 
 ---
-## Known issue (parked 2026-06-27): backtest SAVE fails on MSSQL
+## RESOLVED (2026-06-27): backtest SAVE on MSSQL
 - Compute/run is correct (real metrics verified on RELIANCE). Only `save=true` fails on **MSSQL LocalDB** (the app's real DB via `%APPDATA%/VajraStocks/config.yaml`), not on SQLite dev DB.
 - Error: `Invalid column name 'backtest_id'/'metric'/'value'` — the `backtest_metrics`/`backtest_trades` tables exist in MSSQL with a **stale/mismatched schema**; `create_all` skips tables that already exist by name.
-- **Fix:** drop the 3 `backtest_*` tables in MSSQL, add a proper **alembic migration** for them. LESSON: new tables must ship as alembic migrations, not rely on `create_all` (esp. MSSQL).
+- **Resolved:** the MSSQL `backtest_metrics`/`backtest_trades` had a pre-existing *draft* schema (`run_id`/`metric_name`/`quantity`…) that `create_all` skipped. Dropped & rebuilt the 3 tables → columns now match the models; a full adjusted+save run on RELIANCE succeeds on MSSQL. No code change (models were correct). LESSON: `create_all` only creates absent-by-name tables — it won't fix a name collision with a stale schema.
