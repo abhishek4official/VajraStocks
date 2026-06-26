@@ -1,7 +1,7 @@
 # VajraStocks 2.0 — Build Progress & Resume Checklist
 
 **Branch:** `feature/v2-hybrid-db` (off `feature/screener-report`)
-**Tests:** 147 passing · **Spec:** `Doc/VajraStocks_V2.0_PRD_BRD_Architecture.md`
+**Tests:** 153 passing · **Spec:** `Doc/VajraStocks_V2.0_PRD_BRD_Architecture.md`
 **Last updated:** 2026-06-26
 
 > Convention: all work is TDD (test first), committed under Abhishek (no Claude co-author).
@@ -40,8 +40,10 @@
 
 ### M2 — finish the backtest engine (NEXT)
 - [x] **#1 Single-name "setup replay"** — `run_symbol_backtest` + `sma_crossover_signals` wired to `BarStore`. DONE.
-- [ ] More single-name setups (EMA pullback, breakout, RSI) as signal fns
+- [x] Donchian **breakout** setup + **named signal registry** (`register/get/list_signals`); `run_symbol_backtest` accepts a signal name or callable.
+- [ ] More setups (EMA pullback, RSI) — need indicator infra for clean testing
 - [ ] **#2 Wire `swing.py` strategies** — they are cross-sectional/portfolio (`generate_signals(universe)`), so this needs a **portfolio-level engine + walk-forward**, not the single-name one. Larger. *(recommended next)*
+- [ ] Persist results: `backtests`/`backtest_metrics`/`backtest_trades` tables (+ API/UI, real backtest node back in the agent graph)
 - [ ] Walk-forward analysis + purged/embargoed CV + deflated-Sharpe / multiple-testing guard
 - [ ] Persist results: `backtests` / `backtest_metrics` / `backtest_trades` tables (reproducible, stored)
 - [ ] Expose via API + UI ("Backtest Lab"); re-insert a **real** backtest node into the agent graph
