@@ -1,7 +1,7 @@
 # VajraStocks 2.0 — Build Progress & Resume Checklist
 
 **Branch:** `feature/v2-hybrid-db` (off `feature/screener-report`)
-**Tests:** 172 passing · **Spec:** `Doc/VajraStocks_V2.0_PRD_BRD_Architecture.md`
+**Tests:** 186 passing · **Spec:** `Doc/VajraStocks_V2.0_PRD_BRD_Architecture.md`
 **Last updated:** 2026-06-26
 
 > Convention: all work is TDD (test first), committed under Abhishek (no Claude co-author).
@@ -38,19 +38,19 @@
 
 ## ⏳ PENDING
 
-### M2 — backtest engine (backend ESSENTIALLY COMPLETE)
+### M2 — backtest engine (backend COMPLETE)
 - [x] **#1 Single-name setup replay** — `run_symbol_backtest` wired to `BarStore` (adjusted bars)
 - [x] Setups + **named signal registry** — `sma_crossover`, Donchian `breakout`; run by name or callable
 - [x] **Persist results** — `backtests`/`backtest_metrics`/`backtest_trades` + `BacktestRepository`; reproducibility-on-record test (stored == fresh re-run). *(Tables auto-create via `create_all`; dedicated alembic migration is a nice-to-have.)*
 - [x] **Backtest Lab API** — `/backtest/signals`, `/run`, `/runs`, `/runs/{id}`, `/walk-forward`; `get_bar_store` dep
 - [x] **Walk-forward** — `walkforward.py` anchored expanding-window WFA (grid-search IS, evaluate OOS) + API
-- [x] **#2 Portfolio backtest** — `portfolio.py` weight-based `portfolio_backtest` (turnover cost, no-lookahead) + `run_strategy_backtest` adapter so the real `swing.py` strategies plug in
-- [x] **Frontend "Backtest Lab" panel** — new Backtest tab + `BacktestPanel`: symbol/setup/params/stop/target/costs/adjusted/save → metrics + trade table + saved-runs list. Wired to `/api/v1/backtest/*`. Typechecks + prod build clean.
-- [x] **Initial BarStore backfill trigger** — `POST /backtest/backfill` + `backfill-columnar` CLI + "Backfill data" button in the panel. Existing installs can populate the columnar store on demand (incremental; `full=true` re-mirrors all).
-- [ ] Portfolio backtest **API endpoint** + real-swing-strategy **integration test** (realistic multi-month data)
-- [ ] Re-insert a **real** backtest node into the agent graph (lower priority)
-- [ ] Optional extras: EMA/RSI setups, purged/embargoed CV, deflated-Sharpe
-- [ ] Make the screener actually **read** `BarStore` (Parquet mirror is written; not yet read by screener)
+- [x] **#2 Portfolio backtest** — `portfolio.py` weight-based engine + `run_strategy_backtest` adapter + `POST /backtest/portfolio`; **real Minervini swing strategy** runs end-to-end (integration test)
+- [x] **Frontend "Backtest Lab" panel** + **Backfill** (`POST /backtest/backfill`, CLI `backfill-columnar`, panel button). Typechecks + prod build clean.
+- [x] **EMA crossover** setup (registered + API + panel) — setups now: sma / ema / breakout
+- [x] **Statistical guards** — `statistics.py`: probabilistic + deflated Sharpe (multiple-testing / overfitting), scipy cross-checked
+- [ ] **Deferred to M4 (AI tool contract):** real backtest node in the agent graph — better as a typed copilot tool than a fixed graph node
+- [ ] Optional: RSI setup; purged/embargoed CV; expose PSR/DSR in the `/run` response
+- [ ] Make the screener actually **read** `BarStore` (M1/M6 data-model work; mirror written, not yet read)
 
 ### M1 — rest of Foundation (not started)
 - [ ] Real **job worker** (SQLite-backed queue: progress / cancel / retry) — replaces the thin post-sync hook
