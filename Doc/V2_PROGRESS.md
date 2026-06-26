@@ -1,7 +1,7 @@
 # VajraStocks 2.0 — Build Progress & Resume Checklist
 
 **Branch:** `feature/v2-hybrid-db` (off `feature/screener-report`)
-**Tests:** 203 passing · **Spec:** `Doc/VajraStocks_V2.0_PRD_BRD_Architecture.md`
+**Tests:** 215 passing · **Spec:** `Doc/VajraStocks_V2.0_PRD_BRD_Architecture.md`
 **Last updated:** 2026-06-26
 
 > Convention: all work is TDD (test first), committed under Abhishek (no Claude co-author).
@@ -52,8 +52,9 @@
 - [ ] Optional: RSI setup; purged/embargoed CV; expose PSR/DSR in the `/run` response
 - [ ] Make the screener actually **read** `BarStore` (M1/M6 data-model work; mirror written, not yet read)
 
-### M1 — rest of Foundation (not started)
-- [ ] Real **job worker** (SQLite-backed queue: progress / cancel / retry) — replaces the thin post-sync hook
+### M1 — rest of Foundation
+- [x] **Job worker (DB-backed)** — `Job` model + `JobRunner` (enqueue/run_next/cancel/retry/progress) + threaded `JobWorker` (off-request-thread, started in lifespan) + handler registry. API `/jobs` (enqueue/list/get/cancel/retry). `columnar_backfill` handler makes the minutes-long backfill a cancellable job with progress. *(DB-backed so it works on MSSQL, not just SQLite.)*
+- [ ] **Migrate the EOD sync onto the worker** — the remaining step to actually fix the startup-sync-blocks-everything problem (scheduler currently runs sync in an executor; enqueue a `sync` job instead). Follow-up.
 - [ ] **Incremental indicator recompute** (only new bars)
 - [ ] **Kill the 96-col god-table**: slim typed snapshot + JSON long-tail (`features_json`)
 
