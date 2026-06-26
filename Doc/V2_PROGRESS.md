@@ -45,7 +45,8 @@
 - [x] **Backtest Lab API** — `/backtest/signals`, `/run`, `/runs`, `/runs/{id}`, `/walk-forward`; `get_bar_store` dep
 - [x] **Walk-forward** — `walkforward.py` anchored expanding-window WFA (grid-search IS, evaluate OOS) + API
 - [x] **#2 Portfolio backtest** — `portfolio.py` weight-based `portfolio_backtest` (turnover cost, no-lookahead) + `run_strategy_backtest` adapter so the real `swing.py` strategies plug in
-- [ ] **Frontend "Backtest Lab" UI panel** (consume the API) — main remaining M2 piece
+- [x] **Frontend "Backtest Lab" panel** — new Backtest tab + `BacktestPanel`: symbol/setup/params/stop/target/costs/adjusted/save → metrics + trade table + saved-runs list. Wired to `/api/v1/backtest/*`. Typechecks + prod build clean.
+- [ ] **Initial BarStore backfill trigger** — the panel needs the columnar store populated; today it only fills via `sync_columnar_store` after the next sync. Add a one-time backfill (API/CLI) so existing installs get data without waiting. **← do this so the panel shows real results**
 - [ ] Portfolio backtest **API endpoint** + real-swing-strategy **integration test** (realistic multi-month data)
 - [ ] Re-insert a **real** backtest node into the agent graph (lower priority)
 - [ ] Optional extras: EMA/RSI setups, purged/embargoed CV, deflated-Sharpe
