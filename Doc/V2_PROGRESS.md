@@ -1,7 +1,7 @@
 # VajraStocks 2.0 — Build Progress & Resume Checklist
 
 **Branch:** `feature/v2-hybrid-db` (off `feature/screener-report`)
-**Tests:** 186 passing · **Spec:** `Doc/VajraStocks_V2.0_PRD_BRD_Architecture.md`
+**Tests:** 203 passing · **Spec:** `Doc/VajraStocks_V2.0_PRD_BRD_Architecture.md`
 **Last updated:** 2026-06-26
 
 > Convention: all work is TDD (test first), committed under Abhishek (no Claude co-author).
@@ -57,9 +57,13 @@
 - [ ] **Incremental indicator recompute** (only new bars)
 - [ ] **Kill the 96-col god-table**: slim typed snapshot + JSON long-tail (`features_json`)
 
-### M3 — Memory (not started)
-- [ ] Trade journal + execution log + auto-review (win rate / expectancy / R by setup)
-- [ ] New tables: trade_plans, trades, trade_executions, trade_reviews, journal_snapshots
+### M3 — Memory (DONE — core loop)
+- [x] **Trade journal** — `JournalTrade` model (verified `create_all` builds it on real MSSQL, 17 cols)
+- [x] `services/journal/analytics.py` — pure realized_pnl / return_pct / r_multiple + `review_by_setup` (win rate, expectancy-in-R, R distribution)
+- [x] `services/journal/repository.py` — log / close / list / delete / review
+- [x] **API** `/journal/trades` (+ `/{id}/close`, `/{id}`, DELETE), `/journal/review`
+- [x] **Frontend Journal panel** — log form, inline close, per-setup review table, computed P&L/R. Typechecks + prod build clean.
+- [ ] Later: separate execution log (partial fills), entry chart snapshot, mistake-tag analytics
 
 ### M4 — Clarity / UI (not started)
 - [ ] Router IA (5 destinations, down from 11 tabs), code-split lazy routes
@@ -90,3 +94,9 @@
 
 ## Recommended resume point
 **M2 #1** — single-name setup replay wired to `BarStore`. It makes the data plane + engine immediately useful (the swing trader's "has this setup worked on this stock?"), then tackle **#2** (swing.py portfolio + walk-forward) for the quant.
+
+---
+## Known issue (parked 2026-06-27): backtest SAVE fails on MSSQL
+- Compute/run is correct (real metrics verified on RELIANCE). Only `save=true` fails on **MSSQL LocalDB** (the app's real DB via `%APPDATA%/VajraStocks/config.yaml`), not on SQLite dev DB.
+- Error: `Invalid column name 'backtest_id'/'metric'/'value'` — the `backtest_metrics`/`backtest_trades` tables exist in MSSQL with a **stale/mismatched schema**; `create_all` skips tables that already exist by name.
+- **Fix:** drop the 3 `backtest_*` tables in MSSQL, add a proper **alembic migration** for them. LESSON: new tables must ship as alembic migrations, not rely on `create_all` (esp. MSSQL).
