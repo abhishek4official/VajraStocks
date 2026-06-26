@@ -17,6 +17,7 @@ D = dt.date
 @pytest.fixture
 def store(tmp_path):
     s = BarStore(tmp_path / "col")
+    closes = [10, 10, 10, 12, 14, 12, 10, 9]
     s.write_bars(
         "ACME.NS",
         pd.DataFrame(
@@ -25,7 +26,21 @@ def store(tmp_path):
                     "trading_date": D(2023, 1, 1) + dt.timedelta(days=i),
                     "open": c, "high": c, "low": c, "close": c, "adj_close": c, "volume": 1000,
                 }
-                for i, c in enumerate([10, 10, 10, 12, 14, 12, 10, 9])
+                for i, c in enumerate(closes)
+            ]
+        ),
+    )
+    # A longer series for walk-forward windows.
+    long_closes = [10, 11, 12, 11, 13, 15, 14, 16, 18, 17, 19, 21, 20, 22, 24, 23, 25, 27, 26, 28]
+    s.write_bars(
+        "WIDE.NS",
+        pd.DataFrame(
+            [
+                {
+                    "trading_date": D(2023, 3, 1) + dt.timedelta(days=i),
+                    "open": c, "high": c, "low": c, "close": c, "adj_close": c, "volume": 1000,
+                }
+                for i, c in enumerate(long_closes)
             ]
         ),
     )
@@ -81,3 +96,23 @@ def test_run_and_persist_then_fetch(api_client, db_session):
 
 def test_get_missing_run_404(api_client):
     assert api_client.get("/api/v1/backtest/runs/999999").status_code == 404
+
+
+def test_walk_forward_endpoint(api_client):
+    resp = api_client.post("/api/v1/backtest/walk-forward", json={
+        "symbol": "WIDE", "signal": "sma_crossover",
+        "param_grid": [{"fast": 2, "slow": 3}, {"fast": 3, "slow": 6}],
+        "n_splits": 2, "train_frac": 0.5, "metric": "total_return",
+    })
+    assert resp.status_code == 200
+    body = resp.json()
+    assert len(body["windows"]) == 2
+    assert 0.0 <= body["pct_profitable_windows"] <= 1.0
+    # Each window's chosen params come from the supplied grid.
+    for w in body["windows"]:
+        assert w["best_params"] in [{"fast": 2, "slow": 3}, {"fast": 3, "slow": 6}]
+
+
+def test_walk_forward_empty_grid_400(api_client):
+    resp = api_client.post("/api/v1/backtest/walk-forward", json={"symbol": "WIDE", "param_grid": []})
+    assert resp.status_code == 400

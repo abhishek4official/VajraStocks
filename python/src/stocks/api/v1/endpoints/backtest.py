@@ -29,6 +29,7 @@ from stocks.services.quant.backtest.signals import (
     list_signals,
     sma_crossover_signals,
 )
+from stocks.services.quant.backtest.walkforward import walk_forward
 
 router = APIRouter(prefix="/backtest", tags=["Backtest Lab"])
 
@@ -86,6 +87,37 @@ class SavedRunOut(BaseModel):
     created_at: str
     metrics: dict[str, float]
     trades: list[TradeOut] = []
+
+
+class WalkForwardRequest(BaseModel):
+    symbol: str
+    signal: str = "sma_crossover"
+    param_grid: list[dict[str, Any]]
+    n_splits: int = 4
+    train_frac: float = 0.6
+    metric: str = "sharpe_ratio"
+    stop_pct: float | None = None
+    target_pct: float | None = None
+    adjusted: bool = False
+    start: dt.date | None = None
+    end: dt.date | None = None
+
+
+class WindowOut(BaseModel):
+    test_start: int
+    test_end: int
+    best_params: dict[str, Any]
+    in_sample_metric: float | None
+    oos: MetricsOut
+
+
+class WalkForwardOut(BaseModel):
+    symbol: str
+    signal: str
+    windows: list[WindowOut]
+    avg_oos_return: float
+    avg_oos_sharpe: float
+    pct_profitable_windows: float
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
@@ -200,6 +232,56 @@ def run(
         bars=len(result.equity_curve),
         metrics=_metrics_out(result.metrics),
         trades=[_trade_out(t) for t in result.trades],
+    )
+
+
+@router.post("/walk-forward", response_model=WalkForwardOut)
+def walk_forward_endpoint(
+    body: WalkForwardRequest,
+    db: Session = Depends(get_db),
+    store: BarStore = Depends(get_bar_store),
+):
+    """Anchored walk-forward: grid-search params in-sample, evaluate out-of-sample per window."""
+    symbol = _normalize(body.symbol)
+    if not body.param_grid:
+        raise HTTPException(status_code=400, detail="param_grid must not be empty")
+
+    actions = None
+    if body.adjusted:
+        symbol_id = db.scalar(select(Symbol.id).where(Symbol.symbol == symbol))
+        if symbol_id is not None:
+            actions = load_actions(db, symbol_id)
+
+    bars = store.read_bars(symbol, start=body.start, end=body.end, adjusted=body.adjusted, actions=actions)
+
+    def factory(params):
+        try:
+            return _build_signal_fn(body.signal, params)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from None
+
+    try:
+        result = walk_forward(
+            bars, factory, body.param_grid,
+            n_splits=body.n_splits, train_frac=body.train_frac, metric=body.metric,
+            stop_pct=body.stop_pct, target_pct=body.target_pct,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
+
+    return WalkForwardOut(
+        symbol=symbol,
+        signal=body.signal,
+        windows=[
+            WindowOut(
+                test_start=w.test_start, test_end=w.test_end, best_params=w.best_params,
+                in_sample_metric=_finite(w.in_sample_metric), oos=_metrics_out(w.oos),
+            )
+            for w in result.windows
+        ],
+        avg_oos_return=result.avg_oos_return,
+        avg_oos_sharpe=result.avg_oos_sharpe,
+        pct_profitable_windows=result.pct_profitable_windows,
     )
 
 
