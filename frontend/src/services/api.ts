@@ -659,6 +659,51 @@ export interface BacktestRunRequest {
   save?: boolean;
 }
 
+// ── Trade Journal ─────────────────────────────────────────────────────────────
+export interface JournalTrade {
+  id: number;
+  symbol: string;
+  setup: string;
+  side: string;
+  status: string;
+  entry_date: string;
+  entry_price: number;
+  qty: number;
+  stop_price: number | null;
+  target_price: number | null;
+  exit_date: string | null;
+  exit_price: number | null;
+  fees: number;
+  thesis: string | null;
+  mistake_tags: string | null;
+  pnl: number | null;
+  return_pct: number | null;
+  r_multiple: number | null;
+}
+
+export interface JournalTradeInput {
+  symbol: string;
+  entry_date: string;
+  entry_price: number;
+  qty: number;
+  setup?: string;
+  side?: string;
+  stop_price?: number | null;
+  target_price?: number | null;
+  thesis?: string | null;
+}
+
+export interface SetupStats {
+  setup: string;
+  trades: number;
+  wins: number;
+  win_rate: number;
+  total_pnl: number;
+  avg_pnl: number;
+  avg_r: number;
+  expectancy_r: number;
+}
+
 export const apiService = {
   // 1. Symbols endpoints
   async getAllSymbols(activeOnly = true): Promise<SymbolDetail[]> {
@@ -1255,6 +1300,44 @@ export const apiService = {
   async backfillColumnar(full = false): Promise<{ symbols_mirrored: number; rows: number }> {
     const r = await fetch(`${BASE_URL}/backtest/backfill?full=${full}`, { method: 'POST' });
     if (!r.ok) throw new Error('Backfill failed');
+    return r.json();
+  },
+
+  // ── Trade Journal ──────────────────────────────────────────────────────────
+  async logTrade(body: JournalTradeInput): Promise<JournalTrade> {
+    const r = await fetch(`${BASE_URL}/journal/trades`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    });
+    if (!r.ok) throw new Error('Failed to log trade');
+    return r.json();
+  },
+
+  async closeTrade(id: number, exit_date: string, exit_price: number, mistake_tags?: string): Promise<JournalTrade> {
+    const r = await fetch(`${BASE_URL}/journal/trades/${id}/close`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ exit_date, exit_price, mistake_tags }),
+    });
+    if (!r.ok) throw new Error('Failed to close trade');
+    return r.json();
+  },
+
+  async listTrades(symbol?: string, status?: string): Promise<JournalTrade[]> {
+    const q = new URLSearchParams();
+    if (symbol) q.append('symbol', symbol);
+    if (status) q.append('status', status);
+    const r = await fetch(`${BASE_URL}/journal/trades?${q.toString()}`);
+    if (!r.ok) throw new Error('Failed to list trades');
+    return r.json();
+  },
+
+  async deleteTrade(id: number): Promise<void> {
+    const r = await fetch(`${BASE_URL}/journal/trades/${id}`, { method: 'DELETE' });
+    if (!r.ok) throw new Error('Failed to delete trade');
+  },
+
+  async journalReview(): Promise<SetupStats[]> {
+    const r = await fetch(`${BASE_URL}/journal/review`);
+    if (!r.ok) throw new Error('Failed to load review');
     return r.json();
   },
 };

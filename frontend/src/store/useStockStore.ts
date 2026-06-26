@@ -90,7 +90,7 @@ export interface WatchlistAlert {
   createdAt: string;
 }
 
-type TabId = 'explorer' | 'screener' | 'strategy' | 'sync' | 'ai-research' | 'portfolio' | 'watchlist' | 'compare' | 'swing-picks' | 'settings' | 'about' | 'ml2-training' | 'backtest';
+type TabId = 'explorer' | 'screener' | 'strategy' | 'sync' | 'ai-research' | 'portfolio' | 'watchlist' | 'compare' | 'swing-picks' | 'settings' | 'about' | 'ml2-training' | 'backtest' | 'journal';
 type ChartTimeframe = '1W' | '1M' | '3M' | '6M' | '1Y' | 'MAX';
 
 // ─── Store shape ──────────────────────────────────────────────────────────────
