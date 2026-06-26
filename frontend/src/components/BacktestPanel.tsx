@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Play, History, TrendingUp, AlertTriangle } from 'lucide-react';
+import { Play, History, TrendingUp, AlertTriangle, Database } from 'lucide-react';
 import {
   apiService,
   type BacktestRunResult,
@@ -62,6 +62,8 @@ export function BacktestPanel() {
   const [runs, setRuns] = useState<SavedBacktestRun[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [backfilling, setBackfilling] = useState(false);
+  const [backfillMsg, setBackfillMsg] = useState<string | null>(null);
 
   const refreshRuns = () => {
     apiService.listBacktestRuns().then(setRuns).catch(() => setRuns([]));
@@ -100,6 +102,19 @@ export function BacktestPanel() {
       setError(e instanceof Error ? e.message : 'Backtest failed');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const backfill = async () => {
+    setBackfilling(true);
+    setBackfillMsg(null);
+    try {
+      const r = await apiService.backfillColumnar();
+      setBackfillMsg(`Mirrored ${r.symbols_mirrored} symbols (${r.rows} rows).`);
+    } catch (e) {
+      setBackfillMsg(e instanceof Error ? e.message : 'Backfill failed');
+    } finally {
+      setBackfilling(false);
     }
   };
 
@@ -186,14 +201,26 @@ export function BacktestPanel() {
         </div>
       </div>
 
-      <button
-        onClick={run}
-        disabled={loading || !symbol}
-        className="flex items-center gap-2 px-4 py-2 rounded-lg bg-accent-primary text-accent-text text-sm font-bold disabled:opacity-50 cursor-pointer"
-      >
-        <Play className="w-4 h-4" />
-        {loading ? 'Running…' : 'Run backtest'}
-      </button>
+      <div className="flex items-center gap-3 flex-wrap">
+        <button
+          onClick={run}
+          disabled={loading || !symbol}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-accent-primary text-accent-text text-sm font-bold disabled:opacity-50 cursor-pointer"
+        >
+          <Play className="w-4 h-4" />
+          {loading ? 'Running…' : 'Run backtest'}
+        </button>
+        <button
+          onClick={backfill}
+          disabled={backfilling}
+          title="Mirror your synced price history into the columnar store (needed once before backtests have data)."
+          className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border-subtle text-text-muted hover:text-text-main text-sm disabled:opacity-50 cursor-pointer"
+        >
+          <Database className="w-4 h-4" />
+          {backfilling ? 'Backfilling…' : 'Backfill data'}
+        </button>
+        {backfillMsg && <span className="text-[11px] text-text-muted">{backfillMsg}</span>}
+      </div>
 
       {error && (
         <div className="flex items-center gap-2 text-sm text-rose-400 bg-rose-500/10 border border-rose-500/30 rounded-lg px-3 py-2">

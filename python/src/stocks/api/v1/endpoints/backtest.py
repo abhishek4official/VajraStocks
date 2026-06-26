@@ -17,7 +17,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from stocks.api.deps import get_bar_store, get_db
-from stocks.data.backfill import load_actions
+from stocks.data.backfill import backfill_all, load_actions
 from stocks.data.bar_store import BarStore
 from stocks.db.models import Symbol
 from stocks.services.quant.backtest.engine import BacktestConfig
@@ -166,10 +166,30 @@ def _trade_out(t) -> TradeOut:
 
 
 # ── routes ────────────────────────────────────────────────────────────────────
+class BackfillOut(BaseModel):
+    symbols_mirrored: int
+    rows: int
+
+
 @router.get("/signals")
 def get_signals():
     """List the registered setup signals available to backtest."""
     return {"signals": list_signals()}
+
+
+@router.post("/backfill", response_model=BackfillOut)
+def backfill(
+    full: bool = False,
+    db: Session = Depends(get_db),
+    store: BarStore = Depends(get_bar_store),
+):
+    """Mirror the SQLite price history into the columnar BarStore so backtests have data.
+
+    Runs incrementally by default (only symbols with new bars); ``full=true`` re-mirrors all.
+    A one-time action for existing installs — afterwards each sync keeps the store current.
+    """
+    result = backfill_all(db, store, incremental=not full)
+    return BackfillOut(symbols_mirrored=len(result), rows=sum(result.values()))
 
 
 @router.post("/run", response_model=BacktestRunOut)

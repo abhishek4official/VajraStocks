@@ -1251,4 +1251,10 @@ export const apiService = {
     if (!r.ok) throw new Error('Backtest run not found');
     return r.json();
   },
+
+  async backfillColumnar(full = false): Promise<{ symbols_mirrored: number; rows: number }> {
+    const r = await fetch(`${BASE_URL}/backtest/backfill?full=${full}`, { method: 'POST' });
+    if (!r.ok) throw new Error('Backfill failed');
+    return r.json();
+  },
 };

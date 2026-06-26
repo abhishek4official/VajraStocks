@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 from stocks.api.deps import get_bar_store, get_db
 from stocks.api.main import app
 from stocks.data.bar_store import BarStore
-from stocks.db.models import Symbol
+from stocks.db.models import DailyPrice, Symbol
 
 D = dt.date
 
@@ -116,3 +116,21 @@ def test_walk_forward_endpoint(api_client):
 def test_walk_forward_empty_grid_400(api_client):
     resp = api_client.post("/api/v1/backtest/walk-forward", json={"symbol": "WIDE", "param_grid": []})
     assert resp.status_code == 400
+
+
+def test_backfill_endpoint_mirrors_db_prices(api_client, db_session, store):
+    sym = Symbol(symbol="BFILL.NS", company_name="Backfill Co", isin="INE0BFILL1", series="EQ", is_active=True)
+    db_session.add(sym)
+    db_session.flush()
+    for d, c in [(D(2023, 5, 1), 100.0), (D(2023, 5, 2), 101.0)]:
+        db_session.add(DailyPrice(
+            symbol_id=sym.id, trading_date=d, open=c, high=c, low=c, close=c,
+            adj_close=c, volume=1000, granularity="1d", data_source="TEST",
+        ))
+    db_session.commit()
+
+    resp = api_client.post("/api/v1/backtest/backfill")
+    assert resp.status_code == 200
+    assert resp.json()["symbols_mirrored"] >= 1
+    # The DB prices are now readable from the columnar store.
+    assert len(store.read_bars("BFILL.NS")) == 2
