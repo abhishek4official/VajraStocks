@@ -906,3 +906,66 @@ class SwingPickNote(Base):
     updated_at: Mapped[datetime.datetime] = mapped_column(
         DateTime, default=func.now(), onupdate=func.now()
     )
+
+
+# ── Backtest domain (V2.0 spec M2) — stored, reproducible results, no fabricated metrics ──
+
+
+class BacktestRun(Base):
+    """A single backtest execution: its parameters, computed metrics, and trade audit trail."""
+
+    __tablename__ = "backtests"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    symbol: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    signal: Mapped[str] = mapped_column(String(100), nullable=False)
+    params_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    start_date: Mapped[datetime.date | None] = mapped_column(Date, nullable=True)
+    end_date: Mapped[datetime.date | None] = mapped_column(Date, nullable=True)
+    trades_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    equity_curve_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=func.now())
+
+    metrics: Mapped[list["BacktestMetric"]] = relationship(
+        "BacktestMetric", back_populates="run", cascade="all, delete-orphan"
+    )
+    trades: Mapped[list["BacktestTrade"]] = relationship(
+        "BacktestTrade", back_populates="run", cascade="all, delete-orphan"
+    )
+
+
+class BacktestMetric(Base):
+    """One named, computed performance metric for a backtest run (e.g. sharpe_ratio)."""
+
+    __tablename__ = "backtest_metrics"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    backtest_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("backtests.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    metric: Mapped[str] = mapped_column(String(50), nullable=False)
+    value: Mapped[float] = mapped_column(Float, nullable=False)
+
+    run: Mapped["BacktestRun"] = relationship("BacktestRun", back_populates="metrics")
+
+    __table_args__ = (UniqueConstraint("backtest_id", "metric", name="UQ_Backtest_Metric"),)
+
+
+class BacktestTrade(Base):
+    """A single simulated trade produced by a backtest run (audit trail)."""
+
+    __tablename__ = "backtest_trades"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    backtest_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("backtests.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    entry_date: Mapped[datetime.date] = mapped_column(Date, nullable=False)
+    entry_price: Mapped[float] = mapped_column(Float, nullable=False)
+    exit_date: Mapped[datetime.date] = mapped_column(Date, nullable=False)
+    exit_price: Mapped[float] = mapped_column(Float, nullable=False)
+    qty: Mapped[float] = mapped_column(Float, nullable=False)
+    return_pct: Mapped[float] = mapped_column(Float, nullable=False)
+    reason: Mapped[str] = mapped_column(String(20), nullable=False)
+
+    run: Mapped["BacktestRun"] = relationship("BacktestRun", back_populates="trades")
