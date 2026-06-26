@@ -1,7 +1,7 @@
 # VajraStocks 2.0 — Build Progress & Resume Checklist
 
 **Branch:** `feature/v2-hybrid-db` (off `feature/screener-report`)
-**Tests:** 158 passing · **Spec:** `Doc/VajraStocks_V2.0_PRD_BRD_Architecture.md`
+**Tests:** 162 passing · **Spec:** `Doc/VajraStocks_V2.0_PRD_BRD_Architecture.md`
 **Last updated:** 2026-06-26
 
 > Convention: all work is TDD (test first), committed under Abhishek (no Claude co-author).
@@ -44,7 +44,9 @@
 - [ ] More setups (EMA pullback, RSI) — need indicator infra for clean testing
 - [x] **Persist results** — `backtests`/`backtest_metrics`/`backtest_trades` models + `BacktestRepository` (save/get/get_metrics/list). Reproducibility-on-record test (stored == fresh re-run). *(Tables auto-create via `create_all` at startup; a dedicated alembic migration is a nice-to-have follow-up.)*
 - [ ] **#2 Wire `swing.py` strategies** — they are cross-sectional/portfolio (`generate_signals(universe)`), so this needs a **portfolio-level engine + walk-forward**, not the single-name one. Larger. *(recommended next)*
-- [ ] Expose backtests via API + UI ("Backtest Lab"); re-insert a **real** backtest node into the agent graph
+- [x] **Backtest Lab API** — `GET /backtest/signals`, `POST /backtest/run` (run + optional persist), `GET /backtest/runs`, `GET /backtest/runs/{id}`. New `get_bar_store` dependency.
+- [ ] Frontend "Backtest Lab" UI panel (consume the API)
+- [ ] Re-insert a **real** backtest node into the agent graph (replace the deleted fake one)
 - [ ] Walk-forward analysis + purged/embargoed CV + deflated-Sharpe / multiple-testing guard
 - [ ] Persist results: `backtests` / `backtest_metrics` / `backtest_trades` tables (reproducible, stored)
 - [ ] Expose via API + UI ("Backtest Lab"); re-insert a **real** backtest node into the agent graph
