@@ -12,6 +12,7 @@ from stocks.api.v1.endpoints import (
     eod,
     fundamentals,
     indicators,
+    jobs,
     journal,
     ml2_training,
     news,
@@ -53,3 +54,4 @@ api_router.include_router(swing_picks.router)
 api_router.include_router(eod.router)
 api_router.include_router(backtest.router)
 api_router.include_router(journal.router)
+api_router.include_router(jobs.router)

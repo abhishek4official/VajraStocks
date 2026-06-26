@@ -1007,3 +1007,28 @@ class JournalTrade(Base):
 
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=func.now())
     updated_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now())
+
+
+# ── Background job queue (V2.0 spec M1) — long work off the request thread ──
+
+
+class Job(Base):
+    """A queued background job (sync / recompute / backtest / backfill …).
+
+    DB-backed so it works across SQLite/MSSQL/PG with progress, cancel, and retry.
+    """
+
+    __tablename__ = "jobs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    kind: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="PENDING", index=True)
+    params_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    result_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    progress_current: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    progress_total: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    cancel_requested: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=func.now(), index=True)
+    started_at: Mapped[datetime.datetime | None] = mapped_column(DateTime, nullable=True)
+    finished_at: Mapped[datetime.datetime | None] = mapped_column(DateTime, nullable=True)

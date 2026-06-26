@@ -367,6 +367,15 @@ async def lifespan(app: FastAPI):
     from VajraML2.train_service import TrainingJobManagerV2
     app.state.training_manager_v2 = TrainingJobManagerV2()
 
+    # ⑦c — background job worker (DB-backed queue; long work off the request thread)
+    try:
+        from stocks.services.jobs import handlers as _job_handlers  # noqa: F401 — registers handlers
+        from stocks.services.jobs.worker import JobWorker
+        app.state.job_worker = JobWorker(db_manager)
+        app.state.job_worker.start()
+    except Exception as exc:
+        logger.warning(f"Job worker not started: {exc}")
+
     logger.info("Application startup complete.")
 
     # ⑧ — start background daily scheduler (00:00 UTC / 5:30 AM IST sync & missed runs check)
@@ -376,7 +385,12 @@ async def lifespan(app: FastAPI):
 
     yield
 
-    # Clean up: wait for any in-flight sync, then cancel the loop, then release DB
+    # Clean up: stop the job worker, wait for any in-flight sync, then cancel the loop
+    try:
+        if getattr(app.state, "job_worker", None):
+            app.state.job_worker.stop()
+    except Exception as exc:
+        logger.warning(f"Job worker stop error: {exc}")
     from stocks.services.scheduler import shutdown_scheduler
     await shutdown_scheduler()
     logger.info("Stopping background scheduler task...")
