@@ -1,7 +1,7 @@
 # VajraStocks 2.0 — Build Progress & Resume Checklist
 
 **Branch:** `feature/v2-hybrid-db` (off `feature/screener-report`)
-**Tests:** 140 passing · **Spec:** `Doc/VajraStocks_V2.0_PRD_BRD_Architecture.md`
+**Tests:** 147 passing · **Spec:** `Doc/VajraStocks_V2.0_PRD_BRD_Architecture.md`
 **Last updated:** 2026-06-26
 
 > Convention: all work is TDD (test first), committed under Abhishek (no Claude co-author).
@@ -28,17 +28,20 @@
 - [x] Confirmed stray ML logs already gitignored/untracked
 - [x] Integrity guard test (`test_no_fake_backtester.py`) prevents regression
 
-### M2 — Real backtest engine (CORE built, not yet connected)
+### M2 — Real backtest engine (CORE + single-name replay DONE)
 - [x] `services/quant/backtest/metrics.py` — pure, reproducible cagr/max_drawdown/win_rate/profit_factor/sharpe + `compute_metrics` (verified vs hand-computed; honest 0.0/inf on degenerate input)
-- [x] `services/quant/backtest/engine.py` — `run_backtest`: no-lookahead single-name sim, intrabar stop/target (stop-first), bps costs+slippage, MTM equity curve, deterministic
+- [x] `services/quant/backtest/engine.py` — `run_backtest`: no-lookahead single-name sim, intrabar stop/target (stop-first), bps costs+slippage, MTM equity curve, deterministic, empty-bars safe
+- [x] `services/quant/backtest/signals.py` — pure `sma_crossover_signals` (entries/exits)
+- [x] `services/quant/backtest/replay.py` — `run_symbol_backtest`: reads (adjusted) bars from `BarStore` → signal fn → engine. **End-to-end data-plane → backtest path works.**
 
 ---
 
 ## ⏳ PENDING
 
-### M2 — finish the backtest engine (NEXT — has a design fork)
-- [ ] **#1 Single-name "setup replay"** — adapter `run_symbol_backtest(symbol, BarStore, signal_fn)` reading *adjusted* bars; a couple built-in single-name signals (SMA/EMA cross, pullback). Proves data-plane → engine end-to-end. *(recommended first)*
-- [ ] **#2 Wire `swing.py` strategies** — they are cross-sectional/portfolio (`generate_signals(universe)`), so this needs a **portfolio-level engine + walk-forward**, not the single-name one. Larger.
+### M2 — finish the backtest engine (NEXT)
+- [x] **#1 Single-name "setup replay"** — `run_symbol_backtest` + `sma_crossover_signals` wired to `BarStore`. DONE.
+- [ ] More single-name setups (EMA pullback, breakout, RSI) as signal fns
+- [ ] **#2 Wire `swing.py` strategies** — they are cross-sectional/portfolio (`generate_signals(universe)`), so this needs a **portfolio-level engine + walk-forward**, not the single-name one. Larger. *(recommended next)*
 - [ ] Walk-forward analysis + purged/embargoed CV + deflated-Sharpe / multiple-testing guard
 - [ ] Persist results: `backtests` / `backtest_metrics` / `backtest_trades` tables (reproducible, stored)
 - [ ] Expose via API + UI ("Backtest Lab"); re-insert a **real** backtest node into the agent graph
