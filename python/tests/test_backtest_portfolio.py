@@ -73,3 +73,33 @@ def test_run_strategy_backtest_adapter():
     adapted = run_strategy_backtest(StubStrategy(), market_data)
     direct = portfolio_backtest(_weights(), _prices())
     assert adapted.equity_curve == direct.equity_curve
+
+
+def _panel(symbols, n=80, start=D(2022, 1, 3)):
+    """Deterministic long-format OHLCV panel for integration tests (no randomness)."""
+    rows = []
+    for si, sym in enumerate(symbols):
+        price = 100.0 + si * 10
+        for i in range(n):
+            price *= 1 + 0.01 * (((i + si) % 5) - 1.5) / 3  # mild zig-zag drift
+            c = round(price, 2)
+            rows.append({
+                "date": start + dt.timedelta(days=i), "symbol": sym,
+                "open": c, "high": round(c * 1.01, 2), "low": round(c * 0.99, 2),
+                "close": c, "volume": 100_000,
+            })
+    return pd.DataFrame(rows)
+
+
+def test_real_swing_strategy_runs_end_to_end():
+    # Wire a real swing.py strategy through the portfolio engine on a synthetic panel.
+    from stocks.services.strategies.registry import get_strategy
+
+    market_data = _panel(["AAA", "BBB", "CCC"], n=80)
+    strat = get_strategy("minervini").make(force_market_ok=True)
+
+    res = run_strategy_backtest(strat, market_data)
+    # One equity point per unique date; result is well-formed (no crash, real metrics).
+    assert len(res.equity_curve) == 80
+    assert isinstance(res.metrics.total_return, float)
+    assert isinstance(res.metrics.max_drawdown, float)

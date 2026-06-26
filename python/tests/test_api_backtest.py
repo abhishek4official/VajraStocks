@@ -44,6 +44,19 @@ def store(tmp_path):
             ]
         ),
     )
+    # A small multi-symbol panel for portfolio backtests.
+    for si, sym in enumerate(["PA.NS", "PB.NS", "PC.NS"]):
+        price = 100.0 + si * 10
+        rows = []
+        for i in range(70):
+            price *= 1 + 0.01 * (((i + si) % 5) - 1.5) / 3
+            c = round(price, 2)
+            rows.append({
+                "trading_date": D(2022, 1, 3) + dt.timedelta(days=i),
+                "open": c, "high": round(c * 1.01, 2), "low": round(c * 0.99, 2),
+                "close": c, "adj_close": c, "volume": 100000,
+            })
+        s.write_bars(sym, pd.DataFrame(rows))
     return s
 
 
@@ -116,6 +129,29 @@ def test_walk_forward_endpoint(api_client):
 def test_walk_forward_empty_grid_400(api_client):
     resp = api_client.post("/api/v1/backtest/walk-forward", json={"symbol": "WIDE", "param_grid": []})
     assert resp.status_code == 400
+
+
+def test_portfolio_endpoint_runs_real_strategy(api_client):
+    resp = api_client.post("/api/v1/backtest/portfolio", json={
+        "strategy_id": "minervini",
+        "universe": ["PA", "PB", "PC"],
+        "force_market_ok": True,
+    })
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["symbols"] == 3
+    assert body["bars"] == len(body["equity_curve"]) > 0
+    assert isinstance(body["metrics"]["total_return"], (int, float))
+
+
+def test_portfolio_unknown_strategy_404(api_client):
+    resp = api_client.post("/api/v1/backtest/portfolio", json={"strategy_id": "nope", "universe": ["PA"]})
+    assert resp.status_code == 404
+
+
+def test_portfolio_empty_universe_400(api_client):
+    resp = api_client.post("/api/v1/backtest/portfolio", json={"strategy_id": "minervini", "universe": ["ZZZ"]})
+    assert resp.status_code == 400  # no stored bars for ZZZ
 
 
 def test_backfill_endpoint_mirrors_db_prices(api_client, db_session, store):

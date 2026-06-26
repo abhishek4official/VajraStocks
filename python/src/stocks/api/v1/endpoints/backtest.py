@@ -11,6 +11,7 @@ import datetime as dt
 import math
 from typing import Any
 
+import pandas as pd
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select
@@ -22,6 +23,7 @@ from stocks.data.bar_store import BarStore
 from stocks.db.models import Symbol
 from stocks.services.quant.backtest.engine import BacktestConfig
 from stocks.services.quant.backtest.persistence import BacktestRepository
+from stocks.services.quant.backtest.portfolio import run_strategy_backtest
 from stocks.services.quant.backtest.replay import run_symbol_backtest
 from stocks.services.quant.backtest.signals import (
     breakout_signals,
@@ -30,6 +32,7 @@ from stocks.services.quant.backtest.signals import (
     sma_crossover_signals,
 )
 from stocks.services.quant.backtest.walkforward import walk_forward
+from stocks.services.strategies.registry import get_strategy
 
 router = APIRouter(prefix="/backtest", tags=["Backtest Lab"])
 
@@ -171,6 +174,34 @@ class BackfillOut(BaseModel):
     rows: int
 
 
+class PortfolioBacktestRequest(BaseModel):
+    strategy_id: str
+    universe: list[str]
+    params: dict[str, Any] = {}
+    force_market_ok: bool = True
+    cost_bps: float = 0.0
+    adjusted: bool = False
+    start: dt.date | None = None
+    end: dt.date | None = None
+
+
+class PortfolioMetricsOut(BaseModel):
+    total_return: float
+    cagr: float
+    max_drawdown: float
+    sharpe_ratio: float
+
+
+class PortfolioBacktestOut(BaseModel):
+    strategy_id: str
+    symbols: int
+    bars: int
+    final_equity: float
+    metrics: PortfolioMetricsOut
+    equity_curve: list[float]
+    dates: list[str]
+
+
 @router.get("/signals")
 def get_signals():
     """List the registered setup signals available to backtest."""
@@ -302,6 +333,54 @@ def walk_forward_endpoint(
         avg_oos_return=result.avg_oos_return,
         avg_oos_sharpe=result.avg_oos_sharpe,
         pct_profitable_windows=result.pct_profitable_windows,
+    )
+
+
+@router.post("/portfolio", response_model=PortfolioBacktestOut)
+def portfolio_run(
+    body: PortfolioBacktestRequest,
+    db: Session = Depends(get_db),
+    store: BarStore = Depends(get_bar_store),
+):
+    """Backtest a real swing.py strategy across a universe (weight-based portfolio engine)."""
+    adapter = get_strategy(body.strategy_id)
+    if adapter is None:
+        raise HTTPException(status_code=404, detail=f"Unknown strategy '{body.strategy_id}'")
+
+    frames: list[pd.DataFrame] = []
+    for raw in body.universe:
+        symbol = _normalize(raw)
+        actions = None
+        if body.adjusted:
+            symbol_id = db.scalar(select(Symbol.id).where(Symbol.symbol == symbol))
+            if symbol_id is not None:
+                actions = load_actions(db, symbol_id)
+        bars = store.read_bars(symbol, start=body.start, end=body.end, adjusted=body.adjusted, actions=actions)
+        if bars.empty:
+            continue
+        b = bars.rename(columns={"trading_date": "date"})
+        b["symbol"] = symbol
+        frames.append(b[["date", "symbol", "open", "high", "low", "close", "volume"]])
+
+    if not frames:
+        raise HTTPException(status_code=400, detail="No stored bars for the requested universe")
+
+    market_data = pd.concat(frames, ignore_index=True)
+    strat = adapter.make(body.params, force_market_ok=body.force_market_ok)
+    result = run_strategy_backtest(strat, market_data, config=BacktestConfig(cost_bps=body.cost_bps))
+
+    m = result.metrics
+    return PortfolioBacktestOut(
+        strategy_id=body.strategy_id,
+        symbols=len(frames),
+        bars=len(result.equity_curve),
+        final_equity=result.equity_curve[-1] if result.equity_curve else 0.0,
+        metrics=PortfolioMetricsOut(
+            total_return=m.total_return, cagr=m.cagr,
+            max_drawdown=m.max_drawdown, sharpe_ratio=m.sharpe_ratio,
+        ),
+        equity_curve=result.equity_curve,
+        dates=[d.isoformat() for d in result.dates],
     )
 
 
