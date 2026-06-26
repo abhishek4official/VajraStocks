@@ -27,6 +27,13 @@ def _signals(n, true_at):
     return [i in true_at for i in range(n)]
 
 
+def test_empty_bars_returns_empty_result():
+    result = run_backtest(_bars([]), entries=[])
+    assert result.trades == []
+    assert result.equity_curve == []
+    assert result.metrics.trades == 0
+
+
 def test_no_entries_gives_flat_equity_and_no_trades():
     bars = _bars([
         (D(2023, 1, 2), 100, 101, 99, 100),

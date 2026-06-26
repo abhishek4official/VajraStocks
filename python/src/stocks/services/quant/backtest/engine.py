@@ -66,6 +66,9 @@ def run_backtest(
     if exits is not None and len(exits) != n:
         raise ValueError("exits must align 1:1 with bars")
 
+    if n == 0:
+        return BacktestResult(trades=[], equity_curve=[], metrics=compute_metrics([], [], 0.0))
+
     o = bars["open"].tolist()
     h = bars["high"].tolist()
     low = bars["low"].tolist()
