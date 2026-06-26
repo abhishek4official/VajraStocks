@@ -52,7 +52,6 @@ def test_dsr_deflates_below_psr():
 
 
 def test_dsr_more_trials_more_deflation():
-    args = dict(sr=0.15, n=250, var=0.04)
-    few = deflated_sharpe_ratio(args["sr"], n_obs=args["n"], n_trials=5, sharpe_variance=args["var"])
-    many = deflated_sharpe_ratio(args["sr"], n_obs=args["n"], n_trials=200, sharpe_variance=args["var"])
+    few = deflated_sharpe_ratio(0.15, n_obs=250, n_trials=5, sharpe_variance=0.04)
+    many = deflated_sharpe_ratio(0.15, n_obs=250, n_trials=200, sharpe_variance=0.04)
     assert many < few         # more trials -> higher expected-max benchmark -> lower DSR
