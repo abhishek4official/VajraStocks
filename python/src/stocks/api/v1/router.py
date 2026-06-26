@@ -6,6 +6,7 @@ from stocks.api.v1.endpoints import (
     agents,
     alerts,
     announcements,
+    backtest,
     charts,
     conversations,
     eod,
@@ -49,3 +50,4 @@ api_router.include_router(news.router)
 api_router.include_router(trendlines.router)
 api_router.include_router(swing_picks.router)
 api_router.include_router(eod.router)
+api_router.include_router(backtest.router)

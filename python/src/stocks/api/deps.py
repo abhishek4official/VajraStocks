@@ -26,14 +26,26 @@ def get_settings(request: Request) -> Generator:
         session.close()
 
 
+def get_bar_store(request: Request):
+    """Yields a BarStore for the columnar data plane (overridable in tests)."""
+    from stocks.data.bar_store import BarStore
+
+    return BarStore.from_config(get_config(request))
+
+
 def get_config(request: Request):
     """
     Builds a Config object entirely from DB-backed settings — no config.yaml involved.
     Used by sync and agent endpoints so they always reflect live DB values.
     """
     from stocks.config import (
-        AIConfig, AppConfig, Config, DatabaseConfig,
-        DownloaderConfig, SymbolsConfig, ValidationConfig,
+        AIConfig,
+        AppConfig,
+        Config,
+        DatabaseConfig,
+        DownloaderConfig,
+        SymbolsConfig,
+        ValidationConfig,
     )
     from stocks.services.settings_service import SettingsService
 
