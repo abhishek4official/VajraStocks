@@ -606,6 +606,59 @@ export interface NewsItem {
   published_at: string | null;
 }
 
+// ── Backtest Lab ──────────────────────────────────────────────────────────────
+export interface BacktestMetrics {
+  total_return: number;
+  cagr: number;
+  max_drawdown: number;
+  win_rate: number;
+  profit_factor: number | null;
+  sharpe_ratio: number;
+  trades: number;
+}
+
+export interface BacktestTrade {
+  entry_date: string;
+  entry_price: number;
+  exit_date: string;
+  exit_price: number;
+  qty: number;
+  return_pct: number;
+  reason: string;
+}
+
+export interface BacktestRunResult {
+  run_id: number | null;
+  symbol: string;
+  signal: string;
+  bars: number;
+  metrics: BacktestMetrics;
+  trades: BacktestTrade[];
+}
+
+export interface SavedBacktestRun {
+  id: number;
+  symbol: string;
+  signal: string;
+  trades_count: number;
+  created_at: string;
+  metrics: Record<string, number>;
+  trades?: BacktestTrade[];
+}
+
+export interface BacktestRunRequest {
+  symbol: string;
+  signal: string;
+  params?: Record<string, unknown>;
+  stop_pct?: number | null;
+  target_pct?: number | null;
+  cost_bps?: number;
+  slippage_bps?: number;
+  initial_capital?: number;
+  adjusted?: boolean;
+  save?: boolean;
+}
+
 export const apiService = {
   // 1. Symbols endpoints
   async getAllSymbols(activeOnly = true): Promise<SymbolDetail[]> {
@@ -1164,5 +1217,38 @@ export const apiService = {
   async deleteEodJob(jobId: string): Promise<void> {
     const r = await fetch(`${BASE_URL}/eod/jobs/${jobId}`, { method: 'DELETE' });
     if (!r.ok) throw new Error('Failed to delete EOD job');
+  },
+
+  // ── Backtest Lab ──────────────────────────────────────────────────────────
+  async getBacktestSignals(): Promise<string[]> {
+    const r = await fetch(`${BASE_URL}/backtest/signals`);
+    if (!r.ok) throw new Error('Failed to load signals');
+    return (await r.json()).signals;
+  },
+
+  async runBacktest(body: BacktestRunRequest): Promise<BacktestRunResult> {
+    const r = await fetch(`${BASE_URL}/backtest/run`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!r.ok) {
+      const e = await r.json().catch(() => ({} as { detail?: string }));
+      throw new Error(e.detail || 'Backtest failed');
+    }
+    return r.json();
+  },
+
+  async listBacktestRuns(symbol?: string): Promise<SavedBacktestRun[]> {
+    const q = symbol ? `?symbol=${encodeURIComponent(symbol)}` : '';
+    const r = await fetch(`${BASE_URL}/backtest/runs${q}`);
+    if (!r.ok) throw new Error('Failed to list backtest runs');
+    return r.json();
+  },
+
+  async getBacktestRun(id: number): Promise<SavedBacktestRun> {
+    const r = await fetch(`${BASE_URL}/backtest/runs/${id}`);
+    if (!r.ok) throw new Error('Backtest run not found');
+    return r.json();
   },
 };
