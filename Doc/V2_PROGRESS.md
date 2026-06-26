@@ -71,9 +71,11 @@
 - [ ] AI copilot demoted to slide-over; numeric guardrail; `SqliteSaver` durable checkpoints
 - [ ] Split mega-components (ScreenerPanel 2,802 LOC, etc.)
 
-### M5 — Portfolio & risk (not started)
-- [ ] Live mark-to-market portfolio (supersede CSV `PortfolioHolding`); tax lots
-- [ ] Exposure, concentration, correlation clustering, contribution-to-risk
+### M5 — Portfolio & risk (ALREADY LARGELY IMPLEMENTED — discovered 2026-06-27)
+- [x] **Live mark-to-market** — `get_portfolio` values holdings at the latest synced close (`snap.close_price`), not stale CSV LTP
+- [x] **Risk metrics wired** — `portfolio_risk.py`: correlation clustering, portfolio beta, HHI concentration, diversification score, VaR/CVaR — called from `get_portfolio`, exposed via `GET /api/v1/portfolio`
+- [ ] Genuinely missing (optional): tax lots, contribution-to-risk decomposition, stress/scenario shocks
+- NOTE: spec drafts understated this — described as a CSV snapshot but it's a full risk dashboard.
 
 ### M6 — Edge / scale (not started)
 - [ ] Factor library (value/quality/momentum/low-vol/size) + regime model as first-class object
