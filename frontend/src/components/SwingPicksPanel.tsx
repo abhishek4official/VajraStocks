@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useStockStore } from '../store/useStockStore';
 import { apiService, type SwingPick, type SwingPicksResponse, type SwingPicksParams } from '../services/api';
 import {
@@ -671,7 +672,8 @@ const loadLocalNotes = (): Record<string, string> => {
 };
 
 export const SwingPicksPanel: React.FC = () => {
-  const { setActiveTab, setSelectedSymbol, qualifyQueue, clearQualifyQueue } = useStockStore();
+  const { setSelectedSymbol, qualifyQueue, clearQualifyQueue } = useStockStore();
+  const navigate = useNavigate();
 
   const [data, setData]         = useState<SwingPicksResponse | null>(null);
   const [loading, setLoading]   = useState(false);
@@ -706,7 +708,7 @@ export const SwingPicksPanel: React.FC = () => {
 
   const handleView = async (symbol: string) => {
     await setSelectedSymbol(`${symbol}.NS`);
-    setActiveTab('explorer');
+    navigate('/research/explorer');
   };
 
   const runPipeline = useCallback(async () => {

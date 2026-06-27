@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useStockStore } from '../store/useStockStore';
 import {
   Upload, Trash2, TrendingUp, TrendingDown, Minus, BarChart2, ShieldAlert,
@@ -11,8 +12,9 @@ import { StockChartWorkspace } from './StockChartWorkspace';
 export const PortfolioPanel: React.FC = () => {
   const {
     portfolio, portfolioLoading, fetchPortfolio, importPortfolioFile, clearPortfolio,
-    setSelectedSymbol, setActiveTab,
+    setSelectedSymbol,
   } = useStockStore();
+  const navigate = useNavigate();
 
   useEffect(() => { fetchPortfolio(); }, [fetchPortfolio]);
 
@@ -32,7 +34,7 @@ export const PortfolioPanel: React.FC = () => {
   const handleInspect = async (instrument: string) => {
     const symbol = instrument.endsWith('.NS') ? instrument : `${instrument}.NS`;
     await setSelectedSymbol(symbol);
-    setActiveTab('explorer');
+    navigate('/research/explorer');
   };
 
   const handleOpenChartModal = async (instrument: string) => {

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useStockStore } from '../store/useStockStore';
 import { Bookmark, Plus, Trash2, Eye, X, Edit2, Check, Bell, BellOff } from 'lucide-react';
 import type { AlertType } from '../store/useStockStore';
@@ -18,8 +19,8 @@ export const WatchlistPanel: React.FC = () => {
     addAlert,
     removeAlert,
     setSelectedSymbol,
-    setActiveTab,
   } = useStockStore();
+  const navigate = useNavigate();
 
   useEffect(() => { fetchWatchlists(); }, [fetchWatchlists]);
 
@@ -61,7 +62,7 @@ export const WatchlistPanel: React.FC = () => {
 
   const handleInspect = async (symbol: string) => {
     await setSelectedSymbol(symbol);
-    setActiveTab('explorer');
+    navigate('/research/explorer');
   };
 
   // Look up latest screener snapshot data for watchlist items

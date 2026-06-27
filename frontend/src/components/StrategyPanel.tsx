@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useStockStore } from '../store/useStockStore';
 import { apiService } from '../services/api';
 import type { StrategyMeta, StrategySignalsResponse, StrategyMatrixResponse } from '../services/api';
@@ -21,7 +22,8 @@ const SIGNAL_STYLE: Record<string, string> = {
 type SortField = 'score' | 'symbol' | 'last_close' | 'rr' | 'risk_pct';
 
 export const StrategyPanel: React.FC = () => {
-  const { setActiveTab, setSelectedSymbol, watchlists, activeWatchlistId, addToWatchlist } = useStockStore();
+  const { setSelectedSymbol, watchlists, activeWatchlistId, addToWatchlist } = useStockStore();
+  const navigate = useNavigate();
 
   const [strategies, setStrategies] = useState<StrategyMeta[]>([]);
   const [strategyId, setStrategyId] = useState<string>('');
@@ -183,7 +185,7 @@ export const StrategyPanel: React.FC = () => {
 
   const openSymbol = async (symbol: string) => {
     await setSelectedSymbol(symbol);
-    setActiveTab('explorer');
+    navigate('/research/explorer');
   };
 
   const exportCsv = () => {
