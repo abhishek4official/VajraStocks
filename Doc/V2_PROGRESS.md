@@ -1,7 +1,7 @@
 # VajraStocks 2.0 — Build Progress & Resume Checklist
 
 **Branch:** `feature/v2-hybrid-db` (off `feature/screener-report`)
-**Tests:** 249 passing · **Spec:** `Doc/VajraStocks_V2.0_PRD_BRD_Architecture.md`
+**Tests:** 255 passing · **Spec:** `Doc/VajraStocks_V2.0_PRD_BRD_Architecture.md`
 **Last updated:** 2026-06-26
 
 > Convention: all work is TDD (test first), committed under Abhishek (no Claude co-author).
@@ -77,7 +77,8 @@
 ### M5 — Portfolio & risk (ALREADY LARGELY IMPLEMENTED — discovered 2026-06-27)
 - [x] **Live mark-to-market** — `get_portfolio` values holdings at the latest synced close (`snap.close_price`), not stale CSV LTP
 - [x] **Risk metrics wired** — `portfolio_risk.py`: correlation clustering, portfolio beta, HHI concentration, diversification score, VaR/CVaR — called from `get_portfolio`, exposed via `GET /api/v1/portfolio`
-- [ ] Genuinely missing (optional): tax lots, contribution-to-risk decomposition, stress/scenario shocks
+- [x] **Contribution-to-risk** — `portfolio_risk.risk_contributions` (pure) + `compute_risk_contributions` (cov from returns); `get_portfolio` attaches `risk_contribution_pct` per holding. *(Frontend column: TODO.)*
+- [ ] Genuinely missing (optional): tax lots, stress/scenario shocks
 - NOTE: spec drafts understated this — described as a CSV snapshot but it's a full risk dashboard.
 
 ### M6 — Edge / scale (partial)
