@@ -32,6 +32,7 @@ from stocks.services.quant.backtest.signals import (
     list_signals,
     sma_crossover_signals,
 )
+from stocks.services.quant.backtest.statistics import probabilistic_sharpe_from_equity
 from stocks.services.quant.backtest.walkforward import walk_forward
 from stocks.services.strategies.registry import get_strategy
 
@@ -62,6 +63,7 @@ class MetricsOut(BaseModel):
     profit_factor: float | None  # None when undefined (no losses -> infinite)
     sharpe_ratio: float
     trades: int
+    psr: float | None = None  # probabilistic Sharpe (confidence true Sharpe > 0)
 
 
 class TradeOut(BaseModel):
@@ -147,7 +149,7 @@ def _build_signal_fn(signal: str, params: dict[str, Any]):
     return get_signal(signal)  # raises ValueError for unknown names
 
 
-def _metrics_out(m) -> MetricsOut:
+def _metrics_out(m, psr: float | None = None) -> MetricsOut:
     return MetricsOut(
         total_return=m.total_return,
         cagr=m.cagr,
@@ -156,6 +158,7 @@ def _metrics_out(m) -> MetricsOut:
         profit_factor=_finite(m.profit_factor),
         sharpe_ratio=m.sharpe_ratio,
         trades=m.trades,
+        psr=psr,
     )
 
 
@@ -284,7 +287,7 @@ def run(
         symbol=symbol,
         signal=body.signal,
         bars=len(result.equity_curve),
-        metrics=_metrics_out(result.metrics),
+        metrics=_metrics_out(result.metrics, psr=probabilistic_sharpe_from_equity(result.equity_curve)),
         trades=[_trade_out(t) for t in result.trades],
     )
 

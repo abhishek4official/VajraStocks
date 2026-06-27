@@ -12,6 +12,7 @@ The ``sharpe`` arguments here are **per-observation** (non-annualised) Sharpe ra
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 
 from scipy.stats import norm
 
@@ -53,6 +54,31 @@ def expected_max_sharpe(n_trials: int, sharpe_variance: float) -> float:
         + _EULER_MASCHERONI * norm.ppf(1.0 - 1.0 / (n_trials * e))
     )
     return float(math.sqrt(sharpe_variance) * quantile)
+
+
+def probabilistic_sharpe_from_equity(
+    equity_curve: Sequence[float],
+    periods_per_year: int = 252,
+) -> float:
+    """Convenience: PSR (vs a 0 benchmark) computed from a backtest equity curve.
+
+    Confidence that the strategy's true (per-period) Sharpe is positive given the sample
+    length. 0.5 means indistinguishable from zero; higher is more confident.
+    """
+    returns = [
+        equity_curve[i] / equity_curve[i - 1] - 1.0
+        for i in range(1, len(equity_curve))
+        if equity_curve[i - 1] > 0
+    ]
+    n = len(returns)
+    if n < 2:
+        return 0.0
+    mean = sum(returns) / n
+    variance = sum((r - mean) ** 2 for r in returns) / (n - 1)
+    if variance <= 0:
+        return 0.5  # zero variance and zero excess -> indistinguishable from the benchmark
+    per_period_sr = mean / math.sqrt(variance)
+    return probabilistic_sharpe_ratio(per_period_sr, n_obs=n)
 
 
 def deflated_sharpe_ratio(

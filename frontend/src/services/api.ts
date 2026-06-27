@@ -615,6 +615,7 @@ export interface BacktestMetrics {
   profit_factor: number | null;
   sharpe_ratio: number;
   trades: number;
+  psr?: number | null;
 }
 
 export interface BacktestTrade {

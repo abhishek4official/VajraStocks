@@ -13,6 +13,7 @@ from scipy.stats import norm
 
 from stocks.services.quant.backtest.statistics import (
     deflated_sharpe_ratio,
+    probabilistic_sharpe_from_equity,
     probabilistic_sharpe_ratio,
 )
 
@@ -49,6 +50,19 @@ def test_dsr_deflates_below_psr():
     dsr = deflated_sharpe_ratio(sr, n_obs=n, n_trials=20, sharpe_variance=0.04)
     assert dsr < psr          # raising the benchmark lowers the confidence
     assert 0.0 <= dsr <= 1.0
+
+
+def test_psr_from_equity_rising_is_confident():
+    psr = probabilistic_sharpe_from_equity([100, 101, 102, 103, 104, 105])
+    assert psr > 0.5
+
+
+def test_psr_from_equity_flat_is_half():
+    assert probabilistic_sharpe_from_equity([100, 100, 100, 100]) == pytest.approx(0.5)
+
+
+def test_psr_from_equity_too_short():
+    assert probabilistic_sharpe_from_equity([100]) == 0.0
 
 
 def test_dsr_more_trials_more_deflation():

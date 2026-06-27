@@ -47,6 +47,7 @@ function MetricsGrid({ m }: { m: BacktestMetrics }) {
       <MetricCard label="Win rate" value={PCT(m.win_rate)} />
       <MetricCard label="Profit factor" value={NUM(m.profit_factor)} />
       <MetricCard label="Trades" value={String(m.trades)} />
+      <MetricCard label="PSR (Sharpe>0)" value={m.psr === null || m.psr === undefined ? '—' : PCT(m.psr)} />
     </div>
   );
 }
