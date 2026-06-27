@@ -1,7 +1,7 @@
 # VajraStocks 2.0 — Build Progress & Resume Checklist
 
 **Branch:** `feature/v2-hybrid-db` (off `feature/screener-report`)
-**Tests:** 236 passing · **Spec:** `Doc/VajraStocks_V2.0_PRD_BRD_Architecture.md`
+**Tests:** 245 passing · **Spec:** `Doc/VajraStocks_V2.0_PRD_BRD_Architecture.md`
 **Last updated:** 2026-06-26
 
 > Convention: all work is TDD (test first), committed under Abhishek (no Claude co-author).
@@ -82,7 +82,8 @@
 
 ### M6 — Edge / scale (partial)
 - [x] **Factor ranking primitives** — `quant/factors.py` (cross-sectional zscore/percentile/composite). Reused by M4 ranking.
-- [ ] Raw factor extractors from price/fundamentals (momentum/low-vol/value/quality/size) + first-class regime object
+- [x] **Raw academic factor extractors** — `quant/factor_extractors.py` (momentum 12-1, low-volatility, 52wk high_proximity) + `quant/factor_ranking.py` (`rank_symbols_by_factors` over BarStore) + API `POST /ranking/by-factors` (rank a watchlist by true factors). *(Frontend: TODO; universe-wide scan: TODO — bounded by symbol list for now.)*
+- [ ] Value/quality/size factors (need fundamentals) + first-class regime object
 - [ ] Drop derived-bar tables (HA/Renko/LineBreak) → compute on demand
 - [ ] Drop wide snapshot columns after cutover; plugin SDK (entry-points)
 
