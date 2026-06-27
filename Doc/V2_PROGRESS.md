@@ -68,7 +68,7 @@
 - [ ] Later: separate execution log (partial fills), entry chart snapshot, mistake-tag analytics
 
 ### M4 — Clarity / UI (partial)
-- [x] **Cross-sectional ranking** — `quant/factors.py` (pure zscore/percentile/composite_z) + `quant/ranking.py` (z-scores snapshot factor cols → weighted composite, ordered) + API `GET /ranking`. The relative-strength view the screener lacked. *(Frontend Ranking view: TODO.)*
+- [x] **Cross-sectional ranking (end-to-end)** — `quant/factors.py` (pure zscore/percentile/composite_z) + `quant/ranking.py` + API `GET /ranking` + **Ranking tab/panel** (universe ordered by composite z, per-factor z columns, percentile). The relative-strength view the screener lacked.
 - [ ] Router IA (5 destinations, down from 11 tabs), code-split lazy routes
 - [ ] Preset screeners (one-click setups)
 - [ ] AI copilot demoted to slide-over; numeric guardrail; `SqliteSaver` durable checkpoints
