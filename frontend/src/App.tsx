@@ -20,7 +20,6 @@ import { ComparePanel } from './components/ComparePanel';
 import { SettingsPanel } from './components/SettingsPanel';
 import { SetupWizard } from './components/SetupWizard';
 import { AboutPanel } from './components/AboutPanel';
-import { ML2TrainingPanel } from './components/ML2TrainingPanel';
 import { SwingPicksPanel } from './components/SwingPicksPanel';
 import { BacktestPanel } from './components/BacktestPanel';
 import { JournalPanel } from './components/JournalPanel';
@@ -372,9 +371,6 @@ function Dashboard() {
 
         {/* About */}
         {activeTab === 'about' && <AboutPanel />}
-
-        {/* ML Training */}
-        {activeTab === 'ml2-training' && <ML2TrainingPanel />}
 
         {/* TAB 6: Watchlist */}
         {activeTab === 'watchlist' && <WatchlistPanel />}

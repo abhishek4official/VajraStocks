@@ -472,8 +472,7 @@ class SyncEngine:
             except Exception as tl_err:
                 logger.error(f"Failed to compute trendlines post-sync: {tl_err}")
 
-            # Post-Sync Hook: Run VajraML2 (triple-barrier) predictions.
-            # V2 is the primary ML signal — writes ml2_* AND the shared ml_label/ml_rank/ml_prediction columns.
+            # Post-Sync Hook: Run VajraML predictions (LightGBM walk-forward ensemble).
             try:
                 import sys
                 from pathlib import Path as _Path
@@ -482,11 +481,11 @@ class SyncEngine:
                 if _vajra_root not in sys.path:
                     sys.path.insert(0, _vajra_root)
 
-                from VajraML2.predict import run_ml2_snapshot_update
+                from VajraML.predict import run_ml_snapshot_update
 
-                run_ml2_snapshot_update(self.db_manager.engine)
-            except Exception as ml2_err:
-                logger.error(f"Failed to run VajraML2 V2 snapshot update post-sync: {ml2_err}")
+                run_ml_snapshot_update(self.db_manager.engine)
+            except Exception as ml_err:
+                logger.error(f"Failed to run VajraML snapshot update post-sync: {ml_err}")
 
             # 6. Finalize Sync Job status
             final_status = "SUCCESS"

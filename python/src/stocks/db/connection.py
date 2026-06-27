@@ -318,12 +318,6 @@ class DatabaseManager:
             ("screening_snapshots", "stochrsi_zone",                "VARCHAR(15)",  "VARCHAR(15)"),
             ("screening_snapshots", "stochrsi_bullish_xover_days_ago", "INTEGER",   "INT"),
             ("screening_snapshots", "stochrsi_bearish_xover_days_ago", "INTEGER",   "INT"),
-            # VajraML2 prediction columns (triple-barrier classifier)
-            ("screening_snapshots", "ml2_p_tp",             "FLOAT",        "FLOAT"),
-            ("screening_snapshots", "ml2_p_sl",             "FLOAT",        "FLOAT"),
-            ("screening_snapshots", "ml2_ev_score",         "FLOAT",        "FLOAT"),
-            ("screening_snapshots", "ml2_rank",             "INTEGER",      "INT"),
-            ("screening_snapshots", "ml2_signal",           "VARCHAR(20)",  "VARCHAR(20)"),
             # Crossover recency columns
             ("screening_snapshots", "days_since_price_sma20_bull", "INTEGER", "INT"),
             ("screening_snapshots", "days_since_price_sma50_bull", "INTEGER", "INT"),

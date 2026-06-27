@@ -358,15 +358,6 @@ async def lifespan(app: FastAPI):
     # ⑦ — expose to request handlers
     app.state.db_manager = db_manager
 
-    # ⑦b — ML training job manager (one background thread at a time)
-    import sys as _sys
-    from pathlib import Path as _Path
-    _vajra_root = str(_Path(__file__).parents[4])
-    if _vajra_root not in _sys.path:
-        _sys.path.insert(0, _vajra_root)
-    from VajraML2.train_service import TrainingJobManagerV2
-    app.state.training_manager_v2 = TrainingJobManagerV2()
-
     # ⑦c — background job worker (DB-backed queue; long work off the request thread)
     try:
         from stocks.services.jobs import handlers as _job_handlers  # noqa: F401 — registers handlers

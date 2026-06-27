@@ -286,11 +286,6 @@ class ScreenerRowResponse(BaseModel):
     stochrsi_zone: str | None = None
     stochrsi_bullish_xover_days_ago: int | None = None
     stochrsi_bearish_xover_days_ago: int | None = None
-    ml2_p_tp: float | None = None
-    ml2_p_sl: float | None = None
-    ml2_ev_score: float | None = None
-    ml2_rank: int | None = None
-    ml2_signal: str | None = None
     strategy_signals: dict = {}   # {strategy_id: {"signal": str, "score": float|None}}
     # Crossover recency
     days_since_price_sma20_bull: int | None = None
@@ -469,11 +464,6 @@ def _build_row(r, confl_by_symbol_id: dict, risk_per_trade: float, strat_by_symb
         "stochrsi_zone": getattr(r, "stochrsi_zone", None),
         "stochrsi_bullish_xover_days_ago": getattr(r, "stochrsi_bullish_xover_days_ago", None),
         "stochrsi_bearish_xover_days_ago": getattr(r, "stochrsi_bearish_xover_days_ago", None),
-        "ml2_p_tp":    getattr(r, "ml2_p_tp",    None),
-        "ml2_p_sl":    getattr(r, "ml2_p_sl",    None),
-        "ml2_ev_score":getattr(r, "ml2_ev_score", None),
-        "ml2_rank":    getattr(r, "ml2_rank",     None),
-        "ml2_signal":  getattr(r, "ml2_signal",   None),
         "strategy_signals": (strat_by_symbol_id or {}).get(r.symbol_id, {}),
         "market_cap":       getattr(fund, "market_cap",       None),
         "enterprise_value": getattr(fund, "enterprise_value", None),

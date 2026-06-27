@@ -26,7 +26,7 @@ const DEFAULT_COL_FILTERS = {
   cmf_20: '', stochrsi_k: '', stochrsi_d: '',
   sma_20_cross_direction: '', sma_50_cross_direction: '', sma_200_cross_direction: '',
   macd_trend: '', ha_direction: '', renko_direction: '', line_break_direction: '',
-  rs_score_1m: '', patterns: '', ml2_signal: '',
+  rs_score_1m: '', patterns: '',
   days_since_ema9_ema20_bull: '', days_since_sma20_sma50_bull: '',
   days_since_macd_bull: '', days_since_cmf_bull: '',
   // New indicators
@@ -576,10 +576,6 @@ export const ScreenerPanel: React.FC = () => {
           }
         }
 
-        if (colFilters.ml2_signal) {
-          const selected = colFilters.ml2_signal.split(',').filter(Boolean);
-          if (selected.length > 0 && !selected.includes((row as any).ml2_signal || '')) return false;
-        }
         if (!matchNumericFilter(row.days_since_ema9_ema20_bull, colFilters.days_since_ema9_ema20_bull)) return false;
         if (!matchNumericFilter(row.days_since_sma20_sma50_bull, colFilters.days_since_sma20_sma50_bull)) return false;
         if (!matchNumericFilter(row.days_since_macd_bull, colFilters.days_since_macd_bull)) return false;
@@ -678,9 +674,6 @@ export const ScreenerPanel: React.FC = () => {
         row.line_break_direction ?? '',
         (row as any).rs_score_1m ?? '',
         patterns,
-        (row as any).ml2_signal ?? '',
-        (row as any).ml2_ev_score ?? '',
-        (row as any).ml2_rank ?? '',
         row.days_since_ema9_ema20_bull ?? '',
         row.days_since_sma20_sma50_bull ?? '',
         row.days_since_macd_bull ?? '',
@@ -1206,9 +1199,6 @@ export const ScreenerPanel: React.FC = () => {
                   RS 1M {renderSortIcon('rs_score_1m' as any)}
                 </th>
                 <th className="py-2 px-1.5 text-center" title="Pattern triggers">Patterns</th>
-                <th className="py-2 px-1.5 text-center cursor-pointer hover:text-text-main transition" title="VajraML2 triple-barrier signal (EV rank)" onClick={() => handleSort('ml2_rank' as any)}>
-                  ML Signal {renderSortIcon('ml2_rank' as any)}
-                </th>
                 <th className="py-2 px-1.5 text-center cursor-pointer hover:text-text-main transition" title="Days since EMA9 crossed above EMA20 (golden ribbon)" onClick={() => handleSort('days_since_ema9_ema20_bull')}>
                   EMA Rbbn {renderSortIcon('days_since_ema9_ema20_bull')}
                 </th>
@@ -1656,23 +1646,6 @@ export const ScreenerPanel: React.FC = () => {
                         { value: 'Inside', label: 'Inside' },
                         { value: 'Gap+', label: 'Gap+' },
                         { value: 'Gap-', label: 'Gap-' },
-                      ]}
-                    />
-                  </td>
-
-                  {/* ML Signal */}
-                  <td className="py-1 px-1.5 text-center">
-                    <MultiSelectFilter
-                      value={colFilters.ml2_signal}
-                      onChange={(val) => setColFilters({ ...colFilters, ml2_signal: val })}
-                      placeholder="All"
-                      minWidth="80px"
-                      options={[
-                        { value: 'Strong Buy',   label: 'Strong Buy',   className: 'text-emerald-300 font-bold' },
-                        { value: 'Buy',          label: 'Buy',          className: 'text-emerald-500' },
-                        { value: 'Watch',        label: 'Watch',        className: 'text-amber-400' },
-                        { value: 'Avoid',        label: 'Avoid',        className: 'text-slate-500' },
-                        { value: 'Market Risk',  label: 'Market Risk',  className: 'text-rose-400 font-bold' },
                       ]}
                     />
                   </td>
@@ -2349,35 +2322,6 @@ export const ScreenerPanel: React.FC = () => {
                             })}
                           </div>
                         )}
-                      </td>
-
-                      {/* ML Signal (VajraML2) */}
-                      <td className="py-2 px-1.5 text-center">
-                        {(() => {
-                          const sig  = (row as any).ml2_signal as string | null | undefined;
-                          const rank = (row as any).ml2_rank as number | null | undefined;
-                          const ptp  = (row as any).ml2_p_tp as number | null | undefined;
-                          if (!sig) return <span className="text-slate-600 text-xs">—</span>;
-                          const cfg: Record<string, { bg: string; text: string }> = {
-                            'Strong Buy':  { bg: 'bg-emerald-500/20 border-emerald-400/50', text: 'text-emerald-200' },
-                            'Buy':         { bg: 'bg-teal-500/15 border-teal-400/40',       text: 'text-teal-300'   },
-                            'Watch':       { bg: 'bg-amber-500/15 border-amber-400/40',     text: 'text-amber-300'  },
-                            'Avoid':       { bg: 'bg-slate-700/40 border-slate-600/40',     text: 'text-slate-400'  },
-                            'Market Risk': { bg: 'bg-rose-500/20 border-rose-400/50',       text: 'text-rose-200'   },
-                          };
-                          const c = cfg[sig] ?? cfg['Avoid'];
-                          return (
-                            <span
-                              title={`ML2 EV Rank: ${rank ?? '—'} | P(TP): ${ptp != null ? (ptp * 100).toFixed(1) + '%' : '—'}`}
-                              className={`inline-flex flex-col items-center gap-0 px-1.5 py-0.5 rounded border text-[10px] font-bold whitespace-nowrap ${c.bg} ${c.text}`}
-                            >
-                              {sig}
-                              {rank != null && (
-                                <span className="opacity-60 font-mono text-[9px] font-normal">#{rank}</span>
-                              )}
-                            </span>
-                          );
-                        })()}
                       </td>
 
                       {/* EMA Ribbon crossover */}

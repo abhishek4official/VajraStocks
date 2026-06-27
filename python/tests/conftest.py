@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import scoped_session, sessionmaker
@@ -6,6 +8,8 @@ from sqlalchemy.pool import StaticPool
 from stocks.config import Config
 from stocks.db.connection import DatabaseManager
 
+_TESTS_DIR = Path(__file__).parent
+
 
 @pytest.fixture(scope="session")
 def test_config() -> Config:
@@ -13,7 +17,7 @@ def test_config() -> Config:
     config = Config.load()
     # Override database to in-memory SQLite for high-speed unit tests
     config.database.connection_string = "sqlite:///:memory:"
-    config.symbols.fallback_csv_path = "tests/EQUITY_L_TEST.csv"
+    config.symbols.fallback_csv_path = str(_TESTS_DIR / "EQUITY_L_TEST.csv")
     return config
 
 

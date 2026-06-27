@@ -510,54 +510,6 @@ export interface EodImportJob {
   error_message: string | null;
 }
 
-// ── ML Training (VajraML2) ────────────────────────────────────────────────────
-export interface ML2FoldMetric {
-  fold: number;
-  ic_ptp: number;
-  tp_prec: number;
-  hit_5d: number;
-  ls_pnl: number;
-}
-
-export interface ML2TrainingRun {
-  id: number;
-  version: string;
-  status: 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
-  num_folds: number | null;
-  dataset_rows: number | null;
-  date_range_start: string | null;
-  date_range_end: string | null;
-  mean_ic_ptp: number | null;
-  fold_metrics: ML2FoldMetric[] | null;
-  error_message: string | null;
-  started_at: string;
-  completed_at: string | null;
-}
-
-export interface ML2ProgressEvent {
-  type: 'stage' | 'dataset' | 'fold_start' | 'tree' | 'fold_done'
-      | 'complete' | 'cancelled' | 'error' | 'heartbeat' | 'stream_end';
-  pct?: number;
-  message?: string;
-  rows?: number;
-  features?: number;
-  date_start?: string;
-  date_end?: string;
-  fold?: number;
-  total?: number;
-  train_rows?: number;
-  test_rows?: number;
-  tree?: number;
-  ic_ptp?: number;
-  tp_prec?: number;
-  hit_5d?: number;
-  ls_pnl?: number;
-  mean_ic_ptp?: number;
-  mean_tp_prec?: number;
-  folds?: number;
-  error?: string;
-}
-
 // ── Fundamentals ─────────────────────────────────────────────────────────────
 export interface SymbolFundamentals {
   symbol: string;

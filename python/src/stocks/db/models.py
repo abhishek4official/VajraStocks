@@ -374,13 +374,6 @@ class ScreeningSnapshot(Base):
     stochrsi_bullish_xover_days_ago: Mapped[int | None] = mapped_column(Integer, nullable=True)
     stochrsi_bearish_xover_days_ago: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
-    # VajraML2 Prediction (triple-barrier classifier, written by V2 post-sync hook)
-    ml2_p_tp: Mapped[float | None] = mapped_column(Float, nullable=True)
-    ml2_p_sl: Mapped[float | None] = mapped_column(Float, nullable=True)
-    ml2_ev_score: Mapped[float | None] = mapped_column(Float, nullable=True)
-    ml2_rank: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    ml2_signal: Mapped[str | None] = mapped_column(String(20), nullable=True)
-
     # Crossover recency — trading days since last crossover event (None = not seen within 20-day window)
     days_since_price_sma20_bull: Mapped[int | None] = mapped_column(Integer, nullable=True)
     days_since_price_sma50_bull: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -477,25 +470,6 @@ class MLTrainingRun(Base):
     date_range_start: Mapped[datetime.date | None] = mapped_column(Date, nullable=True)
     date_range_end:   Mapped[datetime.date | None] = mapped_column(Date, nullable=True)
     mean_ic:          Mapped[float | None]         = mapped_column(Float, nullable=True)
-    fold_metrics:     Mapped[str | None]           = mapped_column(Text, nullable=True)   # JSON array
-    error_message:    Mapped[str | None]           = mapped_column(Text, nullable=True)
-    started_at:       Mapped[datetime.datetime]    = mapped_column(DateTime, default=func.now())
-    completed_at:     Mapped[datetime.datetime | None] = mapped_column(DateTime, nullable=True)
-
-
-class ML2TrainingRun(Base):
-    """Persists each VajraML2 (triple-barrier classifier) training run."""
-
-    __tablename__ = "ml2_training_runs"
-
-    id:               Mapped[int]                  = mapped_column(Integer, primary_key=True, autoincrement=True)
-    version:          Mapped[str]                  = mapped_column(String(30), nullable=False)
-    status:           Mapped[str]                  = mapped_column(String(20), nullable=False, default="RUNNING")
-    num_folds:        Mapped[int | None]           = mapped_column(Integer, nullable=True)
-    dataset_rows:     Mapped[int | None]           = mapped_column(Integer, nullable=True)
-    date_range_start: Mapped[datetime.date | None] = mapped_column(Date, nullable=True)
-    date_range_end:   Mapped[datetime.date | None] = mapped_column(Date, nullable=True)
-    mean_ic_ptp:      Mapped[float | None]         = mapped_column(Float, nullable=True)
     fold_metrics:     Mapped[str | None]           = mapped_column(Text, nullable=True)   # JSON array
     error_message:    Mapped[str | None]           = mapped_column(Text, nullable=True)
     started_at:       Mapped[datetime.datetime]    = mapped_column(DateTime, default=func.now())
