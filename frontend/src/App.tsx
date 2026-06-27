@@ -24,6 +24,7 @@ import { ML2TrainingPanel } from './components/ML2TrainingPanel';
 import { SwingPicksPanel } from './components/SwingPicksPanel';
 import { BacktestPanel } from './components/BacktestPanel';
 import { JournalPanel } from './components/JournalPanel';
+import { RankingPanel } from './components/RankingPanel';
 import { FundamentalsCard } from './components/FundamentalsCard';
 import { AnnouncementsPanel } from './components/AnnouncementsPanel';
 import { NewsPanel } from './components/NewsPanel';
@@ -44,6 +45,7 @@ import {
   Zap,
   Activity,
   BookMarked,
+  ListOrdered,
 } from 'lucide-react';
 import './App.css';
 
@@ -102,7 +104,7 @@ function Dashboard() {
 
     const handlePopState = () => {
       const path = window.location.pathname.replace(/^\/+/, '').split('/')[0];
-      const valid = ['explorer', 'screener', 'strategy', 'backtest', 'journal', 'sync', 'ai-research', 'portfolio', 'watchlist', 'about', 'ml2-training'];
+      const valid = ['explorer', 'screener', 'ranking', 'strategy', 'backtest', 'journal', 'sync', 'ai-research', 'portfolio', 'watchlist', 'about', 'ml2-training'];
       const tab = valid.includes(path) ? path : 'explorer';
       useStockStore.setState({ activeTab: tab as any });
     };
@@ -158,6 +160,7 @@ function Dashboard() {
           {([
             { id: 'explorer',    label: 'Explorer',    Icon: Layers      },
             { id: 'screener',    label: 'Screener',    Icon: Search      },
+            { id: 'ranking',     label: 'Ranking',     Icon: ListOrdered },
             { id: 'strategy',    label: 'Strategy',    Icon: Target      },
             { id: 'backtest',    label: 'Backtest',    Icon: Activity    },
             { id: 'journal',     label: 'Journal',     Icon: BookMarked  },
@@ -340,6 +343,9 @@ function Dashboard() {
 
         {/* TAB 2d: Trade Journal */}
         {activeTab === 'journal' && <JournalPanel />}
+
+        {/* TAB 2e: Cross-sectional Ranking */}
+        {activeTab === 'ranking' && <RankingPanel />}
 
         {/* TAB 3: Synchronization Workspace */}
         {activeTab === 'sync' && <SyncPanel />}

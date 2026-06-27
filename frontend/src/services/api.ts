@@ -718,6 +718,14 @@ export interface Job {
   finished_at: string | null;
 }
 
+// ── Cross-sectional ranking ─────────────────────────────────────────────────────
+export interface RankRow {
+  symbol: string;
+  composite_z: number;
+  percentile: number | null;
+  factors: Record<string, number | null>;
+}
+
 export const apiService = {
   // 1. Symbols endpoints
   async getAllSymbols(activeOnly = true): Promise<SymbolDetail[]> {
@@ -1368,6 +1376,19 @@ export const apiService = {
   async getJob(id: number): Promise<Job> {
     const r = await fetch(`${BASE_URL}/jobs/${id}`);
     if (!r.ok) throw new Error('Job not found');
+    return r.json();
+  },
+
+  // ── Cross-sectional ranking ──────────────────────────────────────────────────
+  async getRanking(limit = 100): Promise<RankRow[]> {
+    const r = await fetch(`${BASE_URL}/ranking?limit=${limit}`);
+    if (!r.ok) throw new Error('Failed to load ranking');
+    return r.json();
+  },
+
+  async getRankingFactors(): Promise<{ factors: string[]; weights: Record<string, number> }> {
+    const r = await fetch(`${BASE_URL}/ranking/factors`);
+    if (!r.ok) throw new Error('Failed to load ranking factors');
     return r.json();
   },
 };
