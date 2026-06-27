@@ -82,7 +82,7 @@
 
 ### M6 — Edge / scale (partial)
 - [x] **Factor ranking primitives** — `quant/factors.py` (cross-sectional zscore/percentile/composite). Reused by M4 ranking.
-- [x] **Raw academic factor extractors** — `quant/factor_extractors.py` (momentum 12-1, low-volatility, 52wk high_proximity) + `quant/factor_ranking.py` (`rank_symbols_by_factors` over BarStore) + API `POST /ranking/by-factors` (rank a watchlist by true factors). *(Frontend: TODO; universe-wide scan: TODO — bounded by symbol list for now.)*
+- [x] **Raw academic factor extractors (end-to-end)** — `quant/factor_extractors.py` (momentum 12-1, low-volatility, 52wk high_proximity) + `quant/factor_ranking.py` (`rank_symbols_by_factors` over BarStore) + API `POST /ranking/by-factors` + **Ranking panel "Watchlist (academic factors)" mode** (pick a watchlist → ranked by true factors). *(Universe-wide scan still bounded by symbol list — fine for watchlists.)*
 - [ ] Value/quality/size factors (need fundamentals) + first-class regime object
 - [ ] Drop derived-bar tables (HA/Renko/LineBreak) → compute on demand
 - [ ] Drop wide snapshot columns after cutover; plugin SDK (entry-points)
