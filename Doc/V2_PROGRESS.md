@@ -1,7 +1,7 @@
 # VajraStocks 2.0 — Build Progress & Resume Checklist
 
 **Branch:** `feature/v2-hybrid-db` (off `feature/screener-report`)
-**Tests:** 245 passing · **Spec:** `Doc/VajraStocks_V2.0_PRD_BRD_Architecture.md`
+**Tests:** 249 passing · **Spec:** `Doc/VajraStocks_V2.0_PRD_BRD_Architecture.md`
 **Last updated:** 2026-06-26
 
 > Convention: all work is TDD (test first), committed under Abhishek (no Claude co-author).
@@ -87,8 +87,9 @@
 - [ ] Drop derived-bar tables (HA/Renko/LineBreak) → compute on demand
 - [ ] Drop wide snapshot columns after cutover; plugin SDK (entry-points)
 
-### M7 / M8 — Polish (not started)
-- [ ] OS notifications for alerts; backup/restore portable profile; auto-update channel
+### M7 / M8 — Polish (partial)
+- [x] **Backup/restore (end-to-end)** — `services/backup.py` export/import of journal trades + watchlists + pick notes (versioned, idempotent, DB-agnostic incl. MSSQL) + API `/backup/export`+`/import` + **Backup & Restore section in Settings** (download JSON / import file). Price data excluded (re-syncable).
+- [ ] OS notifications for alerts; auto-update channel
 - [ ] VaR / scenario / stress / attribution
 - [ ] Unify the two ML stacks (`VajraML` + `VajraML2`) → one module
 - [ ] Freeze then remove MSSQL/PostgreSQL support
