@@ -1,7 +1,7 @@
 # VajraStocks 2.0 — Build Progress & Resume Checklist
 
 **Branch:** `feature/v2-hybrid-db` (off `feature/screener-report`)
-**Tests:** 215 passing · **Spec:** `Doc/VajraStocks_V2.0_PRD_BRD_Architecture.md`
+**Tests:** 225 passing · **Spec:** `Doc/VajraStocks_V2.0_PRD_BRD_Architecture.md`
 **Last updated:** 2026-06-26
 
 > Convention: all work is TDD (test first), committed under Abhishek (no Claude co-author).
@@ -67,9 +67,10 @@
 - [x] **Frontend Journal panel** — log form, inline close, per-setup review table, computed P&L/R. Typechecks + prod build clean.
 - [ ] Later: separate execution log (partial fills), entry chart snapshot, mistake-tag analytics
 
-### M4 — Clarity / UI (not started)
+### M4 — Clarity / UI (partial)
+- [x] **Cross-sectional ranking** — `quant/factors.py` (pure zscore/percentile/composite_z) + `quant/ranking.py` (z-scores snapshot factor cols → weighted composite, ordered) + API `GET /ranking`. The relative-strength view the screener lacked. *(Frontend Ranking view: TODO.)*
 - [ ] Router IA (5 destinations, down from 11 tabs), code-split lazy routes
-- [ ] Preset screeners + **cross-sectional ranking** (z-scores, not just absolute thresholds)
+- [ ] Preset screeners (one-click setups)
 - [ ] AI copilot demoted to slide-over; numeric guardrail; `SqliteSaver` durable checkpoints
 - [ ] Split mega-components (ScreenerPanel 2,802 LOC, etc.)
 
@@ -79,8 +80,9 @@
 - [ ] Genuinely missing (optional): tax lots, contribution-to-risk decomposition, stress/scenario shocks
 - NOTE: spec drafts understated this — described as a CSV snapshot but it's a full risk dashboard.
 
-### M6 — Edge / scale (not started)
-- [ ] Factor library (value/quality/momentum/low-vol/size) + regime model as first-class object
+### M6 — Edge / scale (partial)
+- [x] **Factor ranking primitives** — `quant/factors.py` (cross-sectional zscore/percentile/composite). Reused by M4 ranking.
+- [ ] Raw factor extractors from price/fundamentals (momentum/low-vol/value/quality/size) + first-class regime object
 - [ ] Drop derived-bar tables (HA/Renko/LineBreak) → compute on demand
 - [ ] Drop wide snapshot columns after cutover; plugin SDK (entry-points)
 
