@@ -5,11 +5,8 @@ import pandas as pd
 from sqlalchemy import select
 
 from stocks.db.models import (
-    DailyHeikinAshi,
     DailyIndicator,
     DailyPrice,
-    LineBreakLine,
-    RenkoBrick,
     ScreeningSnapshot,
     SymbolSyncState,
     SyncJob,
@@ -67,12 +64,6 @@ def test_full_resumable_sync_run(mock_download, test_config, db_manager):
     # Verify derived indicators and market structures are saved successfully
     total_indicators = session.query(DailyIndicator).count()
     assert total_indicators == 21
-
-    total_ha = session.query(DailyHeikinAshi).count()
-    assert total_ha == 21
-
-    total_renko = session.query(RenkoBrick).count()
-    total_lb = session.query(LineBreakLine).count()
 
     # Verify screening snapshots are created successfully and are accurate
     total_snapshots = session.query(ScreeningSnapshot).count()

@@ -64,7 +64,7 @@ def _execute_async_recalculate(request: Request, symbol_ticker: str | None = Non
     from concurrent.futures import ProcessPoolExecutor, as_completed
     from loguru import logger
     from sqlalchemy import delete
-    from stocks.db.models import DailyHeikinAshi, DailyIndicator, LineBreakLine, RenkoBrick
+    from stocks.db.models import DailyIndicator
     from stocks.services.sync_engine import calculate_derived_data_in_memory
 
     CHUNK_SIZE = 50
@@ -147,18 +147,9 @@ def _execute_async_recalculate(request: Request, symbol_ticker: str | None = Non
                 try:
                     result_ids = [r["symbol_id"] for r in chunk_results]
 
-                    # 4 batch DELETEs (IN clause) instead of 4 × len(chunk) individual ones
                     session.execute(delete(DailyIndicator).where(DailyIndicator.symbol_id.in_(result_ids)))
-                    session.execute(delete(DailyHeikinAshi).where(DailyHeikinAshi.symbol_id.in_(result_ids)))
-                    session.execute(delete(RenkoBrick).where(RenkoBrick.symbol_id.in_(result_ids)))
-                    session.execute(delete(LineBreakLine).where(LineBreakLine.symbol_id.in_(result_ids)))
 
-                    # Accumulate all rows across the chunk, then 4 bulk INSERTs
-                    all_indicators:   list[dict] = []
-                    all_ha_candles:   list[dict] = []
-                    all_renko_bricks: list[dict] = []
-                    all_line_breaks:  list[dict] = []
-
+                    all_indicators: list[dict] = []
                     for result in chunk_results:
                         sid = result["symbol_id"]
                         for ind in result["indicators"]:
@@ -166,27 +157,8 @@ def _execute_async_recalculate(request: Request, symbol_ticker: str | None = Non
                             ind["granularity"] = "1d"
                         all_indicators.extend(result["indicators"])
 
-                        for ha in result["ha_candles"]:
-                            ha["symbol_id"] = sid
-                            ha["granularity"] = "1d"
-                        all_ha_candles.extend(result["ha_candles"])
-
-                        for brick in result["renko_bricks"]:
-                            brick["symbol_id"] = sid
-                        all_renko_bricks.extend(result["renko_bricks"])
-
-                        for lb in result["line_breaks"]:
-                            lb["symbol_id"] = sid
-                        all_line_breaks.extend(result["line_breaks"])
-
                     if all_indicators:
                         session.bulk_insert_mappings(DailyIndicator, all_indicators)
-                    if all_ha_candles:
-                        session.bulk_insert_mappings(DailyHeikinAshi, all_ha_candles)
-                    if all_renko_bricks:
-                        session.bulk_insert_mappings(RenkoBrick, all_renko_bricks)
-                    if all_line_breaks:
-                        session.bulk_insert_mappings(LineBreakLine, all_line_breaks)
 
                     # Confluence S/R levels — per-symbol with savepoints.
                     # Runs after bulk inserts so DailyIndicator rows (ATR, SMAs) are

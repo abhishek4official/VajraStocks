@@ -333,6 +333,8 @@ class DatabaseManager:
             ("screening_snapshots", "macd_histogram_slope", "FLOAT",   "FLOAT"),
             ("screening_snapshots", "macd_above_zero",      "BOOLEAN", "BIT"),
             ("screening_snapshots", "cmf_slope_5d",         "FLOAT",   "FLOAT"),
+            # JSON long-tail for point-in-time indicator snapshot
+            ("screening_snapshots", "features_json",         "TEXT",         "TEXT"),
             # EOD import provenance column
             ("daily_prices",        "data_source",          "VARCHAR(20)",  "VARCHAR(20)"),
             # New DailyIndicator columns
@@ -390,6 +392,16 @@ class DatabaseManager:
                 logger.info("ensure_columns: widened screening_snapshots.regime_bias to VARCHAR(20)")
         except Exception as e:
             logger.debug(f"ensure_columns: regime_bias widen skipped (may already be correct width): {e}")
+
+        # Drop legacy derived-bar tables (now computed on demand — chart.py / screening.py).
+        # Safe to run repeatedly: IF EXISTS guards each statement.
+        for tbl in ("daily_heikin_ashi", "renko_bricks", "line_break_lines"):
+            try:
+                with self.engine.begin() as conn:
+                    conn.execute(text(f"DROP TABLE IF EXISTS {tbl}"))
+                logger.info(f"ensure_columns: dropped legacy table '{tbl}' (if it existed)")
+            except Exception as e:
+                logger.debug(f"ensure_columns: could not drop '{tbl}': {e}")
 
     def get_session(self):
         """Returns a new isolated database session."""

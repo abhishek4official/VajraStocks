@@ -314,7 +314,7 @@ def recalculate_derived(config_path: str, symbols: str, limit: int | None):
 
         from sqlalchemy import delete
 
-        from stocks.db.models import DailyHeikinAshi, DailyIndicator, LineBreakLine, RenkoBrick
+        from stocks.db.models import DailyIndicator
 
         processed = 0
         failed = 0
@@ -322,11 +322,8 @@ def recalculate_derived(config_path: str, symbols: str, limit: int | None):
         for idx, symbol_obj in enumerate(active_symbols, 1):
             logger.info(f"[{idx}/{total}] Processing {symbol_obj.symbol}...")
             try:
-                # Clear all existing derived data to guarantee clean cold start calculations
+                # Clear existing indicators to guarantee clean cold start calculations
                 session.execute(delete(DailyIndicator).where(DailyIndicator.symbol_id == symbol_obj.id))
-                session.execute(delete(DailyHeikinAshi).where(DailyHeikinAshi.symbol_id == symbol_obj.id))
-                session.execute(delete(RenkoBrick).where(RenkoBrick.symbol_id == symbol_obj.id))
-                session.execute(delete(LineBreakLine).where(LineBreakLine.symbol_id == symbol_obj.id))
                 session.commit()
 
                 # Fetch all prices in DB

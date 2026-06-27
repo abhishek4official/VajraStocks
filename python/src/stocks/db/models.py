@@ -53,15 +53,6 @@ class Symbol(Base):
     indicators: Mapped[list["DailyIndicator"]] = relationship(
         "DailyIndicator", back_populates="symbol_obj", cascade="all, delete-orphan"
     )
-    heikin_ashi: Mapped[list["DailyHeikinAshi"]] = relationship(
-        "DailyHeikinAshi", back_populates="symbol_obj", cascade="all, delete-orphan"
-    )
-    renko_bricks: Mapped[list["RenkoBrick"]] = relationship(
-        "RenkoBrick", back_populates="symbol_obj", cascade="all, delete-orphan"
-    )
-    line_break_lines: Mapped[list["LineBreakLine"]] = relationship(
-        "LineBreakLine", back_populates="symbol_obj", cascade="all, delete-orphan"
-    )
     screening_snapshot: Mapped[Optional["ScreeningSnapshot"]] = relationship(
         "ScreeningSnapshot", back_populates="symbol_obj", uselist=False, cascade="all, delete-orphan"
     )
@@ -218,76 +209,6 @@ class DailyIndicator(Base):
     )
 
 
-class DailyHeikinAshi(Base):
-    """Model representing historical daily Heikin-Ashi candles."""
-
-    __tablename__ = "daily_heikin_ashi"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    symbol_id: Mapped[int] = mapped_column(Integer, ForeignKey("symbols.id", ondelete="CASCADE"), nullable=False)
-    trading_date: Mapped[datetime.date] = mapped_column(Date, nullable=False)
-    granularity: Mapped[str] = mapped_column(String(10), nullable=False, default="1d")
-    open: Mapped[float] = mapped_column(Numeric(12, 4), nullable=False)
-    high: Mapped[float] = mapped_column(Numeric(12, 4), nullable=False)
-    low: Mapped[float] = mapped_column(Numeric(12, 4), nullable=False)
-    close: Mapped[float] = mapped_column(Numeric(12, 4), nullable=False)
-
-    # Relationships
-    symbol_obj: Mapped["Symbol"] = relationship("Symbol", back_populates="heikin_ashi")
-
-    __table_args__ = (
-        UniqueConstraint("symbol_id", "trading_date", "granularity", name="UQ_HA_Symbol_Date"),
-        Index("ix_ha_symbol_date", "symbol_id", "trading_date"),
-    )
-
-
-class RenkoBrick(Base):
-    """Model representing path-dependent, asynchronous Renko bricks."""
-
-    __tablename__ = "renko_bricks"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    symbol_id: Mapped[int] = mapped_column(Integer, ForeignKey("symbols.id", ondelete="CASCADE"), nullable=False)
-    brick_index: Mapped[int] = mapped_column(Integer, nullable=False)
-    start_date: Mapped[datetime.date] = mapped_column(Date, nullable=False)
-    end_date: Mapped[datetime.date] = mapped_column(Date, nullable=False)
-    open: Mapped[float] = mapped_column(Numeric(12, 4), nullable=False)
-    close: Mapped[float] = mapped_column(Numeric(12, 4), nullable=False)
-    direction: Mapped[str] = mapped_column(String(10), nullable=False)  # 'UP', 'DOWN'
-    brick_size: Mapped[float] = mapped_column(Numeric(12, 4), nullable=False)
-
-    # Relationships
-    symbol_obj: Mapped["Symbol"] = relationship("Symbol", back_populates="renko_bricks")
-
-    __table_args__ = (
-        UniqueConstraint("symbol_id", "brick_index", name="UQ_Renko_Symbol_Index"),
-        Index("ix_renko_symbol_index", "symbol_id", "brick_index"),
-    )
-
-
-class LineBreakLine(Base):
-    """Model representing path-dependent, asynchronous Line Break lines."""
-
-    __tablename__ = "line_break_lines"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    symbol_id: Mapped[int] = mapped_column(Integer, ForeignKey("symbols.id", ondelete="CASCADE"), nullable=False)
-    line_index: Mapped[int] = mapped_column(Integer, nullable=False)
-    start_date: Mapped[datetime.date] = mapped_column(Date, nullable=False)
-    end_date: Mapped[datetime.date] = mapped_column(Date, nullable=False)
-    open: Mapped[float] = mapped_column(Numeric(12, 4), nullable=False)
-    close: Mapped[float] = mapped_column(Numeric(12, 4), nullable=False)
-    direction: Mapped[str] = mapped_column(String(10), nullable=False)  # 'UP', 'DOWN'
-
-    # Relationships
-    symbol_obj: Mapped["Symbol"] = relationship("Symbol", back_populates="line_break_lines")
-
-    __table_args__ = (
-        UniqueConstraint("symbol_id", "line_index", name="UQ_LineBreak_Symbol_Index"),
-        Index("ix_line_break_symbol_index", "symbol_id", "line_index"),
-    )
-
-
 class ScreeningSnapshot(Base):
     """Model representing optimized, rapid-query latest metrics snapshot for screening."""
 
@@ -441,6 +362,9 @@ class ScreeningSnapshot(Base):
     avwap_upper_1sd: Mapped[float | None] = mapped_column(Float, nullable=True)
     avwap_lower_1sd: Mapped[float | None] = mapped_column(Float, nullable=True)
     price_vs_avwap: Mapped[str | None] = mapped_column(String(5), nullable=True)         # ABOVE / BELOW
+
+    # JSON long-tail: secondary indicator values for point-in-time analysis / future plugin indicators
+    features_json: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     updated_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now())
 

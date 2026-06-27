@@ -231,10 +231,8 @@ async def fetch_data_node(state: VajraState, config: RunnableConfig) -> dict[str
     symbol = state.get("symbol") or "RELIANCE.NS"
 
     from stocks.db.models import (
-        DailyHeikinAshi,
         DailyIndicator,
-        LineBreakLine,
-        RenkoBrick,
+        ScreeningSnapshot,
         Symbol as SymModel,
     )
     from stocks.services.database import DatabaseService
@@ -254,18 +252,8 @@ async def fetch_data_node(state: VajraState, config: RunnableConfig) -> dict[str
         .limit(14)
     ).all()
 
-    ha = db.scalar(
-        select(DailyHeikinAshi)
-        .filter_by(symbol_id=sym_obj.id)
-        .order_by(DailyHeikinAshi.trading_date.desc())
-        .limit(1)
-    )
-    brick = db.scalar(
-        select(RenkoBrick).filter_by(symbol_id=sym_obj.id).order_by(RenkoBrick.brick_index.desc()).limit(1)
-    )
-    lb = db.scalar(
-        select(LineBreakLine).filter_by(symbol_id=sym_obj.id).order_by(LineBreakLine.line_index.desc()).limit(1)
-    )
+    # Read direction values from the pre-computed screening snapshot
+    snap = db.scalar(select(ScreeningSnapshot).filter_by(symbol_id=sym_obj.id))
 
     ind_list = [
         {
@@ -282,21 +270,15 @@ async def fetch_data_node(state: VajraState, config: RunnableConfig) -> dict[str
         for r in indicators
     ]
 
-    ha_dir = (
-        ha.ha_direction
-        if ha and hasattr(ha, "ha_direction")
-        else ("UP" if ha and float(ha.close) >= float(ha.open) else "DOWN")
-    )
-
     return {
         "sql_data": {
             "symbol": symbol,
             "prices": prices,
             "ind_list": ind_list,
             "latest_indicators": ind_list[0] if ind_list else {},
-            "ha_direction": ha_dir,
-            "renko_direction": brick.direction if brick else "UP",
-            "line_break_direction": lb.direction if lb else "UP",
+            "ha_direction": snap.ha_direction if snap else "UP",
+            "renko_direction": snap.renko_direction if snap else None,
+            "line_break_direction": snap.line_break_direction if snap else None,
         }
     }
 

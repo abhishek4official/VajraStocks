@@ -31,27 +31,21 @@ def calculate_derived_data_in_memory(
             "symbol_id": int,
             "symbol": str,
             "indicators": [...],    # list of indicator row dicts
-            "ha_candles": [...],    # list of Heikin-Ashi row dicts
-            "renko_bricks": [...],
-            "line_breaks":  [...],
         }
     """
     import pandas as pd
     from stocks.config import Config as _Config
     from stocks.services.indicator_engine import IndicatorEngine
-    from stocks.services.market_structure import MarketStructureEngine
 
     empty: dict[str, Any] = {
         "symbol_id": symbol_id, "symbol": symbol,
-        "indicators": [], "ha_candles": [], "renko_bricks": [], "line_breaks": [],
+        "indicators": [],
     }
     if not prices:
         return empty
 
-    # Engines store config but do not read any config values in their methods
     _cfg = _Config()
     indicator_engine = IndicatorEngine(_cfg)
-    market_structure_engine = MarketStructureEngine(_cfg)
 
     df = pd.DataFrame(prices)
     df.set_index(pd.to_datetime(df["trading_date"]), inplace=True)
@@ -115,18 +109,10 @@ def calculate_derived_data_in_memory(
             "hm_rsi_ema3":            _f(row.get("hm_rsi_ema3")),
         })
 
-    # Cold-start: full historical price series is always passed for recalculate
-    ha_candles:   list[dict[str, Any]] = market_structure_engine.generate_heikin_ashi(df)
-    renko_bricks: list[dict[str, Any]] = market_structure_engine.generate_renko_bricks(df)
-    line_breaks:  list[dict[str, Any]] = market_structure_engine.generate_line_breaks(df)
-
     return {
-        "symbol_id":    symbol_id,
-        "symbol":       symbol,
-        "indicators":   indicators,
-        "ha_candles":   ha_candles,
-        "renko_bricks": renko_bricks,
-        "line_breaks":  line_breaks,
+        "symbol_id":  symbol_id,
+        "symbol":     symbol,
+        "indicators": indicators,
     }
 
 
@@ -535,11 +521,8 @@ class SyncEngine:
         import pandas as pd
 
         from stocks.services.indicator_engine import IndicatorEngine
-        from stocks.services.market_structure import MarketStructureEngine
 
-        # Initialize engines
         indicator_engine = IndicatorEngine(self.config)
-        market_structure_engine = MarketStructureEngine(self.config)
 
         # 1. Determine date boundaries for sliding window
         new_dates = [p["trading_date"] for p in clean_prices]
@@ -602,49 +585,15 @@ class SyncEngine:
             }
             indicators_to_save.append(ind_dict)
 
-        # 3. Heikin-Ashi Candles
-        # Load previous candle seed
-        prev_ha_candle = db_service.get_latest_heikin_ashi(symbol_obj.id)
-        # We calculate HA for only the new prices.
-        # But wait! If we have a seed, we pass only the new prices to generate_heikin_ashi.
-        # If we DO NOT have a seed, we should pass the entire historical prices to get standard Heikin-Ashi.
-        if prev_ha_candle:
-            df_new_prices = df_prices[df_prices.index.date >= min_date]
-            ha_candles_to_save = market_structure_engine.generate_heikin_ashi(df_new_prices, prev_candle=prev_ha_candle)
-        else:
-            ha_candles_to_save = market_structure_engine.generate_heikin_ashi(df_prices)
-
-        # 4. Renko Bricks
-        last_brick = db_service.get_latest_renko_brick(symbol_obj.id)
-        if last_brick:
-            df_new_prices = df_prices[df_prices.index.date >= min_date]
-            renko_bricks_to_save = market_structure_engine.generate_renko_bricks(df_new_prices, last_brick=last_brick)
-        else:
-            # Cold start: calculate Renko bricks for the full historical prices
-            renko_bricks_to_save = market_structure_engine.generate_renko_bricks(df_prices)
-
-        # 5. Line Break Lines
-        last_lines = db_service.get_latest_line_break_lines(symbol_obj.id, count=3)
-        if last_lines:
-            df_new_prices = df_prices[df_prices.index.date >= min_date]
-            line_breaks_to_save = market_structure_engine.generate_line_breaks(df_new_prices, last_lines=last_lines)
-        else:
-            # Cold start: calculate Line Break lines for the full historical prices
-            line_breaks_to_save = market_structure_engine.generate_line_breaks(df_prices)
-
-        # Save everything to the database in an isolated transaction
+        # Save indicators
         db_service.save_derived_structures(
             symbol_id=symbol_obj.id,
             indicators=indicators_to_save,
-            ha_candles=ha_candles_to_save,
-            renko_bricks=renko_bricks_to_save,
-            line_breaks=line_breaks_to_save,
             commit=commit,
         )
         logger.info(
             f"[{symbol_obj.symbol}] Calculated and saved derived data: "
-            f"{len(indicators_to_save)} indicators, {len(ha_candles_to_save)} HA candles, "
-            f"{len(renko_bricks_to_save)} Renko bricks, {len(line_breaks_to_save)} Line Break lines."
+            f"{len(indicators_to_save)} indicators."
         )
 
         try:

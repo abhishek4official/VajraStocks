@@ -6,11 +6,8 @@ from sqlalchemy.orm import Session
 
 from stocks.config import Config
 from stocks.db.models import (
-    DailyHeikinAshi,
     DailyIndicator,
     DailyPrice,
-    LineBreakLine,
-    RenkoBrick,
     ScreeningSnapshot,
     Symbol,
 )
@@ -258,18 +255,29 @@ class ScreeningService:
                     stock_21d_return = (close_price - float(oldest_price.close)) / float(oldest_price.close)
                     rs_score_1m = stock_21d_return / nifty_21d_return
 
-            # 3. Fetch latest Heikin-Ashi candle
-            ha = _prefetch["ha"] if _prefetch else self.db.scalar(
-                select(DailyHeikinAshi)
-                .filter_by(symbol_id=symbol_id)
-                .order_by(DailyHeikinAshi.trading_date.desc())
-                .limit(1)
-            )
-            ha_close = close_price  # Fallback to standard close if no HA computed
+            # 3. Compute Heikin-Ashi direction (on demand — no stored table)
+            ha_close = close_price
             ha_direction = "UP"
-            if ha:
-                ha_close = float(ha.close)
-                ha_direction = "UP" if float(ha.close) >= float(ha.open) else "DOWN"
+            if _prefetch and "ha_direction" in _prefetch:
+                ha_direction = _prefetch["ha_direction"] or "UP"
+            else:
+                # Compute from recent price history (90-bar warmup sufficient for HA convergence)
+                _ha_src = list(reversed(avwap_prices or prices))
+                if _ha_src:
+                    import pandas as _pd
+                    from stocks.services.market_structure import MarketStructureEngine as _MSE
+                    _mse = _MSE(self.config)
+                    _df_ha = _pd.DataFrame([{
+                        "trading_date": p.trading_date,
+                        "open": float(p.open), "high": float(p.high),
+                        "low": float(p.low), "close": float(p.close), "volume": int(p.volume),
+                    } for p in _ha_src])
+                    _df_ha.set_index(_pd.to_datetime(_df_ha["trading_date"]), inplace=True)
+                    _ha_list = _mse.generate_heikin_ashi(_df_ha)
+                    if _ha_list:
+                        _last_ha = _ha_list[-1]
+                        ha_close = float(_last_ha["close"])
+                        ha_direction = "UP" if float(_last_ha["close"]) >= float(_last_ha["open"]) else "DOWN"
 
             # 4. Fetch latest 22 Technical Indicator rows
             #    2nd needed for OBV trend; up to 22nd needed for 20-day crossover window
@@ -411,17 +419,24 @@ class ScreeningService:
                 if getattr(ind, "cmf_20", None) is not None and len(ind_rows) > 5 and getattr(ind_rows[5], "cmf_20", None) is not None:
                     cmf_slope_5d = round(float(ind.cmf_20) - float(ind_rows[5].cmf_20), 4)
 
-            # 5. Fetch latest Renko Brick
-            brick = _prefetch["brick"] if _prefetch else self.db.scalar(
-                select(RenkoBrick).filter_by(symbol_id=symbol_id).order_by(RenkoBrick.brick_index.desc()).limit(1)
-            )
-            renko_direction = brick.direction if brick else None
+            # 5. Renko direction (on demand — no stored table)
+            if _prefetch and "renko_direction" in _prefetch:
+                renko_direction = _prefetch["renko_direction"]
+            else:
+                # Fallback: preserve existing snapshot value to avoid stale None on direct calls
+                _snap_fb = _prefetch.get("snapshot") if _prefetch else self.db.scalar(
+                    select(ScreeningSnapshot).filter_by(symbol_id=symbol_id)
+                )
+                renko_direction = _snap_fb.renko_direction if _snap_fb else None
 
-            # 6. Fetch latest Line Break line
-            lb = _prefetch["lb"] if _prefetch else self.db.scalar(
-                select(LineBreakLine).filter_by(symbol_id=symbol_id).order_by(LineBreakLine.line_index.desc()).limit(1)
-            )
-            line_break_direction = lb.direction if lb else None
+            # 6. LineBreak direction (on demand — no stored table)
+            if _prefetch and "lb_direction" in _prefetch:
+                line_break_direction = _prefetch["lb_direction"]
+            else:
+                _snap_lb = _prefetch.get("snapshot") if _prefetch else self.db.scalar(
+                    select(ScreeningSnapshot).filter_by(symbol_id=symbol_id)
+                )
+                line_break_direction = _snap_lb.line_break_direction if _snap_lb else None
 
             # 6b. MTF / risk fields
             mtf = self._mtf_thresholds()
@@ -1055,67 +1070,7 @@ class ScreeningService:
                 indicators_by_symbol[ind.symbol_id].append(ind)
             indicators_by_symbol = {sid: rows[:45] for sid, rows in indicators_by_symbol.items()}
 
-            # ── Bulk load 3: Latest Heikin-Ashi candle per symbol
-            ha_by_symbol: dict = {}
-            for chunk in self._id_chunks(symbol_ids):
-                ha_subq = (
-                    select(DailyHeikinAshi.symbol_id, func.max(DailyHeikinAshi.trading_date).label("max_date"))
-                    .where(DailyHeikinAshi.symbol_id.in_(chunk))
-                    .group_by(DailyHeikinAshi.symbol_id)
-                    .subquery()
-                )
-                ha_by_symbol.update({
-                    row.symbol_id: row
-                    for row in self.db.scalars(
-                        select(DailyHeikinAshi).join(
-                            ha_subq,
-                            (DailyHeikinAshi.symbol_id == ha_subq.c.symbol_id)
-                            & (DailyHeikinAshi.trading_date == ha_subq.c.max_date),
-                        )
-                    ).all()
-                })
-
-            # ── Bulk load 4: Latest Renko brick per symbol
-            brick_by_symbol: dict = {}
-            for chunk in self._id_chunks(symbol_ids):
-                renko_subq = (
-                    select(RenkoBrick.symbol_id, func.max(RenkoBrick.brick_index).label("max_idx"))
-                    .where(RenkoBrick.symbol_id.in_(chunk))
-                    .group_by(RenkoBrick.symbol_id)
-                    .subquery()
-                )
-                brick_by_symbol.update({
-                    row.symbol_id: row
-                    for row in self.db.scalars(
-                        select(RenkoBrick).join(
-                            renko_subq,
-                            (RenkoBrick.symbol_id == renko_subq.c.symbol_id)
-                            & (RenkoBrick.brick_index == renko_subq.c.max_idx),
-                        )
-                    ).all()
-                })
-
-            # ── Bulk load 5: Latest Line Break line per symbol
-            lb_by_symbol: dict = {}
-            for chunk in self._id_chunks(symbol_ids):
-                lb_subq = (
-                    select(LineBreakLine.symbol_id, func.max(LineBreakLine.line_index).label("max_idx"))
-                    .where(LineBreakLine.symbol_id.in_(chunk))
-                    .group_by(LineBreakLine.symbol_id)
-                    .subquery()
-                )
-                lb_by_symbol.update({
-                    row.symbol_id: row
-                    for row in self.db.scalars(
-                        select(LineBreakLine).join(
-                            lb_subq,
-                            (LineBreakLine.symbol_id == lb_subq.c.symbol_id)
-                            & (LineBreakLine.line_index == lb_subq.c.max_idx),
-                        )
-                    ).all()
-                })
-
-            # ── Bulk load 6: Existing snapshots for upsert
+            # ── Bulk load 3: Existing snapshots for upsert + direction carry-over
             existing_snapshots: dict = {}
             for chunk in self._id_chunks(symbol_ids):
                 existing_snapshots.update({
@@ -1162,12 +1117,12 @@ class ScreeningService:
                                 "symbol":       sym,
                                 "prices":       prices_by_symbol.get(sym.id, []),
                                 "avwap_prices": avwap_prices_by_symbol.get(sym.id, []),
-                                "rs_oldest":    rs_oldest_by_symbol.get(sym.id),
-                                "ha":           ha_by_symbol.get(sym.id),
-                                "ind_rows":     indicators_by_symbol.get(sym.id, []),
-                                "brick":        brick_by_symbol.get(sym.id),
-                                "lb":           lb_by_symbol.get(sym.id),
-                                "snapshot":     existing_snapshots.get(sym.id),
+                                "rs_oldest":        rs_oldest_by_symbol.get(sym.id),
+                                "ha_direction":     (existing_snapshots.get(sym.id) or None) and existing_snapshots[sym.id].ha_direction,
+                                "renko_direction":  (existing_snapshots.get(sym.id) or None) and existing_snapshots[sym.id].renko_direction,
+                                "lb_direction":     (existing_snapshots.get(sym.id) or None) and existing_snapshots[sym.id].line_break_direction,
+                                "ind_rows":         indicators_by_symbol.get(sym.id, []),
+                                "snapshot":         existing_snapshots.get(sym.id),
                                 "weekly_trend": weekly_trend_by_symbol.get(sym.id),
                             },
                         )
