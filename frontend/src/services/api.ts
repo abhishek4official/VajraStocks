@@ -1391,4 +1391,17 @@ export const apiService = {
     if (!r.ok) throw new Error('Failed to load ranking factors');
     return r.json();
   },
+
+  // ── Screener presets ─────────────────────────────────────────────────────────
+  async getPresets(): Promise<{ name: string; description: string }[]> {
+    const r = await fetch(`${BASE_URL}/presets`);
+    if (!r.ok) throw new Error('Failed to load presets');
+    return r.json();
+  },
+
+  async runPreset(name: string): Promise<{ preset: string; count: number; rows: Record<string, unknown>[] }> {
+    const r = await fetch(`${BASE_URL}/presets/${encodeURIComponent(name)}`);
+    if (!r.ok) throw new Error('Failed to run preset');
+    return r.json();
+  },
 };
