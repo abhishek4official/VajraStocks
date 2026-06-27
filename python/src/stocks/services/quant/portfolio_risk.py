@@ -319,3 +319,47 @@ def compute_diversification_score(
         score = min(score + 10, 100)
 
     return max(0, min(100, score))
+
+
+def risk_contributions(
+    weights: dict[Any, float],
+    cov: dict[Any, dict[Any, float]],
+) -> dict[Any, float]:
+    """Percentage contribution to portfolio variance per holding (sums to ~1.0).
+
+    Pure: ``weights`` maps key→weight, ``cov`` is a symmetric covariance matrix keyed the
+    same way. A holding's contribution is ``w_i * (Σw)_i / (wᵀΣw)``. Returns {} when the
+    portfolio variance is non-positive (e.g. no usable history).
+    """
+    keys = [k for k in weights if k in cov]
+    port_var = sum(
+        weights[i] * weights[j] * cov[i].get(j, 0.0) for i in keys for j in keys
+    )
+    if port_var <= 0:
+        return {}
+    out: dict[Any, float] = {}
+    for i in keys:
+        marginal = sum(weights[j] * cov[i].get(j, 0.0) for j in keys)
+        out[i] = weights[i] * marginal / port_var
+    return out
+
+
+def compute_risk_contributions(
+    db: Session,
+    weights_by_symbol_id: dict[int, float],
+    days: int = 90,
+) -> dict[int, float]:
+    """Build a covariance matrix from return history and return per-symbol risk contributions."""
+    ids = list(weights_by_symbol_id)
+    series = _fetch_return_series(db, ids, days)
+    usable = [i for i in ids if len(series.get(i, [])) >= _MIN_DAYS]
+    if len(usable) < 2:
+        return {}
+    n = min(len(series[i]) for i in usable)
+    aligned = {i: series[i][-n:] for i in usable}
+    cov = {
+        i: {j: _covariance(aligned[i], aligned[j]) for j in usable}
+        for i in usable
+    }
+    weights = {i: weights_by_symbol_id[i] for i in usable}
+    return risk_contributions(weights, cov)

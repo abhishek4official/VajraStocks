@@ -22,6 +22,7 @@ from stocks.services.quant.portfolio_risk import (
     compute_diversification_score,
     compute_hhi,
     compute_portfolio_beta,
+    compute_risk_contributions,
     compute_var_cvar,
 )
 from stocks.services.settings_service import SettingsService
@@ -464,6 +465,19 @@ class PortfolioService:
                 )
                 hhi_result = compute_hhi(weights)
                 var_cvar = compute_var_cvar(self.db, holdings, weights, total_current)
+
+                # Per-holding contribution to portfolio risk (% of portfolio variance).
+                weights_by_id = {
+                    h["symbol_id"]: h["current_val"] / total_current
+                    for h in holdings
+                    if h.get("symbol_id") and total_current > 0
+                }
+                rc = compute_risk_contributions(self.db, weights_by_id)
+                for h in holdings:
+                    h["risk_contribution_pct"] = (
+                        round(rc[h["symbol_id"]] * 100.0, 2)
+                        if h.get("symbol_id") in rc else None
+                    )
         except Exception as e:
             logger.warning(f"Portfolio risk calculation failed (non-fatal): {e}")
 
