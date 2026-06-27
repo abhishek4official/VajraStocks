@@ -54,7 +54,8 @@
 
 ### M1 — rest of Foundation
 - [x] **Job worker (DB-backed)** — `Job` model + `JobRunner` (enqueue/run_next/cancel/retry/progress) + threaded `JobWorker` (off-request-thread, started in lifespan) + handler registry. API `/jobs` (enqueue/list/get/cancel/retry). `columnar_backfill` handler makes the minutes-long backfill a cancellable job with progress. *(DB-backed so it works on MSSQL, not just SQLite.)*
-- [ ] **Migrate the EOD sync onto the worker** — the remaining step to actually fix the startup-sync-blocks-everything problem (scheduler currently runs sync in an executor; enqueue a `sync` job instead). Follow-up.
+- [x] **Backfill runs through the worker from the UI** — "Backfill data" enqueues a `columnar_backfill` job and polls progress; serialized on the worker so it can't collide with a sync (the concurrent-op contention that crashed a test instance).
+- [ ] **Migrate the EOD sync onto the worker** — deferred. NOTE: the startup stall is mostly **DB contention** (sync hammering the shared DB), which a worker thread doesn't eliminate; the worker's real win is serialization/visibility/cancel. Migrating sync gives control + prevents concurrent-op contention, but is riskier to do blind on the production daily-sync path. Follow-up.
 - [ ] **Incremental indicator recompute** (only new bars)
 - [ ] **Kill the 96-col god-table**: slim typed snapshot + JSON long-tail (`features_json`)
 
