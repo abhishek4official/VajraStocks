@@ -1,7 +1,7 @@
 # VajraStocks 2.0 — Build Progress & Resume Checklist
 
 **Branch:** `feature/v2-hybrid-db` (off `feature/screener-report`)
-**Tests:** 225 passing · **Spec:** `Doc/VajraStocks_V2.0_PRD_BRD_Architecture.md`
+**Tests:** 236 passing · **Spec:** `Doc/VajraStocks_V2.0_PRD_BRD_Architecture.md`
 **Last updated:** 2026-06-26
 
 > Convention: all work is TDD (test first), committed under Abhishek (no Claude co-author).
@@ -69,8 +69,8 @@
 
 ### M4 — Clarity / UI (partial)
 - [x] **Cross-sectional ranking (end-to-end)** — `quant/factors.py` (pure zscore/percentile/composite_z) + `quant/ranking.py` + API `GET /ranking` + **Ranking tab/panel** (universe ordered by composite z, per-factor z columns, percentile). The relative-strength view the screener lacked.
+- [x] **Preset screeners (end-to-end)** — `quant/presets.py` (7 pure setup predicates: stage2_uptrend, pullback_20ema, nr7_coil, bb_squeeze, momentum_leader, oversold_reversal, macd_fresh_bull) + API `GET /presets` (+ `/{name}`) + **Setups tab** (preset chips → matching-symbols table). The "8-10 setups vs 40 sliders" the spec wanted.
 - [ ] Router IA (5 destinations, down from 11 tabs), code-split lazy routes
-- [ ] Preset screeners (one-click setups)
 - [ ] AI copilot demoted to slide-over; numeric guardrail; `SqliteSaver` durable checkpoints
 - [ ] Split mega-components (ScreenerPanel 2,802 LOC, etc.)
 
