@@ -111,10 +111,24 @@ export function BacktestPanel() {
 
   const backfill = async () => {
     setBackfilling(true);
-    setBackfillMsg(null);
+    setBackfillMsg('Queued…');
     try {
-      const r = await apiService.backfillColumnar();
-      setBackfillMsg(`Mirrored ${r.symbols_mirrored} symbols (${r.rows} rows).`);
+      // Run via the background worker so it doesn't block and can't collide with a sync.
+      const job = await apiService.enqueueJob('columnar_backfill', { incremental: true });
+      // Poll progress until the job finishes.
+      for (;;) {
+        await new Promise(res => setTimeout(res, 1500));
+        const j = await apiService.getJob(job.id);
+        if (j.status === 'RUNNING' && j.progress_total) {
+          setBackfillMsg(`Mirroring… ${j.progress_current}/${j.progress_total}`);
+        } else if (j.status === 'SUCCESS') {
+          setBackfillMsg('Backfill complete.');
+          break;
+        } else if (j.status === 'FAILED' || j.status === 'CANCELLED') {
+          setBackfillMsg(j.status === 'FAILED' ? `Backfill failed: ${j.error ?? ''}` : 'Backfill cancelled.');
+          break;
+        }
+      }
     } catch (e) {
       setBackfillMsg(e instanceof Error ? e.message : 'Backfill failed');
     } finally {

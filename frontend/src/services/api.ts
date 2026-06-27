@@ -704,6 +704,20 @@ export interface SetupStats {
   expectancy_r: number;
 }
 
+// ── Background jobs ─────────────────────────────────────────────────────────────
+export interface Job {
+  id: number;
+  kind: string;
+  status: 'PENDING' | 'RUNNING' | 'SUCCESS' | 'FAILED' | 'CANCELLED';
+  progress_current: number;
+  progress_total: number;
+  cancel_requested: boolean;
+  error: string | null;
+  created_at: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+}
+
 export const apiService = {
   // 1. Symbols endpoints
   async getAllSymbols(activeOnly = true): Promise<SymbolDetail[]> {
@@ -1338,6 +1352,22 @@ export const apiService = {
   async journalReview(): Promise<SetupStats[]> {
     const r = await fetch(`${BASE_URL}/journal/review`);
     if (!r.ok) throw new Error('Failed to load review');
+    return r.json();
+  },
+
+  // ── Background jobs ──────────────────────────────────────────────────────────
+  async enqueueJob(kind: string, params: Record<string, unknown> = {}): Promise<Job> {
+    const r = await fetch(`${BASE_URL}/jobs`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ kind, params }),
+    });
+    if (!r.ok) throw new Error('Failed to enqueue job');
+    return r.json();
+  },
+
+  async getJob(id: number): Promise<Job> {
+    const r = await fetch(`${BASE_URL}/jobs/${id}`);
+    if (!r.ok) throw new Error('Job not found');
     return r.json();
   },
 };
