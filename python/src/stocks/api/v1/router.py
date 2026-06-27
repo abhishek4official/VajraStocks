@@ -7,6 +7,7 @@ from stocks.api.v1.endpoints import (
     alerts,
     announcements,
     backtest,
+    backup,
     charts,
     conversations,
     eod,
@@ -59,3 +60,4 @@ api_router.include_router(journal.router)
 api_router.include_router(jobs.router)
 api_router.include_router(ranking.router)
 api_router.include_router(presets.router)
+api_router.include_router(backup.router)

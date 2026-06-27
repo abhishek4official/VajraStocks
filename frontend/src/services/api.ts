@@ -1404,4 +1404,19 @@ export const apiService = {
     if (!r.ok) throw new Error('Failed to run preset');
     return r.json();
   },
+
+  // ── Backup / restore ─────────────────────────────────────────────────────────
+  async exportBackup(): Promise<Record<string, unknown>> {
+    const r = await fetch(`${BASE_URL}/backup/export`);
+    if (!r.ok) throw new Error('Failed to export backup');
+    return r.json();
+  },
+
+  async importBackup(data: Record<string, unknown>): Promise<Record<string, number>> {
+    const r = await fetch(`${BASE_URL}/backup/import`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data),
+    });
+    if (!r.ok) throw new Error('Failed to import backup');
+    return r.json();
+  },
 };
