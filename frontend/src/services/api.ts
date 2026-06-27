@@ -1392,6 +1392,14 @@ export const apiService = {
     return r.json();
   },
 
+  async rankByFactors(symbols: string[]): Promise<RankRow[]> {
+    const r = await fetch(`${BASE_URL}/ranking/by-factors`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ symbols }),
+    });
+    if (!r.ok) throw new Error('Failed to rank by factors');
+    return r.json();
+  },
+
   // ── Screener presets ─────────────────────────────────────────────────────────
   async getPresets(): Promise<{ name: string; description: string }[]> {
     const r = await fetch(`${BASE_URL}/presets`);
