@@ -15,7 +15,7 @@ downloader:
   backoff_factor: 2.0
   timeout_seconds: 30
 symbols:
-  active_equities_url: https://archives.nseindia.com/content/equities/EQUITY_L_ACTIVE.csv
+  active_equities_url: https://archives.nseindia.com/content/equities/EQUITY_L.csv
   fallback_csv_path: config/EQUITY_L_ACTIVE.csv
   default_indices:
   - ^NSEI

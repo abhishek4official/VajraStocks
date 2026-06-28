@@ -45,7 +45,11 @@ class SymbolService:
 
     def _fetch_from_fallback(self) -> list[dict[str, str]]:
         """Fallback method to load locally cached EQUITY_L_ACTIVE.csv."""
-        fallback_path = Path(self.config.symbols.fallback_csv_path)
+        configured = Path(self.config.symbols.fallback_csv_path)
+        # Also try the path relative to this package's source tree so the fallback
+        # works regardless of what directory the server process was launched from.
+        pkg_relative = Path(__file__).resolve().parents[3] / "config" / "EQUITY_L_ACTIVE.csv"
+        fallback_path = configured if configured.exists() else pkg_relative
         logger.info(f"Attempting to load fallback symbols from: {fallback_path.resolve()}")
 
         if not fallback_path.exists():
