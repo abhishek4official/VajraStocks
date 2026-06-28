@@ -20,6 +20,7 @@
                   "copyright":  "Copyright 2026 Abhishek Kumar",
                   "asar":  true,
                   "win":  {
+                              "icon":  "build/icon.ico",
                               "target":  [
                                              {
                                                  "target":  "nsis",
@@ -30,18 +31,24 @@
                                          ]
                           },
                   "nsis":  {
+                               "installerIcon":  "build/icon.ico",
+                               "uninstallerIcon":  "build/icon.ico",
+                               "installerHeaderIcon":  "build/icon.ico",
                                "oneClick":  false,
                                "allowToChangeInstallationDirectory":  true,
                                "createDesktopShortcut":  true,
                                "createStartMenuShortcut":  true,
                                "shortcutName":  "VajraStocks",
-                               "deleteAppDataOnUninstall":  false
+                               "deleteAppDataOnUninstall":  false,
+                               "include":  "../installer/windows/nsis-extra.nsh"
                            },
                   "mac":  {
+                              "icon":  "build/icon.icns",
                               "target":  "dmg",
                               "category":  "public.app-category.finance"
                           },
                   "linux":  {
+                                "icon":  "build/icon.png",
                                 "target":  "AppImage",
                                 "category":  "Finance"
                             },
@@ -57,7 +64,8 @@
                   "files":  [
                                 "main.js",
                                 "loading.html",
-                                "error.html"
+                                "error.html",
+                                "build/icon.png"
                             ],
                   "directories":  {
                                       "output":  "ELECTRON_OUTPUT_DIR_PLACEHOLDER"

@@ -528,6 +528,18 @@ app.add_middleware(
         "http://localhost:3000",   # alternate dev port
         "http://127.0.0.1:5173",
         "http://127.0.0.1:3000",
+        # Electron shell loads the frontend from the backend's own port (8000
+        # by default, but any free port).  Electron's renderer can set Origin
+        # to http://localhost:<port> or http://127.0.0.1:<port> even on
+        # same-origin requests, so we allow all loopback origins.
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+        "http://localhost:8001",
+        "http://127.0.0.1:8001",
+        # Wildcard-safe: also covers any port the backend might grab
+        # (electron findFreePort can return 8002–8019)
+        *[f"http://localhost:{p}" for p in range(8002, 8020)],
+        *[f"http://127.0.0.1:{p}" for p in range(8002, 8020)],
     ],
     allow_credentials=True,
     allow_methods=["*"],

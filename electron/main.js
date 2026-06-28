@@ -169,7 +169,7 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      sandbox: true,
+      sandbox: false,
     },
   });
 
