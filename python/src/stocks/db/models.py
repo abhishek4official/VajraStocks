@@ -366,6 +366,11 @@ class ScreeningSnapshot(Base):
     # JSON long-tail: secondary indicator values for point-in-time analysis / future plugin indicators
     features_json: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    # VajraML predictions — written post-sync by VajraML/predict.py
+    ml_prediction: Mapped[float | None] = mapped_column(Float, nullable=True)   # raw model score
+    ml_rank: Mapped[int | None] = mapped_column(Integer, nullable=True)          # rank within universe (1 = best)
+    ml_label: Mapped[str | None] = mapped_column(String(20), nullable=True)      # Bullish / Neutral / Bearish
+
     updated_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now())
 
     # Relationships
