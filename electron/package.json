@@ -2,6 +2,7 @@
   "name": "vajrastocks-electron",
   "version": "2.1.0",
   "description": "Electron desktop shell for VajraStocks",
+  "author": "Abhishek Kumar",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
@@ -19,8 +20,7 @@
     "copyright": "Copyright 2026 Abhishek Kumar",
     "asar": true,
     "win": {
-      "target": [{ "target": "nsis", "arch": ["x64"] }],
-      "icon": "../installer/assets/icon.ico"
+      "target": [{ "target": "nsis", "arch": ["x64"] }]
     },
     "nsis": {
       "oneClick": false,
@@ -28,22 +28,18 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "VajraStocks",
-      "installerIcon": "../installer/assets/icon.ico",
-      "uninstallerIcon": "../installer/assets/icon.ico",
       "deleteAppDataOnUninstall": false
     },
     "mac": {
       "target": "dmg",
-      "icon": "../installer/assets/icon.icns",
       "category": "public.app-category.finance"
     },
     "linux": {
       "target": "AppImage",
-      "icon": "../installer/assets/icon.png",
       "category": "Finance"
     },
     "extraResources": [
-      { "from": "../dist/VajraStocks", "to": "backend", "filter": ["**/*"] }
+      { "from": "../python/dist/VajraStocks", "to": "backend", "filter": ["**/*"] }
     ],
     "files": ["main.js", "loading.html", "error.html"],
     "directories": { "output": "../release" }
