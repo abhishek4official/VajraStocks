@@ -43,15 +43,9 @@ Write-Host "      Frontend built -> frontend/dist/" -ForegroundColor Green
 Write-Host "`n[2/3] Bundling Python backend..." -ForegroundColor Yellow
 Set-Location "$Root\python"
 
-# Use pyinstaller from the local venv — more reliable than `uv run pyinstaller`
-# when pyinstaller is installed as a direct package rather than a uv tool.
-$PyInstaller = "$Root\python\.venv\Scripts\pyinstaller.exe"
-if (-not (Test-Path $PyInstaller)) {
-    # Fallback: try uv run in case pyinstaller is registered as a uv tool
-    $PyInstaller = "pyinstaller"
-}
-
-Invoke-Native "pyinstaller" { & $PyInstaller ..\installer\vajrastocks.spec --noconfirm }
+# pyinstaller is installed as a uv tool (uv tool install pyinstaller).
+# `uv tool run` works without needing the uv bin dir on PATH.
+Invoke-Native "pyinstaller" { uv tool run pyinstaller ..\installer\vajrastocks.spec --noconfirm }
 Write-Host "      Backend bundled -> dist/VajraStocks/" -ForegroundColor Green
 
 # ── 3. Electron installer ─────────────────────────────────────────────────────
