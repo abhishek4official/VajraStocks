@@ -37,7 +37,12 @@ Write-Host "      Frontend built -> frontend/dist/" -ForegroundColor Green
 # ── 2. Python backend (PyInstaller) ──────────────────────────────────────────
 Write-Host "`n[2/3] Bundling Python backend..." -ForegroundColor Yellow
 Set-Location "$Root\python"
-Invoke-Native "pyinstaller" { uv tool run pyinstaller ..\installer\vajrastocks.spec --noconfirm }
+# Must use the project venv's pyinstaller so it sees all project dependencies
+# (fastapi, uvicorn, sqlalchemy, etc.). `uv tool run pyinstaller` uses an
+# isolated environment that doesn't have them, causing silent bundle failures.
+$PyInstaller = "$Root\python\.venv\Scripts\pyinstaller.exe"
+if (-not (Test-Path $PyInstaller)) { throw "pyinstaller not in venv. Run: cd python && uv add --dev pyinstaller" }
+Invoke-Native "pyinstaller" { & $PyInstaller ..\installer\vajrastocks.spec --noconfirm }
 Write-Host "      Backend bundled -> python/dist/VajraStocks/" -ForegroundColor Green
 
 # ── 3. Electron installer ─────────────────────────────────────────────────────
