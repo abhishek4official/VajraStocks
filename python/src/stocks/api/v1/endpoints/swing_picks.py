@@ -394,11 +394,11 @@ def save_note(symbol: str, body: NoteRequest, db: Session = Depends(get_db)):
 @router.get("", response_model=SwingPicksResponse)
 def get_swing_picks(
     # Screening
-    min_tqs: float = Query(80.0, description="Min Trend Quality Score"),
-    min_volume_ratio: float = Query(2.0, description="Min volume breakout ratio"),
+    min_tqs: float = Query(65.0, description="Min Trend Quality Score"),
+    min_volume_ratio: float = Query(1.0, description="Min volume breakout ratio"),
     min_atv_cr: float = Query(20.0, description="Min avg traded value (₹Cr)"),
     # Classification thresholds
-    min_rr_buy: float = Query(1.0, description="Min R:R for BUY classification"),
+    min_rr_buy: float = Query(0.75, description="Min R:R for BUY classification"),
     min_rr_watchlist: float = Query(0.4, description="Min R:R for WATCHLIST (below = ELIMINATED)"),
     # Trade plan parameters
     stop_atr_mult: float = Query(1.5, description="Stop loss = support − N×ATR"),

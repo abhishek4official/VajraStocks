@@ -300,7 +300,7 @@ function Dashboard() {
         {/* Content area: sub-tab bar + panel */}
         <div className="flex-1 flex flex-col overflow-hidden">
           <SubTabBar />
-          <main className="flex-1 overflow-hidden">
+          <main className="flex-1 overflow-hidden flex flex-col">
             <Routes>
               {/* Default */}
               <Route path="/" element={<Navigate to="/research/explorer" replace />} />

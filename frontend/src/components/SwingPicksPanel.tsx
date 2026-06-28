@@ -5,16 +5,16 @@ import { apiService, type SwingPick, type SwingPicksResponse, type SwingPicksPar
 import {
   Zap, RefreshCw, AlertTriangle, Eye, Target, SlidersHorizontal,
   ChevronDown, ChevronUp, ShieldAlert, FlaskConical, XIcon, RotateCcw,
-  HelpCircle,
+  HelpCircle, ListOrdered,
 } from 'lucide-react';
 
 // ─── Default config ───────────────────────────────────────────────────────────
 
 const DEFAULTS: Required<SwingPicksParams> = {
-  min_tqs: 80,
-  min_volume_ratio: 2.0,
+  min_tqs: 65,
+  min_volume_ratio: 1.0,
   min_atv_cr: 20,
-  min_rr_buy: 1.0,
+  min_rr_buy: 0.75,
   min_rr_watchlist: 0.4,
   stop_atr_mult: 1.5,
   entry_atr_low: 0.5,
@@ -678,7 +678,8 @@ export const SwingPicksPanel: React.FC = () => {
   const [data, setData]         = useState<SwingPicksResponse | null>(null);
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState<string | null>(null);
-  const [mode, setMode]         = useState<'pipeline' | 'manual'>('pipeline');
+  const [mode, setMode]         = useState<'pipeline' | 'manual' | 'ranking'>('pipeline');
+  const [rankTopN, setRankTopN] = useState(50);
   const [manualInput, setManualInput] = useState('');
   const [notes, setNotes]       = useState<Record<string, string>>(loadLocalNotes);
   const [showConfig, setShowConfig] = useState(false);
@@ -730,6 +731,17 @@ export const SwingPicksPanel: React.FC = () => {
     } finally { setLoading(false); }
   }, [config]);
 
+  const runTopRanked = useCallback(async (n: number) => {
+    setLoading(true); setError(null); setMode('ranking');
+    try {
+      const rows = await apiService.getRanking(n);
+      const symbols = rows.map(r => r.symbol.replace('.NS', ''));
+      setData(await apiService.qualifyStocks(symbols, config));
+    } catch (e: any) {
+      setError(e?.message ?? 'Failed to fetch ranking.');
+    } finally { setLoading(false); }
+  }, [config]);
+
   useEffect(() => { runPipeline(); }, []);
 
   const hasQueue = qualifyQueue.length > 0;
@@ -757,10 +769,17 @@ export const SwingPicksPanel: React.FC = () => {
                     Manual Qualify
                   </span>
                 )}
+                {mode === 'ranking' && data && (
+                  <span className="text-[10px] text-purple-400 font-normal bg-purple-950/30 px-2 py-0.5 rounded border border-purple-800/40">
+                    Top Ranked
+                  </span>
+                )}
               </h2>
               <p className="text-[10px] text-text-muted mt-0.5">
                 {mode === 'pipeline'
                   ? `Stage 2 · TQS ≥ ${config.min_tqs} · Vol ≥ ${config.min_volume_ratio}x · ATV ≥ ₹${config.min_atv_cr}Cr · R:R BUY ≥ ${config.min_rr_buy}`
+                  : mode === 'ranking'
+                  ? `Top ${data?.summary.total_screened ?? '…'} stocks by Ranking composite z-score → qualified through trade plan pipeline`
                   : 'Qualifying selected stocks through trade plan pipeline'}
               </p>
             </div>
@@ -894,6 +913,42 @@ export const SwingPicksPanel: React.FC = () => {
             </div>
           </div>
         )}
+
+        {/* ── Run Top Ranked ── */}
+        <div className="rounded-xl border border-purple-800/40 bg-purple-950/10 p-4 flex flex-col gap-3">
+          <div className="flex items-start justify-between gap-4 flex-wrap">
+            <div className="flex items-start gap-2.5">
+              <ListOrdered className="w-4 h-4 text-purple-400 mt-0.5 shrink-0" />
+              <div>
+                <p className="text-xs font-bold text-text-main">Run Top Ranked through Picks</p>
+                <p className="text-[10px] text-text-muted mt-0.5">
+                  Fetches the top N stocks by Ranking composite z-score and qualifies each one for a trade setup.
+                  Combines relative strength leadership with actionable R:R and stop placement.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <select
+                value={rankTopN}
+                onChange={e => setRankTopN(+e.target.value)}
+                className="bg-bg-base border border-border-subtle rounded-lg px-2 py-1.5 text-xs text-text-main cursor-pointer"
+              >
+                <option value={20}>Top 20</option>
+                <option value={50}>Top 50</option>
+                <option value={100}>Top 100</option>
+                <option value={200}>Top 200</option>
+              </select>
+              <button
+                onClick={() => runTopRanked(rankTopN)}
+                disabled={loading}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-600 text-white text-xs font-bold hover:bg-purple-500 transition disabled:opacity-50 cursor-pointer"
+              >
+                <ListOrdered className={`w-3.5 h-3.5 ${loading && mode === 'ranking' ? 'animate-pulse' : ''}`} />
+                {loading && mode === 'ranking' ? 'Fetching…' : `Run Top ${rankTopN}`}
+              </button>
+            </div>
+          </div>
+        </div>
 
         {/* ── Manual qualify input ── */}
         <div className="rounded-xl border border-border-subtle bg-bg-surface/40 p-4 flex flex-col gap-2">
