@@ -345,7 +345,7 @@ function Dashboard() {
       </div>
 
       <footer className="h-7 shrink-0 border-t border-border-subtle bg-bg-surface/85 backdrop-blur-md flex items-center justify-between px-5 z-40">
-        <span className="text-[10px] font-bold text-slate-300">VajraStocks v1.5.0 — Data © Yahoo Finance, for personal use only</span>
+        <span className="text-[10px] font-bold text-slate-300">VajraStocks v{import.meta.env.VITE_APP_VERSION} — Data © Yahoo Finance, for personal use only</span>
         <a
           href="https://abhishek4official.github.io/"
           target="_blank"
