@@ -90,6 +90,7 @@ export interface PortfolioHolding {
   composite_score?: number | null;
   ml_label?: string | null;
   supertrend_dir?: string | null;
+  risk_contribution_pct?: number | null;
 }
 
 export interface ReplacementCandidate {
