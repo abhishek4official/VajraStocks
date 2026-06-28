@@ -386,8 +386,14 @@ def _run_pending_migrations(connection_string: str) -> None:
                     tables = {r[0] for r in cur.execute(
                         "SELECT name FROM sqlite_master WHERE type='table'"
                     ).fetchall()}
+                    # Also treat an EMPTY alembic_version as unversioned —
+                    # a previous failed stamp may have created the table without inserting a row.
+                    has_version_row = (
+                        "alembic_version" in tables
+                        and cur.execute("SELECT 1 FROM alembic_version LIMIT 1").fetchone() is not None
+                    )
                     con.close()
-                    needs_stamp = ("symbols" in tables and "alembic_version" not in tables)
+                    needs_stamp = "symbols" in tables and not has_version_row
                 except Exception as probe_exc:
                     logger.debug(f"Pre-Alembic probe skipped: {probe_exc}")
 

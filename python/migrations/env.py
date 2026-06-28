@@ -50,6 +50,19 @@ else:
 
 db_url = app_config.database.connection_string
 
+# Resolve relative SQLite paths against the config file's directory.
+# Without this, "sqlite:///data/vajra.db" resolves to CWD/data/vajra.db which
+# differs from the server's path when start.ps1 sets CWD to python/.
+# This mirrors _resolve_sqlite() in main.py so Alembic stamps/upgrades hit
+# the same database as the running server.
+if db_url.startswith("sqlite:///"):
+    _raw = db_url[len("sqlite:///"):]
+    if not _os.path.isabs(_raw):
+        _anchor = _user_cfg.parent if (_user_cfg and _user_cfg.exists()) else Path.cwd()
+        _abs = (_anchor / _raw).resolve()
+        _abs.parent.mkdir(parents=True, exist_ok=True)
+        db_url = f"sqlite:///{_abs.as_posix()}"
+
 # Bootstrap database and localdb instance before any connection attempt
 if db_url.lower().startswith("mssql"):
     from stocks.db.connection import ensure_localdb_started, create_mssql_database_if_not_exists
