@@ -124,6 +124,56 @@ def _load_connection_string() -> str:
     return "sqlite:///data/vajra.db"
 
 
+def _load_columnar_data_dir() -> str:
+    """
+    Resolves the columnar (DuckDB/Parquet) data directory with the same priority
+    as _load_connection_string:
+      1. VAJRA_COLUMNAR_DIR  env var  (Docker / CI override)
+      2. config.yaml  storage.columnar_data_dir
+         Relative paths are anchored to the config.yaml directory so the folder
+         always lands beside the config regardless of server launch CWD.
+         Example: %APPDATA%\\VajraStocks\\config.yaml + columnar_data_dir: DuckDB
+                  → %APPDATA%\\VajraStocks\\DuckDB\\
+      3. Default: <AppData>/VajraStocks/DuckDB  (fresh install, no config yet)
+
+    INSTALLER NOTE: config.yaml stores a relative name ("DuckDB"), not a hardcoded
+    user path. The installer ships config.yaml; this function creates the directory
+    on first run so no manual setup is needed.
+    """
+    # 1. Env-var override
+    env_dir = os.getenv("VAJRA_COLUMNAR_DIR")
+    if env_dir:
+        p = Path(env_dir)
+        p.mkdir(parents=True, exist_ok=True)
+        return str(p)
+
+    # 2. config.yaml — resolve relative paths against the config's parent directory
+    if _CONFIG_YAML.exists():
+        try:
+            import yaml as _yaml
+            with open(_CONFIG_YAML, encoding="utf-8") as f:
+                data = _yaml.safe_load(f) or {}
+            raw = data.get("storage", {}).get("columnar_data_dir", "")
+            if raw:
+                p = Path(raw)
+                if not p.is_absolute():
+                    p = (_CONFIG_YAML.parent / raw).resolve()
+                p.mkdir(parents=True, exist_ok=True)
+                logger.debug(f"Columnar data dir resolved to: {p}")
+                return str(p)
+        except Exception as exc:
+            logger.warning(f"Could not read columnar_data_dir from config.yaml: {exc}")
+
+    # 3. Default — next to the DB in AppData
+    user_dir = _get_user_appdata_dir()
+    if user_dir:
+        p = user_dir / "DuckDB"
+        p.mkdir(parents=True, exist_ok=True)
+        logger.debug(f"No columnar_data_dir in config — using default: {p}")
+        return str(p)
+    return "data/columnar"
+
+
 def write_bootstrap_config(updates: dict[tuple[str, str], str]) -> None:
     """
     Rewrites config.yaml with updated bootstrap values.
@@ -415,6 +465,9 @@ async def lifespan(app: FastAPI):
 
     # ⑦ — expose to request handlers
     app.state.db_manager = db_manager
+    # Resolved once at startup so every request gets the same absolute path.
+    # Use VAJRA_COLUMNAR_DIR env var or config.yaml storage.columnar_data_dir.
+    app.state.columnar_data_dir = _load_columnar_data_dir()
 
     # ⑦c — background job worker (DB-backed queue; long work off the request thread)
     try:

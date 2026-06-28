@@ -27,9 +27,18 @@ def get_settings(request: Request) -> Generator:
 
 
 def get_bar_store(request: Request):
-    """Yields a BarStore for the columnar data plane (overridable in tests)."""
+    """Returns a BarStore pointing at the resolved columnar data directory.
+
+    The path is resolved once at startup (main.py lifespan → app.state.columnar_data_dir)
+    so it's always absolute and independent of server launch CWD.
+    Default: %APPDATA%/VajraStocks/DuckDB  (installer build)
+             data/columnar                 (dev fallback)
+    """
     from stocks.data.bar_store import BarStore
 
+    data_dir = getattr(request.app.state, "columnar_data_dir", None)
+    if data_dir:
+        return BarStore(data_dir)
     return BarStore.from_config(get_config(request))
 
 
