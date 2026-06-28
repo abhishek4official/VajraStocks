@@ -4,7 +4,7 @@ import time
 from pathlib import Path
 
 from loguru import logger
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import scoped_session, sessionmaker
 
@@ -231,9 +231,20 @@ class DatabaseManager:
             if self.provider == "sqlite":
                 self.engine = create_engine(
                     self.connection_string,
-                    connect_args={"check_same_thread": False},
+                    # timeout=30: busy-wait up to 30 s instead of raising immediately
+                    connect_args={"check_same_thread": False, "timeout": 30},
                     echo=False,
                 )
+
+                @event.listens_for(self.engine, "connect")
+                def _set_sqlite_pragmas(dbapi_conn, _connection_record):
+                    cur = dbapi_conn.cursor()
+                    # WAL mode: readers never block writers and writers never block readers.
+                    # Critical for the job worker (reader) running alongside the sync (writer).
+                    cur.execute("PRAGMA journal_mode=WAL")
+                    cur.execute("PRAGMA synchronous=NORMAL")   # safe with WAL; faster than FULL
+                    cur.execute("PRAGMA cache_size=-32768")    # 32 MB page cache
+                    cur.close()
             else:
                 self.engine = create_engine(
                     self.connection_string,
