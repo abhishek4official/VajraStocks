@@ -154,13 +154,18 @@ def main() -> None:
     os.chdir(bundle)
 
     host = "127.0.0.1"
-    port = _find_free_port(8000)
+    # When launched by the Electron shell it passes VAJRA_PORT so both sides
+    # agree on the port without a file-based handshake.
+    _env_port = os.environ.get("VAJRA_PORT", "").strip()
+    port = int(_env_port) if _env_port.isdigit() else _find_free_port(8000)
 
-    threading.Thread(
-        target=_open_browser_when_ready,
-        args=(host, port),
-        daemon=True,
-    ).start()
+    # Skip webbrowser.open() when the Electron shell manages the window.
+    if not os.environ.get("VAJRA_ELECTRON"):
+        threading.Thread(
+            target=_open_browser_when_ready,
+            args=(host, port),
+            daemon=True,
+        ).start()
 
     import uvicorn
     uvicorn.run(
