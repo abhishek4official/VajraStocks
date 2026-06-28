@@ -270,19 +270,20 @@ def _seed_default_symbols(db_manager) -> None:
 
 
 def _run_pending_migrations(connection_string: str) -> None:
-    """Runs `alembic upgrade head` programmatically so the schema is always current."""
+    """Runs `alembic upgrade head` programmatically so the schema is always current.
+
+    Pre-Alembic DBs (tables exist but no alembic_version row) are stamped with
+    the current head so future startups skip migrations cleanly.
+    """
     try:
         from alembic import command
         from alembic.config import Config as AlembicConfig
+        from sqlalchemy import create_engine, inspect, text
 
-        # Prefer env-var path set by the installer launcher (frozen mode),
-        # then fall back to the source-tree location for dev mode.
         env_ini = os.environ.get("VAJRA_ALEMBIC_INI")
         if env_ini:
             alembic_ini = Path(env_ini)
         else:
-            # Dev: python/src/stocks/api/main.py → parents[4] = repo root
-            #      but alembic.ini lives at python/alembic.ini = parents[3]
             alembic_ini = Path(__file__).resolve().parents[3] / "alembic.ini"
 
         if not alembic_ini.exists():
@@ -291,6 +292,23 @@ def _run_pending_migrations(connection_string: str) -> None:
 
         alembic_cfg = AlembicConfig(str(alembic_ini))
         alembic_cfg.set_main_option("sqlalchemy.url", connection_string)
+
+        # Detect a pre-Alembic DB: core tables exist but alembic_version doesn't.
+        # Stamping tells Alembic "this DB is already at head" so it won't try to
+        # re-run the initial CREATE TABLE migrations.
+        _engine = create_engine(connection_string, connect_args={"check_same_thread": False})
+        try:
+            _insp = inspect(_engine)
+            has_symbols = _insp.has_table("symbols")
+            has_version = _insp.has_table("alembic_version")
+            if has_symbols and not has_version:
+                logger.info("Pre-Alembic DB detected (tables exist, no alembic_version). Stamping with head.")
+                command.stamp(alembic_cfg, "head")
+                logger.info("DB stamped at head — future startups will run incremental migrations only.")
+                return
+        finally:
+            _engine.dispose()
+
         command.upgrade(alembic_cfg, "head")
         logger.info("Database migrations applied (alembic upgrade head).")
     except Exception as exc:
