@@ -321,25 +321,33 @@ def _run_pending_migrations(connection_string: str) -> None:
         alembic_cfg = AlembicConfig(str(alembic_ini))
         alembic_cfg.set_main_option("sqlalchemy.url", connection_string)
 
-        # Use raw sqlite3 to check for pre-Alembic state — avoids any SQLAlchemy
-        # engine/pool interaction during startup before the main engine is ready.
+        # Detect pre-Alembic DB: tables exist (created by SQLAlchemy create_all)
+        # but alembic_version was never written. Probe with raw sqlite3 so we
+        # don't create a second SA engine during startup; keep the probe inside
+        # its OWN try so a probe failure never silently swallows stamp/upgrade.
+        needs_stamp = False
         if connection_string.startswith("sqlite"):
             import sqlite3
-            # Extract file path from sqlite:///path or sqlite+pysqlite:///path
             db_path = connection_string.split("///", 1)[-1]
             if db_path and db_path != ":memory:":
                 try:
                     con = sqlite3.connect(db_path, timeout=10)
                     cur = con.cursor()
-                    tables = {r[0] for r in cur.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+                    tables = {r[0] for r in cur.execute(
+                        "SELECT name FROM sqlite_master WHERE type='table'"
+                    ).fetchall()}
                     con.close()
-                    if "symbols" in tables and "alembic_version" not in tables:
-                        logger.info("Pre-Alembic DB detected — stamping at head (no migrations will run).")
-                        command.stamp(alembic_cfg, "head")
-                        logger.info("DB stamped. Future startups will apply only new migrations.")
-                        return
+                    needs_stamp = ("symbols" in tables and "alembic_version" not in tables)
                 except Exception as probe_exc:
-                    logger.debug(f"Pre-Alembic probe failed (non-fatal): {probe_exc}")
+                    logger.debug(f"Pre-Alembic probe skipped: {probe_exc}")
+
+        if needs_stamp:
+            # Tables exist but alembic_version is absent — stamp without running
+            # any migrations. Alembic will only run NEW migrations on next restart.
+            logger.info("Pre-Alembic schema detected — stamping DB at head.")
+            command.stamp(alembic_cfg, "head")
+            logger.info("Stamp complete. Future restarts will apply incremental migrations only.")
+            return
 
         command.upgrade(alembic_cfg, "head")
         logger.info("Database migrations applied (alembic upgrade head).")
