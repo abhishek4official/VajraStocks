@@ -222,6 +222,36 @@ def screen(
 
 @cli.command()
 @click.option("--config-path", default="config/config.yaml", help="Path to config.yaml configuration file.")
+@click.option("--full", is_flag=True, default=False, help="Re-mirror every symbol (default: incremental).")
+def backfill_columnar(config_path: str, full: bool):
+    """Mirror the SQLite price history into the columnar BarStore (Parquet) for backtests."""
+    config_file = Path(config_path)
+    try:
+        config = Config.load(config_file)
+        setup_logging(config)
+
+        db_manager = DatabaseManager.from_config(config)
+        db_manager.initialize()
+
+        from stocks.data.backfill import backfill_all
+        from stocks.data.bar_store import BarStore
+
+        session = db_manager.get_session()
+        try:
+            store = BarStore.from_config(config)
+            result = backfill_all(session, store, incremental=not full)
+        finally:
+            session.close()
+        rows = sum(result.values())
+        click.echo(f"Columnar backfill complete: {len(result)} symbols, {rows} rows mirrored.")
+        db_manager.dispose()
+    except Exception as e:
+        click.echo(f"Columnar backfill failed: {e}", err=True)
+        sys.exit(1)
+
+
+@cli.command()
+@click.option("--config-path", default="config/config.yaml", help="Path to config.yaml configuration file.")
 def refresh_snapshots(config_path: str):
     """Manually triggers a complete rebuild of the screening snapshots table."""
     config_file = Path(config_path)
@@ -284,7 +314,7 @@ def recalculate_derived(config_path: str, symbols: str, limit: int | None):
 
         from sqlalchemy import delete
 
-        from stocks.db.models import DailyHeikinAshi, DailyIndicator, LineBreakLine, RenkoBrick
+        from stocks.db.models import DailyIndicator
 
         processed = 0
         failed = 0
@@ -292,11 +322,8 @@ def recalculate_derived(config_path: str, symbols: str, limit: int | None):
         for idx, symbol_obj in enumerate(active_symbols, 1):
             logger.info(f"[{idx}/{total}] Processing {symbol_obj.symbol}...")
             try:
-                # Clear all existing derived data to guarantee clean cold start calculations
+                # Clear existing indicators to guarantee clean cold start calculations
                 session.execute(delete(DailyIndicator).where(DailyIndicator.symbol_id == symbol_obj.id))
-                session.execute(delete(DailyHeikinAshi).where(DailyHeikinAshi.symbol_id == symbol_obj.id))
-                session.execute(delete(RenkoBrick).where(RenkoBrick.symbol_id == symbol_obj.id))
-                session.execute(delete(LineBreakLine).where(LineBreakLine.symbol_id == symbol_obj.id))
                 session.commit()
 
                 # Fetch all prices in DB

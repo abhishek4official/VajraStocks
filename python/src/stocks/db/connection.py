@@ -4,7 +4,7 @@ import time
 from pathlib import Path
 
 from loguru import logger
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import scoped_session, sessionmaker
 
@@ -100,8 +100,11 @@ def ensure_localdb_started() -> None:
 
         logger.info("Ensuring SQL Server LocalDB 'MSSQLLocalDB' instance is started...")
 
-        # If stopped and stuck, kill the orphaned process first
-        if "Stopped" in check.stdout:
+        # Only kill the orphaned process when the instance is confirmed Stopped AND no
+        # named pipe is present. This prevents killing sqlservr.exe mid-sync when LocalDB
+        # transiently reports "Stopped" while it is actually serving requests.
+        is_stopped = "Stopped" in check.stdout
+        if is_stopped and not _localdb_pipe():
             _kill_stuck_sqlservr()
             time.sleep(1)
 
@@ -228,9 +231,20 @@ class DatabaseManager:
             if self.provider == "sqlite":
                 self.engine = create_engine(
                     self.connection_string,
-                    connect_args={"check_same_thread": False},
+                    # timeout=30: busy-wait up to 30 s instead of raising immediately
+                    connect_args={"check_same_thread": False, "timeout": 30},
                     echo=False,
                 )
+
+                @event.listens_for(self.engine, "connect")
+                def _set_sqlite_pragmas(dbapi_conn, _connection_record):
+                    cur = dbapi_conn.cursor()
+                    # WAL mode: readers never block writers and writers never block readers.
+                    # Critical for the job worker (reader) running alongside the sync (writer).
+                    cur.execute("PRAGMA journal_mode=WAL")
+                    cur.execute("PRAGMA synchronous=NORMAL")   # safe with WAL; faster than FULL
+                    cur.execute("PRAGMA cache_size=-32768")    # 32 MB page cache
+                    cur.close()
             else:
                 self.engine = create_engine(
                     self.connection_string,
@@ -315,12 +329,6 @@ class DatabaseManager:
             ("screening_snapshots", "stochrsi_zone",                "VARCHAR(15)",  "VARCHAR(15)"),
             ("screening_snapshots", "stochrsi_bullish_xover_days_ago", "INTEGER",   "INT"),
             ("screening_snapshots", "stochrsi_bearish_xover_days_ago", "INTEGER",   "INT"),
-            # VajraML2 prediction columns (triple-barrier classifier)
-            ("screening_snapshots", "ml2_p_tp",             "FLOAT",        "FLOAT"),
-            ("screening_snapshots", "ml2_p_sl",             "FLOAT",        "FLOAT"),
-            ("screening_snapshots", "ml2_ev_score",         "FLOAT",        "FLOAT"),
-            ("screening_snapshots", "ml2_rank",             "INTEGER",      "INT"),
-            ("screening_snapshots", "ml2_signal",           "VARCHAR(20)",  "VARCHAR(20)"),
             # Crossover recency columns
             ("screening_snapshots", "days_since_price_sma20_bull", "INTEGER", "INT"),
             ("screening_snapshots", "days_since_price_sma50_bull", "INTEGER", "INT"),
@@ -336,6 +344,8 @@ class DatabaseManager:
             ("screening_snapshots", "macd_histogram_slope", "FLOAT",   "FLOAT"),
             ("screening_snapshots", "macd_above_zero",      "BOOLEAN", "BIT"),
             ("screening_snapshots", "cmf_slope_5d",         "FLOAT",   "FLOAT"),
+            # JSON long-tail for point-in-time indicator snapshot
+            ("screening_snapshots", "features_json",         "TEXT",         "TEXT"),
             # EOD import provenance column
             ("daily_prices",        "data_source",          "VARCHAR(20)",  "VARCHAR(20)"),
             # New DailyIndicator columns
@@ -393,6 +403,16 @@ class DatabaseManager:
                 logger.info("ensure_columns: widened screening_snapshots.regime_bias to VARCHAR(20)")
         except Exception as e:
             logger.debug(f"ensure_columns: regime_bias widen skipped (may already be correct width): {e}")
+
+        # Drop legacy derived-bar tables (now computed on demand — chart.py / screening.py).
+        # Safe to run repeatedly: IF EXISTS guards each statement.
+        for tbl in ("daily_heikin_ashi", "renko_bricks", "line_break_lines"):
+            try:
+                with self.engine.begin() as conn:
+                    conn.execute(text(f"DROP TABLE IF EXISTS {tbl}"))
+                logger.info(f"ensure_columns: dropped legacy table '{tbl}' (if it existed)")
+            except Exception as e:
+                logger.debug(f"ensure_columns: could not drop '{tbl}': {e}")
 
     def get_session(self):
         """Returns a new isolated database session."""

@@ -132,6 +132,32 @@ class IndicatorEngine:
                 df_sorted["stochrsi_bullish_xover"] = None
                 df_sorted["stochrsi_bearish_xover"] = None
 
+            # 14. Zero Lag EMA (21) — corrects EMA lag by subtracting the error term
+            ema21 = ta.ema(df_sorted["close"], length=21)
+            if ema21 is not None and not ema21.dropna().empty:
+                ema_of_ema21 = ta.ema(ema21.ffill(), length=21)
+                if ema_of_ema21 is not None and not ema_of_ema21.dropna().empty:
+                    df_sorted["zlema_21"] = ema21 + (ema21 - ema_of_ema21)
+                else:
+                    df_sorted["zlema_21"] = None
+            else:
+                df_sorted["zlema_21"] = None
+
+            # 15. Hilega-Milega: 21-period WMA of RSI, then 3-period EMA of that WMA
+            if "rsi_14" in df_sorted.columns:
+                rsi_series = df_sorted["rsi_14"].ffill()
+                hm_wma = ta.wma(rsi_series, length=21)
+                if hm_wma is not None and not hm_wma.dropna().empty:
+                    df_sorted["hm_rsi_wma21"] = hm_wma
+                    hm_ema3 = ta.ema(hm_wma.ffill(), length=3)
+                    df_sorted["hm_rsi_ema3"] = hm_ema3 if hm_ema3 is not None else None
+                else:
+                    df_sorted["hm_rsi_wma21"] = None
+                    df_sorted["hm_rsi_ema3"] = None
+            else:
+                df_sorted["hm_rsi_wma21"] = None
+                df_sorted["hm_rsi_ema3"] = None
+
         except Exception as e:
             logger.error(f"Error calculating technical indicators via pandas-ta: {e}")
             raise e

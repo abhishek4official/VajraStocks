@@ -15,7 +15,7 @@ downloader:
   backoff_factor: 2.0
   timeout_seconds: 30
 symbols:
-  active_equities_url: https://archives.nseindia.com/content/equities/EQUITY_L_ACTIVE.csv
+  active_equities_url: https://archives.nseindia.com/content/equities/EQUITY_L.csv
   fallback_csv_path: config/EQUITY_L_ACTIVE.csv
   default_indices:
   - ^NSEI
@@ -33,5 +33,5 @@ logging:
   retention: 30 days
 ai:
   provider: ollama
-  base_url: http://192.168.31.27:11434
-  model: gemma4:e4b
+  base_url: http://localhost:11434
+  model: qwen2.5-coder:7b

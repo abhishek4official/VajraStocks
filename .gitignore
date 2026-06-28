@@ -14,7 +14,6 @@ __pycache__/
 .Python
 build/
 develop-eggs/
-tests/
 dist/
 downloads/
 eggs/
@@ -273,9 +272,10 @@ key.properties
 
 
 # VajraStocks local data (SQLite) and runtime
+# NOTE: anchored to repo root so it does NOT match the source package src/stocks/data/
 python/data/
 python/logs/
-data/
+/data/
 vajra.db
 vajra.db-*
 *.db-journal

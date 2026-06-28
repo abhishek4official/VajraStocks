@@ -69,30 +69,109 @@ def _load_connection_string() -> str:
          then at python/config/config.yaml (dev fallback).
       3. SQLite default for a completely fresh install with no config yet.
 
-    No silent DB fallback — if initialize() fails the error propagates and the
-    server refuses to start with a clear log message.
+    INSTALLER DESIGN — relative SQLite paths:
+      config.yaml stores  sqlite:///data/vajra.db  (relative, no hardcoded user path).
+      This function converts that to an absolute path anchored at the directory that
+      contains config.yaml, so the DB always lives next to the config regardless of
+      which directory the server process was launched from.
+      Example: %APPDATA%\\VajraStocks\\config.yaml  →  DB at
+               %APPDATA%\\VajraStocks\\data\\vajra.db
+      The installer only needs to ship config.yaml — the data/ dir is created on
+      first run.  Do NOT change this to store an absolute user-specific path in
+      config.yaml; that would break installs for other users.
     """
-    # 1. Hard env-var override
+    def _resolve_sqlite(cs: str, config_dir: Path) -> str:
+        """If cs is a relative sqlite:/// URL, anchor it to config_dir."""
+        if not cs.startswith("sqlite:///"):
+            return cs
+        raw = cs[len("sqlite:///"):]
+        # Already absolute (starts with drive letter on Windows or / on Unix)
+        if Path(raw).is_absolute():
+            return cs
+        abs_path = (config_dir / raw).resolve()
+        abs_path.parent.mkdir(parents=True, exist_ok=True)
+        resolved = f"sqlite:///{abs_path.as_posix()}"
+        logger.debug(f"Resolved relative SQLite path to: {abs_path}")
+        return resolved
+
+    # 1. Hard env-var override — used by Docker / CI / frozen launcher
     env_cs = os.getenv("VAJRA_DB_URL")
     if env_cs:
         logger.debug("Connection string from VAJRA_DB_URL env var.")
         return env_cs
 
-    # 2. config.yaml
+    # 2. config.yaml — relative SQLite paths are anchored to the config's directory
     if _CONFIG_YAML.exists():
         try:
             with open(_CONFIG_YAML, encoding="utf-8") as f:
                 data = yaml.safe_load(f) or {}
             cs = data.get("database", {}).get("connection_string", "")
             if cs:
-                logger.debug(f"Connection string from config.yaml: {cs[:60]}…")
+                cs = _resolve_sqlite(cs, _CONFIG_YAML.parent)
+                logger.debug(f"Connection string from config.yaml: {cs[:80]}…")
                 return cs
         except Exception as exc:
             logger.warning(f"Could not read config.yaml: {exc}")
 
-    # 3. Default SQLite
-    logger.debug("Using default SQLite connection string.")
+    # 3. Default — fresh install with no config yet; anchor to AppData if available
+    user_dir = _get_user_appdata_dir()
+    if user_dir:
+        default_db = user_dir / "data" / "vajra.db"
+        default_db.parent.mkdir(parents=True, exist_ok=True)
+        logger.debug(f"No config.yaml found — using default DB at {default_db}")
+        return f"sqlite:///{default_db.as_posix()}"
+    logger.debug("Using fallback relative SQLite connection string.")
     return "sqlite:///data/vajra.db"
+
+
+def _load_columnar_data_dir() -> str:
+    """
+    Resolves the columnar (DuckDB/Parquet) data directory with the same priority
+    as _load_connection_string:
+      1. VAJRA_COLUMNAR_DIR  env var  (Docker / CI override)
+      2. config.yaml  storage.columnar_data_dir
+         Relative paths are anchored to the config.yaml directory so the folder
+         always lands beside the config regardless of server launch CWD.
+         Example: %APPDATA%\\VajraStocks\\config.yaml + columnar_data_dir: DuckDB
+                  → %APPDATA%\\VajraStocks\\DuckDB\\
+      3. Default: <AppData>/VajraStocks/DuckDB  (fresh install, no config yet)
+
+    INSTALLER NOTE: config.yaml stores a relative name ("DuckDB"), not a hardcoded
+    user path. The installer ships config.yaml; this function creates the directory
+    on first run so no manual setup is needed.
+    """
+    # 1. Env-var override
+    env_dir = os.getenv("VAJRA_COLUMNAR_DIR")
+    if env_dir:
+        p = Path(env_dir)
+        p.mkdir(parents=True, exist_ok=True)
+        return str(p)
+
+    # 2. config.yaml — resolve relative paths against the config's parent directory
+    if _CONFIG_YAML.exists():
+        try:
+            import yaml as _yaml
+            with open(_CONFIG_YAML, encoding="utf-8") as f:
+                data = _yaml.safe_load(f) or {}
+            raw = data.get("storage", {}).get("columnar_data_dir", "")
+            if raw:
+                p = Path(raw)
+                if not p.is_absolute():
+                    p = (_CONFIG_YAML.parent / raw).resolve()
+                p.mkdir(parents=True, exist_ok=True)
+                logger.debug(f"Columnar data dir resolved to: {p}")
+                return str(p)
+        except Exception as exc:
+            logger.warning(f"Could not read columnar_data_dir from config.yaml: {exc}")
+
+    # 3. Default — next to the DB in AppData
+    user_dir = _get_user_appdata_dir()
+    if user_dir:
+        p = user_dir / "DuckDB"
+        p.mkdir(parents=True, exist_ok=True)
+        logger.debug(f"No columnar_data_dir in config — using default: {p}")
+        return str(p)
+    return "data/columnar"
 
 
 def write_bootstrap_config(updates: dict[tuple[str, str], str]) -> None:
@@ -270,19 +349,19 @@ def _seed_default_symbols(db_manager) -> None:
 
 
 def _run_pending_migrations(connection_string: str) -> None:
-    """Runs `alembic upgrade head` programmatically so the schema is always current."""
+    """Runs `alembic upgrade head` programmatically so the schema is always current.
+
+    Pre-Alembic DBs (tables present, no alembic_version) are detected via a
+    raw sqlite3 check and stamped at head so future startups are incremental-only.
+    """
     try:
         from alembic import command
         from alembic.config import Config as AlembicConfig
 
-        # Prefer env-var path set by the installer launcher (frozen mode),
-        # then fall back to the source-tree location for dev mode.
         env_ini = os.environ.get("VAJRA_ALEMBIC_INI")
         if env_ini:
             alembic_ini = Path(env_ini)
         else:
-            # Dev: python/src/stocks/api/main.py → parents[4] = repo root
-            #      but alembic.ini lives at python/alembic.ini = parents[3]
             alembic_ini = Path(__file__).resolve().parents[3] / "alembic.ini"
 
         if not alembic_ini.exists():
@@ -291,6 +370,41 @@ def _run_pending_migrations(connection_string: str) -> None:
 
         alembic_cfg = AlembicConfig(str(alembic_ini))
         alembic_cfg.set_main_option("sqlalchemy.url", connection_string)
+
+        # Detect pre-Alembic DB: tables exist (created by SQLAlchemy create_all)
+        # but alembic_version was never written. Probe with raw sqlite3 so we
+        # don't create a second SA engine during startup; keep the probe inside
+        # its OWN try so a probe failure never silently swallows stamp/upgrade.
+        needs_stamp = False
+        if connection_string.startswith("sqlite"):
+            import sqlite3
+            db_path = connection_string.split("///", 1)[-1]
+            if db_path and db_path != ":memory:":
+                try:
+                    con = sqlite3.connect(db_path, timeout=10)
+                    cur = con.cursor()
+                    tables = {r[0] for r in cur.execute(
+                        "SELECT name FROM sqlite_master WHERE type='table'"
+                    ).fetchall()}
+                    # Also treat an EMPTY alembic_version as unversioned —
+                    # a previous failed stamp may have created the table without inserting a row.
+                    has_version_row = (
+                        "alembic_version" in tables
+                        and cur.execute("SELECT 1 FROM alembic_version LIMIT 1").fetchone() is not None
+                    )
+                    con.close()
+                    needs_stamp = "symbols" in tables and not has_version_row
+                except Exception as probe_exc:
+                    logger.debug(f"Pre-Alembic probe skipped: {probe_exc}")
+
+        if needs_stamp:
+            # Tables exist but alembic_version is absent — stamp without running
+            # any migrations. Alembic will only run NEW migrations on next restart.
+            logger.info("Pre-Alembic schema detected — stamping DB at head.")
+            command.stamp(alembic_cfg, "head")
+            logger.info("Stamp complete. Future restarts will apply incremental migrations only.")
+            return
+
         command.upgrade(alembic_cfg, "head")
         logger.info("Database migrations applied (alembic upgrade head).")
     except Exception as exc:
@@ -357,15 +471,18 @@ async def lifespan(app: FastAPI):
 
     # ⑦ — expose to request handlers
     app.state.db_manager = db_manager
+    # Resolved once at startup so every request gets the same absolute path.
+    # Use VAJRA_COLUMNAR_DIR env var or config.yaml storage.columnar_data_dir.
+    app.state.columnar_data_dir = _load_columnar_data_dir()
 
-    # ⑦b — ML training job manager (one background thread at a time)
-    import sys as _sys
-    from pathlib import Path as _Path
-    _vajra_root = str(_Path(__file__).parents[4])
-    if _vajra_root not in _sys.path:
-        _sys.path.insert(0, _vajra_root)
-    from VajraML2.train_service import TrainingJobManagerV2
-    app.state.training_manager_v2 = TrainingJobManagerV2()
+    # ⑦c — background job worker (DB-backed queue; long work off the request thread)
+    try:
+        from stocks.services.jobs import handlers as _job_handlers  # noqa: F401 — registers handlers
+        from stocks.services.jobs.worker import JobWorker
+        app.state.job_worker = JobWorker(db_manager)
+        app.state.job_worker.start()
+    except Exception as exc:
+        logger.warning(f"Job worker not started: {exc}")
 
     logger.info("Application startup complete.")
 
@@ -376,7 +493,12 @@ async def lifespan(app: FastAPI):
 
     yield
 
-    # Clean up: wait for any in-flight sync, then cancel the loop, then release DB
+    # Clean up: stop the job worker, wait for any in-flight sync, then cancel the loop
+    try:
+        if getattr(app.state, "job_worker", None):
+            app.state.job_worker.stop()
+    except Exception as exc:
+        logger.warning(f"Job worker stop error: {exc}")
     from stocks.services.scheduler import shutdown_scheduler
     await shutdown_scheduler()
     logger.info("Stopping background scheduler task...")

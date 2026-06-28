@@ -26,14 +26,35 @@ def get_settings(request: Request) -> Generator:
         session.close()
 
 
+def get_bar_store(request: Request):
+    """Returns a BarStore pointing at the resolved columnar data directory.
+
+    The path is resolved once at startup (main.py lifespan → app.state.columnar_data_dir)
+    so it's always absolute and independent of server launch CWD.
+    Default: %APPDATA%/VajraStocks/DuckDB  (installer build)
+             data/columnar                 (dev fallback)
+    """
+    from stocks.data.bar_store import BarStore
+
+    data_dir = getattr(request.app.state, "columnar_data_dir", None)
+    if data_dir:
+        return BarStore(data_dir)
+    return BarStore.from_config(get_config(request))
+
+
 def get_config(request: Request):
     """
     Builds a Config object entirely from DB-backed settings — no config.yaml involved.
     Used by sync and agent endpoints so they always reflect live DB values.
     """
     from stocks.config import (
-        AIConfig, AppConfig, Config, DatabaseConfig,
-        DownloaderConfig, SymbolsConfig, ValidationConfig,
+        AIConfig,
+        AppConfig,
+        Config,
+        DatabaseConfig,
+        DownloaderConfig,
+        SymbolsConfig,
+        ValidationConfig,
     )
     from stocks.services.settings_service import SettingsService
 

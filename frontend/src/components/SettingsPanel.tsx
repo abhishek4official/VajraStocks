@@ -4,6 +4,7 @@ import {
   Power, RefreshCw, RotateCcw, Save, Settings, Wifi, WifiOff,
 } from 'lucide-react';
 import { invalidateSettingsCache } from '../hooks/useSettings';
+import { BackupSection } from './BackupSection';
 import { API_BASE, API_ROOT } from '../lib/apiBase';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -348,6 +349,11 @@ export const SettingsPanel: React.FC = () => {
             {reconnecting ? 'Restarting…' : 'Restart Server'}
           </button>
         </div>
+      </div>
+
+      {/* ── Backup & Restore ── */}
+      <div className="px-5 shrink-0">
+        <BackupSection />
       </div>
 
       {/* ── Status banners ── */}

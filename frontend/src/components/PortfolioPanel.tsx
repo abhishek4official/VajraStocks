@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useStockStore } from '../store/useStockStore';
 import {
   Upload, Trash2, TrendingUp, TrendingDown, Minus, BarChart2, ShieldAlert,
@@ -11,8 +12,9 @@ import { StockChartWorkspace } from './StockChartWorkspace';
 export const PortfolioPanel: React.FC = () => {
   const {
     portfolio, portfolioLoading, fetchPortfolio, importPortfolioFile, clearPortfolio,
-    setSelectedSymbol, setActiveTab,
+    setSelectedSymbol,
   } = useStockStore();
+  const navigate = useNavigate();
 
   useEffect(() => { fetchPortfolio(); }, [fetchPortfolio]);
 
@@ -32,7 +34,7 @@ export const PortfolioPanel: React.FC = () => {
   const handleInspect = async (instrument: string) => {
     const symbol = instrument.endsWith('.NS') ? instrument : `${instrument}.NS`;
     await setSelectedSymbol(symbol);
-    setActiveTab('explorer');
+    navigate('/research/explorer');
   };
 
   const handleOpenChartModal = async (instrument: string) => {
@@ -334,6 +336,7 @@ export const PortfolioPanel: React.FC = () => {
                 <th className="py-2.5 px-3 text-right font-semibold">R:R</th>
                 <th className="py-2.5 px-3 text-right font-semibold">RS</th>
                 <th className="py-2.5 px-3 text-right font-semibold" title="Composite score (trend + volume + RS + momentum + CMF + breakout, 0–100)">Score</th>
+                <th className="py-2.5 px-3 text-right font-semibold" title="This holding's contribution to total portfolio variance (%)">Risk%</th>
                 <th className="py-2.5 pr-5 pl-3 text-center font-semibold"></th>
               </tr>
             </thead>
@@ -439,6 +442,17 @@ export const PortfolioPanel: React.FC = () => {
                           {h.composite_score.toFixed(0)}
                         </span>
                       ) : <span className="text-slate-600 text-xs">—</span>}
+                    </td>
+                    <td className="py-3 px-3 text-right font-mono text-xs" title="Contribution to portfolio variance">
+                      {h.risk_contribution_pct != null ? (
+                        <span className={
+                          h.risk_contribution_pct > 20 ? 'text-rose-400 font-semibold'
+                          : h.risk_contribution_pct > 10 ? 'text-amber-400'
+                          : 'text-slate-400'
+                        }>
+                          {h.risk_contribution_pct.toFixed(1)}%
+                        </span>
+                      ) : <span className="text-slate-600">—</span>}
                     </td>
                     <td className="py-3 pr-5 pl-3 text-center">
                       <div className="flex items-center gap-1 justify-center">

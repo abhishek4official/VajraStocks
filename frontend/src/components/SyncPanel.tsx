@@ -12,6 +12,7 @@ import {
   AlertOctagon,
   AlertTriangle,
   Upload,
+  Database,
 } from 'lucide-react';
 import { EodImportPanel } from './EodImportPanel';
 
@@ -57,6 +58,16 @@ export const SyncPanel: React.FC = () => {
   };
 
   const isRecalcRunning = recalcProgress?.status === 'RUNNING';
+
+  const [isBootstrapping, setIsBootstrapping] = useState(false);
+  const handleBootstrapSymbols = async () => {
+    setIsBootstrapping(true);
+    try {
+      await apiService.bootstrapSymbols();
+    } catch { /* ignore */ } finally {
+      setTimeout(() => { setIsBootstrapping(false); fetchSyncLogs(); }, 3000);
+    }
+  };
 
   const totalRegistered = syncStatuses.length;
   const successfulCount = syncStatuses.filter(s => s.last_attempt_status === 'SUCCESS').length;
@@ -148,6 +159,21 @@ export const SyncPanel: React.FC = () => {
               {isRecalcRunning ? 'Stop Recalculation' : 'Stop Active Sync'}
             </button>
           )}
+
+          {/* Bootstrap Symbols */}
+          <button
+            onClick={handleBootstrapSymbols}
+            disabled={isBootstrapping || isJobRunning}
+            title="Re-fetch active equities list from NSE and update symbol registry"
+            className={`flex items-center gap-2 px-4 py-2 bg-slate-900 border ${
+              isBootstrapping || isJobRunning
+                ? 'border-slate-800 text-slate-500 cursor-not-allowed'
+                : 'border-emerald-500/30 hover:border-emerald-500 text-emerald-400 hover:text-text-main'
+            } rounded-lg text-xs font-bold transition duration-150 cursor-pointer`}
+          >
+            <Database className={`w-3.5 h-3.5 ${isBootstrapping ? 'animate-pulse' : ''}`} />
+            {isBootstrapping ? 'Refreshing…' : 'Refresh Symbol Registry'}
+          </button>
 
           {/* Crawl Job */}
           <button

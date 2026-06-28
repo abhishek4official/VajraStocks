@@ -1,0 +1,1012 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NSE Swing Trade Report — June 22, 2026</title>
+<style>
+  :root {
+    --bg: #0a0e1a;
+    --card: #111827;
+    --card2: #1a2236;
+    --border: #1e2d45;
+    --accent: #f59e0b;
+    --green: #10b981;
+    --red: #ef4444;
+    --blue: #3b82f6;
+    --purple: #8b5cf6;
+    --text: #e2e8f0;
+    --muted: #94a3b8;
+    --gold: #fbbf24;
+    --silver: #cbd5e1;
+    --bronze: #d97706;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; font-size: 14px; line-height: 1.6; }
+  a { color: var(--accent); text-decoration: none; }
+  .report-header { background: linear-gradient(135deg, #0d1b2e 0%, #111827 100%); border-bottom: 2px solid var(--accent); padding: 24px 20px; }
+  .header-grid { display: grid; grid-template-columns: 1fr auto; gap: 16px; align-items: start; max-width: 1200px; margin: 0 auto; }
+  .report-title { font-size: 26px; font-weight: 700; color: var(--accent); letter-spacing: -0.5px; }
+  .report-subtitle { font-size: 13px; color: var(--muted); margin-top: 4px; }
+  .capital-pills { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .pill { background: var(--card2); border: 1px solid var(--border); border-radius: 20px; padding: 4px 12px; font-size: 12px; color: var(--muted); }
+  .pill span { color: var(--accent); font-weight: 600; }
+  .data-tag { background: var(--green); color: #000; border-radius: 4px; padding: 3px 8px; font-size: 11px; font-weight: 700; white-space: nowrap; }
+  .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+  .section { margin-bottom: 28px; }
+  .section-title { font-size: 16px; font-weight: 700; color: var(--accent); border-left: 3px solid var(--accent); padding-left: 12px; margin-bottom: 14px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .toc { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+  .toc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 6px; }
+  .toc-item { padding: 5px 8px; border-radius: 5px; font-size: 12px; color: var(--muted); }
+  .market-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; }
+  .market-card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 12px; text-align: center; }
+  .market-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+  .market-val { font-size: 20px; font-weight: 700; margin: 4px 0; }
+  .market-chg { font-size: 12px; }
+  .pos { color: var(--green); }
+  .neg { color: var(--red); }
+  .neu { color: var(--muted); }
+  .table-wrap { overflow-x: auto; border-radius: 10px; border: 1px solid var(--border); }
+  table { width: 100%; border-collapse: collapse; }
+  th { background: #0d1422; color: var(--muted); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; padding: 10px 12px; text-align: left; white-space: nowrap; }
+  td { padding: 10px 12px; border-top: 1px solid var(--border); white-space: nowrap; font-size: 13px; }
+  tr:hover td { background: var(--card2); }
+  .ticker { font-weight: 700; color: var(--text); font-family: monospace; }
+  .score-bar { height: 6px; border-radius: 3px; background: var(--border); overflow: hidden; min-width: 80px; margin-top: 4px; }
+  .score-fill { height: 100%; border-radius: 3px; }
+  .score-num { font-size: 13px; font-weight: 700; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+  .badge-buy { background: rgba(16,185,129,0.15); color: var(--green); border: 1px solid rgba(16,185,129,0.3); }
+  .badge-watch { background: rgba(245,158,11,0.15); color: var(--accent); border: 1px solid rgba(245,158,11,0.3); }
+  .badge-avoid { background: rgba(239,68,68,0.15); color: var(--red); border: 1px solid rgba(239,68,68,0.3); }
+  .badge-ath { background: rgba(139,92,246,0.2); color: #a78bfa; border: 1px solid rgba(139,92,246,0.3); font-size: 10px; }
+  .badge-asm { background: rgba(239,68,68,0.2); color: #fca5a5; border: 1px solid rgba(239,68,68,0.3); font-size: 10px; }
+  .rank-1 { color: var(--gold); font-weight: 800; font-size: 16px; }
+  .rank-2 { color: var(--silver); font-weight: 800; font-size: 16px; }
+  .rank-3 { color: var(--bronze); font-weight: 800; font-size: 16px; }
+  .rank-4 { color: var(--blue); font-weight: 800; font-size: 16px; }
+  .hero-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(540px, 1fr)); gap: 16px; }
+  .hero-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+  .hero-card.rank1 { border-top: 3px solid var(--gold); }
+  .hero-card.rank2 { border-top: 3px solid var(--silver); }
+  .hero-card.rank3 { border-top: 3px solid var(--bronze); }
+  .hero-card.rank4 { border-top: 3px solid var(--blue); }
+  .hero-header { padding: 16px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: start; flex-wrap: wrap; gap: 8px; }
+  .hero-name { font-size: 18px; font-weight: 700; }
+  .hero-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .hero-price { text-align: right; }
+  .hero-cmp { font-size: 24px; font-weight: 800; color: var(--accent); }
+  .hero-chg { font-size: 12px; }
+  .hero-body { padding: 16px; }
+  .hero-scores { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 14px; }
+  .score-box { text-align: center; background: var(--card2); border-radius: 8px; padding: 10px 6px; }
+  .score-box .label { font-size: 10px; color: var(--muted); text-transform: uppercase; }
+  .score-box .val { font-size: 22px; font-weight: 800; }
+  .hero-sections { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .hero-section h4 { font-size: 11px; color: var(--muted); text-transform: uppercase; margin-bottom: 8px; letter-spacing: 0.5px; }
+  .kv { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid var(--border); font-size: 12px; }
+  .kv:last-child { border-bottom: none; }
+  .kv .k { color: var(--muted); }
+  .kv .v { font-weight: 600; }
+  .trade-grid { background: var(--card2); border-radius: 8px; padding: 12px; margin-top: 14px; border: 1px solid var(--border); }
+  .trade-grid h4 { font-size: 11px; color: var(--muted); text-transform: uppercase; margin-bottom: 10px; letter-spacing: 0.5px; }
+  .trade-levels { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; text-align: center; }
+  .trade-level { background: var(--bg); border-radius: 6px; padding: 8px 4px; }
+  .trade-level .tl-label { font-size: 10px; color: var(--muted); }
+  .trade-level .tl-val { font-size: 15px; font-weight: 700; margin-top: 4px; }
+  .entry-col .tl-val { color: var(--accent); }
+  .sl-col .tl-val { color: var(--red); }
+  .t1-col .tl-val { color: #34d399; }
+  .t2-col .tl-val { color: #10b981; }
+  .t3-col .tl-val { color: #059669; }
+  .rr-row { display: flex; justify-content: space-around; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); text-align: center; flex-wrap: wrap; gap: 8px; }
+  .rr-item .label { font-size: 10px; color: var(--muted); }
+  .rr-item .val { font-size: 14px; font-weight: 700; margin-top: 2px; }
+  .alloc-bar { height: 10px; border-radius: 5px; }
+  .alloc-1 { background: var(--gold); }
+  .alloc-2 { background: var(--silver); }
+  .alloc-3 { background: var(--bronze); }
+  .alloc-4 { background: var(--blue); }
+  .stress-ok { color: var(--green); font-weight: 600; }
+  .stress-warn { color: var(--accent); font-weight: 600; }
+  .stress-danger { color: var(--red); font-weight: 600; }
+  .alert { border-radius: 8px; padding: 12px 14px; margin-bottom: 12px; border-left: 4px solid; font-size: 13px; }
+  .alert-warn { background: rgba(245,158,11,0.08); border-color: var(--accent); }
+  .alert-danger { background: rgba(239,68,68,0.08); border-color: var(--red); }
+  .alert-info { background: rgba(59,130,246,0.08); border-color: var(--blue); }
+  .alert-success { background: rgba(16,185,129,0.08); border-color: var(--green); }
+  .alert strong { display: block; margin-bottom: 4px; }
+  .decision-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+  .decision-card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
+  .decision-header { font-size: 14px; font-weight: 700; margin-bottom: 10px; }
+  .decision-item { display: flex; gap: 8px; align-items: start; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 12px; }
+  .decision-item:last-child { border-bottom: none; }
+  .di-ticker { font-weight: 700; min-width: 85px; font-family: monospace; font-size: 13px; }
+  .di-reason { color: var(--muted); }
+  .checklist { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+  .check-item { display: flex; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+  .check-item:last-child { border-bottom: none; }
+  .check-num { background: var(--accent); color: #000; border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; flex-shrink: 0; margin-top: 1px; }
+  .check-text strong { display: block; margin-bottom: 2px; }
+  .check-text span { font-size: 12px; color: var(--muted); }
+  .footer { background: var(--card); border-top: 1px solid var(--border); padding: 16px 20px; margin-top: 28px; font-size: 11px; color: var(--muted); text-align: center; line-height: 1.8; }
+  @media (max-width: 768px) {
+    .hero-grid { grid-template-columns: 1fr; }
+    .hero-sections { grid-template-columns: 1fr; }
+    .hero-scores { grid-template-columns: repeat(2, 1fr); }
+    .trade-levels { grid-template-columns: repeat(3, 1fr); }
+    .market-grid { grid-template-columns: repeat(2, 1fr); }
+    .header-grid { grid-template-columns: 1fr; }
+    .decision-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div class="report-header">
+  <div class="header-grid">
+    <div>
+      <div class="report-title">⚡ NSE SWING TRADE REPORT</div>
+      <div class="report-subtitle">Institutional Equity Analysis · 9 Candidates · Trade Date: June 23, 2026</div>
+      <div class="capital-pills">
+        <div class="pill">Total Exposure <span>₹1,20,000</span></div>
+        <div class="pill">Own Capital <span>₹36,000 (30%)</span></div>
+        <div class="pill">Zerodha MTF <span>₹84,000 (70%)</span></div>
+        <div class="pill">Hold Period <span>1–8 Weeks</span></div>
+        <div class="pill">Exchange <span>NSE India</span></div>
+      </div>
+    </div>
+    <div style="text-align:right;">
+      <div class="data-tag">✅ Prices Verified Jun 22, 2026</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:6px;">Source: Trendlyne.com (NSE Close)</div>
+      <div style="font-size:11px;color:var(--muted);">Report Generated: 22 Jun 2026</div>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+
+<div class="section">
+  <div class="toc">
+    <div style="font-size:12px;color:var(--muted);font-weight:600;margin-bottom:10px;text-transform:uppercase;">Table of Contents</div>
+    <div class="toc-grid">
+      <a href="#market" class="toc-item">1. Market Overview</a>
+      <a href="#ranking" class="toc-item">2. Comparative Ranking</a>
+      <a href="#candidates" class="toc-item">3. All Candidates Brief</a>
+      <a href="#heroes" class="toc-item">4. Top 4 Deep-Dive</a>
+      <a href="#portfolio" class="toc-item">5. Portfolio Allocation</a>
+      <a href="#stress" class="toc-item">6. Stress Testing</a>
+      <a href="#rejected" class="toc-item">7. Rejected Stocks</a>
+      <a href="#decision" class="toc-item">8. Decision Framework</a>
+      <a href="#final" class="toc-item">9. Final Recommendations</a>
+      <a href="#checklist" class="toc-item">10. Execution Checklist</a>
+    </div>
+  </div>
+</div>
+
+<div class="alert alert-danger">
+  <strong>⚠️ CRITICAL: 3 of 9 Stocks are on ASM (Additional Surveillance Measure)</strong>
+  <b>HFCL, SIGMAADV, VINDHYATEL</b> are ASM-listed. Zerodha <b>blocks MTF on ASM stocks</b>. These can only be traded with full cash. They are EXCLUDED from the swing portfolio below.
+</div>
+
+<div class="section" id="market">
+  <div class="section-title">1. Market Overview — June 22, 2026</div>
+  <div class="market-grid">
+    <div class="market-card">
+      <div class="market-label">Nifty 50</div>
+      <div class="market-val pos">24,102.9</div>
+      <div class="market-chg pos">+89.80 (+0.37%)</div>
+    </div>
+    <div class="market-card">
+      <div class="market-label">Sensex</div>
+      <div class="market-val pos">77,094.1</div>
+      <div class="market-chg pos">+291.17 (+0.38%)</div>
+    </div>
+    <div class="market-card">
+      <div class="market-label">India VIX</div>
+      <div class="market-val pos">12.84</div>
+      <div class="market-chg neg">-1.0% — Low Volatility ✅</div>
+    </div>
+    <div class="market-card">
+      <div class="market-label">FII Cash (Jun 20)</div>
+      <div class="market-val pos">+₹4,859 Cr</div>
+      <div class="market-chg pos">Net Buyer ✅</div>
+    </div>
+    <div class="market-card">
+      <div class="market-label">DII Cash (Jun 20)</div>
+      <div class="market-val neg">-₹1,160 Cr</div>
+      <div class="market-chg neg">Net Seller</div>
+    </div>
+    <div class="market-card">
+      <div class="market-label">Today's Basket</div>
+      <div class="market-val" style="color:var(--accent)">7/9 ATH</div>
+      <div class="market-chg pos">New 52W Highs Today</div>
+    </div>
+  </div>
+  <div class="alert alert-success" style="margin-top:12px;margin-bottom:0;">
+    <strong>🟢 Market Bias: STRONGLY BULLISH</strong>
+    VIX at 12.84 (multi-month low, fear absent), FII net buyers, Nifty at 24,100+. 7 of 9 stocks in this basket touched new 52W Highs today — exceptional momentum breadth. Conditions favour swing entries on confirmed ATH breakouts. Mid/small-cap participation strong. India macro (₹11L Cr power capex, defense indigenisation, premium consumption) provides sector tailwinds for all 4 picks.
+  </div>
+</div>
+
+<div class="section" id="ranking">
+  <div class="section-title">2. Comparative Ranking — All 9 Candidates</div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Rank</th><th>Stock</th><th>CMP (₹)</th><th>Change</th><th>Signal</th>
+          <th>Tech /100</th><th>Fundamental /100</th><th>Catalyst /100</th><th>Risk /100</th><th>Composite</th><th>Verdict</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="rank-1">🥇 #1</span></td>
+          <td><span class="ticker">VENUSPIPES</span><br><small style="color:var(--muted)">Venus Pipes &amp; Tubes</small></td>
+          <td style="color:var(--accent);font-weight:700">1,673.50</td>
+          <td class="pos">+8.24%</td>
+          <td><span class="badge badge-ath">🚀 NEW ATH</span></td>
+          <td><span style="color:var(--green);font-weight:700">90</span><div class="score-bar"><div class="score-fill" style="width:90%;background:var(--green)"></div></div></td>
+          <td><span style="color:var(--green);font-weight:700">76</span><div class="score-bar"><div class="score-fill" style="width:76%;background:#34d399"></div></div></td>
+          <td><span style="color:var(--green);font-weight:700">85</span><div class="score-bar"><div class="score-fill" style="width:85%;background:var(--green)"></div></div></td>
+          <td><span style="color:var(--accent);font-weight:700">70</span><div class="score-bar"><div class="score-fill" style="width:70%;background:var(--accent)"></div></div></td>
+          <td><span style="color:var(--green);font-size:20px;font-weight:800">81</span></td>
+          <td><span class="badge badge-buy">✅ BUY NOW</span></td>
+        </tr>
+        <tr>
+          <td><span class="rank-2">🥈 #2</span></td>
+          <td><span class="ticker">AIAENG</span><br><small style="color:var(--muted)">AIA Engineering</small></td>
+          <td style="color:var(--accent);font-weight:700">4,848.00</td>
+          <td class="pos">+3.44%</td>
+          <td><span class="badge badge-ath">🚀 NEW ATH</span></td>
+          <td><span style="color:var(--green);font-weight:700">85</span><div class="score-bar"><div class="score-fill" style="width:85%;background:var(--green)"></div></div></td>
+          <td><span style="color:var(--green);font-weight:700">75</span><div class="score-bar"><div class="score-fill" style="width:75%;background:#34d399"></div></div></td>
+          <td><span style="color:var(--green);font-weight:700">78</span><div class="score-bar"><div class="score-fill" style="width:78%;background:var(--green)"></div></div></td>
+          <td><span style="color:var(--green);font-weight:700">80</span><div class="score-bar"><div class="score-fill" style="width:80%;background:var(--green)"></div></div></td>
+          <td><span style="color:var(--green);font-size:20px;font-weight:800">79</span></td>
+          <td><span class="badge badge-buy">✅ BUY NOW</span></td>
+        </tr>
+        <tr>
+          <td><span class="rank-3">🥉 #3</span></td>
+          <td><span class="ticker">RADICO</span><br><small style="color:var(--muted)">Radico Khaitan</small></td>
+          <td style="color:var(--accent);font-weight:700">3,778.60</td>
+          <td class="pos">+0.25%</td>
+          <td><span class="badge badge-ath">🚀 NEW ATH</span></td>
+          <td><span style="color:var(--green);font-weight:700">82</span><div class="score-bar"><div class="score-fill" style="width:82%;background:var(--green)"></div></div></td>
+          <td><span style="color:var(--green);font-weight:700">80</span><div class="score-bar"><div class="score-fill" style="width:80%;background:var(--green)"></div></div></td>
+          <td><span style="color:var(--accent);font-weight:700">78</span><div class="score-bar"><div class="score-fill" style="width:78%;background:var(--accent)"></div></div></td>
+          <td><span style="color:var(--green);font-weight:700">76</span><div class="score-bar"><div class="score-fill" style="width:76%;background:var(--green)"></div></div></td>
+          <td><span style="color:var(--green);font-size:20px;font-weight:800">79</span></td>
+          <td><span class="badge badge-buy">✅ BUY NOW</span></td>
+        </tr>
+        <tr>
+          <td><span class="rank-4">🔵 #4</span></td>
+          <td><span class="ticker">SCHNEIDER</span><br><small style="color:var(--muted)">Schneider Electric Infra</small></td>
+          <td style="color:var(--accent);font-weight:700">1,395.50</td>
+          <td class="pos">+4.81%</td>
+          <td><span style="color:var(--accent);font-size:11px">Near ATH (-1.6%)</span></td>
+          <td><span style="color:var(--green);font-weight:700">84</span><div class="score-bar"><div class="score-fill" style="width:84%;background:var(--green)"></div></div></td>
+          <td><span style="color:var(--accent);font-weight:700">62</span><div class="score-bar"><div class="score-fill" style="width:62%;background:var(--accent)"></div></div></td>
+          <td><span style="color:var(--green);font-weight:700">80</span><div class="score-bar"><div class="score-fill" style="width:80%;background:var(--green)"></div></div></td>
+          <td><span style="color:var(--accent);font-weight:700">65</span><div class="score-bar"><div class="score-fill" style="width:65%;background:var(--accent)"></div></div></td>
+          <td><span style="color:var(--green);font-size:20px;font-weight:800">72</span></td>
+          <td><span class="badge badge-buy">✅ BUY NOW</span></td>
+        </tr>
+        <tr>
+          <td style="color:var(--muted)">#5</td>
+          <td><span class="ticker">SIGMAADV</span> <span class="badge badge-asm">ASM</span></td>
+          <td>551.30</td><td class="pos">+5.00%</td>
+          <td><span class="badge badge-ath">NEW ATH</span></td>
+          <td><span style="color:var(--green)">87</span></td><td><span style="color:var(--accent)">68</span></td><td><span style="color:var(--green)">82</span></td><td><span style="color:var(--red)">35</span></td>
+          <td><span style="color:var(--accent);font-size:18px;font-weight:700">70</span></td>
+          <td><span class="badge badge-avoid">🚫 ASM — NO MTF</span></td>
+        </tr>
+        <tr>
+          <td style="color:var(--muted)">#6</td>
+          <td><span class="ticker">WELSPUNLIV</span></td>
+          <td>161.75</td><td class="neg">-0.30%</td>
+          <td><small style="color:var(--muted)">52W Hi this week</small></td>
+          <td><span style="color:var(--accent)">60</span></td><td><span style="color:var(--red)">50</span></td><td><span style="color:var(--accent)">68</span></td><td><span style="color:var(--accent)">65</span></td>
+          <td><span style="color:var(--accent);font-size:18px;font-weight:700">59</span></td>
+          <td><span class="badge badge-watch">⏳ PULLBACK ₹148</span></td>
+        </tr>
+        <tr>
+          <td style="color:var(--red)">#7</td>
+          <td><span class="ticker">HFCL</span> <span class="badge badge-asm">ASM</span></td>
+          <td>209.46</td><td class="neg">-0.07%</td>
+          <td><span style="color:var(--red);font-size:11px">Shooting Star ❌</span></td>
+          <td><span style="color:var(--red)">42</span></td><td><span style="color:var(--accent)">55</span></td><td><span style="color:var(--accent)">60</span></td><td><span style="color:var(--red)">35</span></td>
+          <td><span style="color:var(--red);font-size:18px;font-weight:700">49</span></td>
+          <td><span class="badge badge-avoid">🚫 AVOID</span></td>
+        </tr>
+        <tr>
+          <td style="color:var(--red)">#8</td>
+          <td><span class="ticker">GOCLCORP</span></td>
+          <td>445.30</td><td class="pos">+1.78%</td>
+          <td><span style="color:var(--red);font-size:11px">HARD REJECT</span></td>
+          <td><span style="color:var(--accent)">68</span></td><td><span style="color:var(--red)">20</span></td><td><span style="color:var(--accent)">45</span></td><td><span style="color:var(--red)">30</span></td>
+          <td><span style="color:var(--red);font-size:18px;font-weight:700">41</span></td>
+          <td><span class="badge badge-avoid">🚫 HARD REJECT</span></td>
+        </tr>
+        <tr>
+          <td style="color:var(--red)">#9</td>
+          <td><span class="ticker">VINDHYATEL</span> <span class="badge badge-asm">ASM</span></td>
+          <td>2,340.90</td><td class="neg">-1.40%</td>
+          <td><span style="color:var(--red);font-size:11px">Shooting Star ❌ HARD REJECT</span></td>
+          <td><span style="color:var(--red)">35</span></td><td><span style="color:var(--red)">42</span></td><td><span style="color:var(--red)">40</span></td><td><span style="color:var(--red)">30</span></td>
+          <td><span style="color:var(--red);font-size:18px;font-weight:700">38</span></td>
+          <td><span class="badge badge-avoid">🚫 HARD REJECT</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <p style="font-size:11px;color:var(--muted);margin-top:8px;">Composite Score = Technical×0.25 + Fundamental×0.35 + Catalyst×0.25 + Risk(inverse)×0.15</p>
+</div>
+
+<div class="section" id="candidates">
+  <div class="section-title">3. All Candidates — Brief Overview</div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Stock</th><th>CMP</th><th>52W High / Low</th><th>Trend</th><th>Q4 FY26 Highlight</th><th>Key Risk</th><th>Verdict</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><span class="ticker">VENUSPIPES</span></td><td class="pos" style="font-weight:700">₹1,673.50 +8.24%</td><td><span class="pos">₹1,673</span> / <span class="neg">₹890</span></td><td><span class="badge badge-ath">🚀 ATH BREAKOUT</span></td><td>Revenue +17% · EBITDA +18.7% · Orderbook 2.5x YoY · DC cooling LOI</td><td>Cyclical SS pipes; promoter 48.4%</td><td><span class="badge badge-buy">✅ BUY NOW</span></td></tr>
+        <tr><td><span class="ticker">AIAENG</span></td><td class="pos" style="font-weight:700">₹4,848.00 +3.44%</td><td><span class="pos">₹4,848</span> / <span class="neg">₹3,001</span></td><td><span class="badge badge-ath">🚀 ATH BREAKOUT</span></td><td>EBITDA ₹502 Cr RECORD · PAT +38% · Chile $32.9M order · Debt-free</td><td>Growth slowing 5.6%/yr; P/E 30x</td><td><span class="badge badge-buy">✅ BUY NOW</span></td></tr>
+        <tr><td><span class="ticker">RADICO</span></td><td class="pos" style="font-weight:700">₹3,778.60 +0.25%</td><td><span class="pos">₹3,778</span> / <span class="neg">₹2,500</span></td><td><span class="badge badge-ath">🚀 ATH BREAKOUT</span></td><td>Revenue +24.7% · PAT +76% · Margin 16.8% · Dividend ₹9 Jul 24</td><td>Promoter 40.2%; high P/E</td><td><span class="badge badge-buy">✅ BUY NOW</span></td></tr>
+        <tr><td><span class="ticker">SCHNEIDER</span></td><td class="pos" style="font-weight:700">₹1,395.50 +4.81%</td><td><span class="pos">₹1,418</span> / <span class="neg">₹572</span></td><td style="color:var(--green)">Near ATH (-1.6%)</td><td>Orders +27.4% FY26 · Backlog +50% YoY · ROE 31.8%</td><td>Q4 PAT -59.8% YoY sharp dip</td><td><span class="badge badge-buy">✅ BUY NOW</span></td></tr>
+        <tr><td><span class="ticker">SIGMAADV</span> <span class="badge badge-asm">ASM</span></td><td class="pos" style="font-weight:700">₹551.30 +5.00%</td><td><span class="pos">₹551</span> / <span class="neg">₹82</span></td><td><span class="badge badge-ath">🚀 ATH BREAKOUT</span></td><td>Revenue +469% YoY · PAT +634% · Nasmyth UK acquisition</td><td>ASM—no MTF · Mkt cap vs revenue extreme</td><td><span class="badge badge-avoid">🚫 AVOID</span></td></tr>
+        <tr><td><span class="ticker">WELSPUNLIV</span></td><td class="neg" style="font-weight:700">₹161.75 -0.30%</td><td><span class="pos">₹165.5</span> / <span class="neg">₹107</span></td><td style="color:var(--accent)">Near 52W High</td><td>Debt cut 52% · Buyback ₹252 Cr @ ₹175 · Q4 PAT ₹104 Cr</td><td>FY26 Rev -11.5% · EBITDA -40.6% · Genuine turnaround risk</td><td><span class="badge badge-watch">⏳ PULLBACK ₹148</span></td></tr>
+        <tr><td><span class="ticker">HFCL</span> <span class="badge badge-asm">ASM</span></td><td class="neg" style="font-weight:700">₹209.46 -0.07%</td><td><span class="pos">₹220.09</span> / <span class="neg">₹59.82</span></td><td style="color:var(--red)">Shooting Star ❌</td><td>Revenue +128% Q4 · Order book ₹21,200 Cr · USD 1.1B OFC deal</td><td>ASM—no MTF · ROE 0.67% · ROCE 3.95% · Reversal candle</td><td><span class="badge badge-avoid">🚫 AVOID</span></td></tr>
+        <tr><td><span class="ticker">GOCLCORP</span></td><td class="pos" style="font-weight:700">₹445.30 +1.78%</td><td><span class="pos">₹445</span> / <span class="neg">₹223</span></td><td><span class="badge badge-ath">NEW ATH</span></td><td>Core revenue ONLY ₹2.33 Cr · PAT from discontinued ops only</td><td>CORE REVENUE ₹2.33 Cr · ROCE -1.11% · Shell co risk</td><td><span class="badge badge-avoid">🚫 HARD REJECT</span></td></tr>
+        <tr><td><span class="ticker">VINDHYATEL</span> <span class="badge badge-asm">ASM</span></td><td class="neg" style="font-weight:700">₹2,340.90 -1.40%</td><td><span class="pos">₹2,485</span> / <span class="neg">₹964</span></td><td style="color:var(--red)">Shooting Star ❌</td><td>Q4 Revenue ₹1,009 Cr (down YoY) · ROE 5.9%</td><td>ASM · Credit downgraded · Extreme intraday reversal -5.8% from high</td><td><span class="badge badge-avoid">🚫 HARD REJECT</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="section" id="heroes">
+  <div class="section-title">4. Top 4 Deep-Dive — Hero Analysis Cards</div>
+  <div class="hero-grid">
+
+    <!-- VENUSPIPES -->
+    <div class="hero-card rank1">
+      <div class="hero-header">
+        <div>
+          <div style="font-size:11px;color:var(--gold);font-weight:700;text-transform:uppercase;letter-spacing:1px">🥇 Rank #1 · Metals &amp; Mining / Stainless Steel</div>
+          <div class="hero-name">VENUSPIPES &nbsp;<span class="badge badge-ath">🚀 ATH BREAKOUT</span></div>
+          <div class="hero-sub">Venus Pipes &amp; Tubes Ltd · NSE: VENUSPIPES · Sector: Iron &amp; Steel Products</div>
+        </div>
+        <div class="hero-price">
+          <div class="hero-cmp">₹1,673.50</div>
+          <div class="hero-chg pos">+₹127.40 &nbsp;(+8.24%)</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:4px">Volume: 1.0M — Institutional!</div>
+        </div>
+      </div>
+      <div class="hero-body">
+        <div class="hero-scores">
+          <div class="score-box"><div class="label">Technical</div><div class="val pos">90</div></div>
+          <div class="score-box"><div class="label">Fundamental</div><div class="val" style="color:#34d399">76</div></div>
+          <div class="score-box"><div class="label">Catalyst</div><div class="val pos">85</div></div>
+          <div class="score-box"><div class="label">Risk</div><div class="val" style="color:var(--accent)">70</div></div>
+        </div>
+        <div class="hero-sections">
+          <div class="hero-section">
+            <h4>📊 Fundamentals (Q4 FY26 / FY26)</h4>
+            <div class="kv"><span class="k">Q4 Revenue</span><span class="v pos">₹302.2 Cr (+17.1% YoY)</span></div>
+            <div class="kv"><span class="k">Q4 EBITDA</span><span class="v pos">₹49.4 Cr (+18.7% YoY)</span></div>
+            <div class="kv"><span class="k">Q4 PAT</span><span class="v pos">₹25.4 Cr (+7.2% YoY)</span></div>
+            <div class="kv"><span class="k">FY26 Revenue</span><span class="v pos">₹1,166.8 Cr (+21.7%)</span></div>
+            <div class="kv"><span class="k">FY26 PAT</span><span class="v pos">₹101.9 Cr (+9.7%)</span></div>
+            <div class="kv"><span class="k">P/E Ratio</span><span class="v">31.41x</span></div>
+            <div class="kv"><span class="k">Market Cap</span><span class="v">₹3,203 Cr</span></div>
+            <div class="kv"><span class="k">Promoter Holding</span><span class="v">48.4%</span></div>
+            <div class="kv"><span class="k">Order Book</span><span class="v pos">₹560 Cr + ₹185 Cr LOI</span></div>
+            <div class="kv"><span class="k">FY27 Guidance</span><span class="v pos">20% vol growth · 17% EBITDA margin</span></div>
+          </div>
+          <div class="hero-section">
+            <h4>📈 Technical Analysis</h4>
+            <div class="kv"><span class="k">52W High (Today)</span><span class="v pos">₹1,673.50 — NEW ATH!</span></div>
+            <div class="kv"><span class="k">52W Low</span><span class="v neg">₹890</span></div>
+            <div class="kv"><span class="k">1Y Return</span><span class="v pos">+87.9% (outperformer)</span></div>
+            <div class="kv"><span class="k">Trend Structure</span><span class="v pos">Higher Highs + Higher Lows</span></div>
+            <div class="kv"><span class="k">vs MAs</span><span class="v pos">Above SMA20/50/100/200</span></div>
+            <div class="kv"><span class="k">RSI (14)</span><span class="v" style="color:var(--accent)">~68–72 (Healthy momentum)</span></div>
+            <div class="kv"><span class="k">MACD</span><span class="v pos">Bullish crossover</span></div>
+            <div class="kv"><span class="k">Volume Signal</span><span class="v pos">1.0M — Institutional buying!</span></div>
+            <div class="kv"><span class="k">Candle Type</span><span class="v pos">Strong marubozu — conviction buy</span></div>
+            <div class="kv"><span class="k">ATH Note</span><span class="v pos">No supply overhead — momentum open</span></div>
+          </div>
+        </div>
+        <div class="alert alert-success" style="margin-top:12px">
+          <strong>🎯 Catalysts &amp; News</strong>
+          Nuvama maintains BUY · Target ₹2,000–₹2,260 (20–35% upside). LOI ₹185 Cr from Data Center cooling segment. New segment: Pipe Spooling for DC infra (₹70 Cr capex). Power sector order ₹190 Cr (~15% executed, remainder by Jun 26). Antique also bullish. Record FY26 revenue. FY27: 20% volume growth + 17% EBITDA margin guided.
+        </div>
+        <div class="trade-grid">
+          <h4>⚡ Trade Setup — Execute at Jun 23 Open</h4>
+          <div class="trade-levels">
+            <div class="trade-level entry-col"><div class="tl-label">ENTRY ZONE</div><div class="tl-val">₹1,668–₹1,720</div></div>
+            <div class="trade-level sl-col"><div class="tl-label">STOP LOSS</div><div class="tl-val">₹1,545</div></div>
+            <div class="trade-level t1-col"><div class="tl-label">TARGET 1 (30%)</div><div class="tl-val">₹1,880</div></div>
+            <div class="trade-level t2-col"><div class="tl-label">TARGET 2 (30%)</div><div class="tl-val">₹2,000</div></div>
+            <div class="trade-level t3-col"><div class="tl-label">TARGET 3 (40% trail)</div><div class="tl-val">₹2,260</div></div>
+          </div>
+          <div class="rr-row">
+            <div class="rr-item"><div class="label">Downside</div><div class="val neg">-7.9%</div></div>
+            <div class="rr-item"><div class="label">T1 Upside</div><div class="val pos">+10.9%</div></div>
+            <div class="rr-item"><div class="label">T2 Upside</div><div class="val pos">+18.0%</div></div>
+            <div class="rr-item"><div class="label">T3 Upside</div><div class="val pos">+33.3%</div></div>
+            <div class="rr-item"><div class="label">R:R</div><div class="val pos">1 : 4.2 ✅</div></div>
+            <div class="rr-item"><div class="label">Shares (₹36K)</div><div class="val" style="color:var(--accent)">21 shares</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- AIAENG -->
+    <div class="hero-card rank2">
+      <div class="hero-header">
+        <div>
+          <div style="font-size:11px;color:var(--silver);font-weight:700;text-transform:uppercase;letter-spacing:1px">🥈 Rank #2 · General Industrials / Mining Equipment</div>
+          <div class="hero-name">AIAENG &nbsp;<span class="badge badge-ath">🚀 ATH BREAKOUT</span></div>
+          <div class="hero-sub">AIA Engineering Ltd · NSE: AIAENG · Sector: Castings &amp; Forgings</div>
+        </div>
+        <div class="hero-price">
+          <div class="hero-cmp">₹4,848.00</div>
+          <div class="hero-chg pos">+₹161.00 &nbsp;(+3.44%)</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:4px">Volume: 249.7K · Promoter: 58.5%</div>
+        </div>
+      </div>
+      <div class="hero-body">
+        <div class="hero-scores">
+          <div class="score-box"><div class="label">Technical</div><div class="val pos">85</div></div>
+          <div class="score-box"><div class="label">Fundamental</div><div class="val pos">75</div></div>
+          <div class="score-box"><div class="label">Catalyst</div><div class="val pos">78</div></div>
+          <div class="score-box"><div class="label">Risk</div><div class="val pos">80</div></div>
+        </div>
+        <div class="hero-sections">
+          <div class="hero-section">
+            <h4>📊 Fundamentals (Q4 FY26 / FY26)</h4>
+            <div class="kv"><span class="k">Q4 Revenue</span><span class="v pos">₹1,251 Cr</span></div>
+            <div class="kv"><span class="k">Q4 EBITDA</span><span class="v pos">₹502 Cr — RECORD EVER!</span></div>
+            <div class="kv"><span class="k">Q4 PAT</span><span class="v pos">₹393 Cr (+38% YoY)</span></div>
+            <div class="kv"><span class="k">FY26 Revenue</span><span class="v pos">₹4,355 Cr</span></div>
+            <div class="kv"><span class="k">FY26 PAT</span><span class="v pos">₹1,270 Cr</span></div>
+            <div class="kv"><span class="k">ROCE</span><span class="v pos">34.43% (5Y avg: 30.3%)</span></div>
+            <div class="kv"><span class="k">ROE</span><span class="v pos">15.94%</span></div>
+            <div class="kv"><span class="k">Debt</span><span class="v pos">ZERO — Net Cash Positive</span></div>
+            <div class="kv"><span class="k">Promoter</span><span class="v pos">58.5% (Strong)</span></div>
+            <div class="kv"><span class="k">Dividend FY26</span><span class="v pos">₹16/share declared</span></div>
+          </div>
+          <div class="hero-section">
+            <h4>📈 Technical Analysis</h4>
+            <div class="kv"><span class="k">52W High (New Today)</span><span class="v pos">₹4,848.00</span></div>
+            <div class="kv"><span class="k">52W Low</span><span class="v neg">₹3,001.10</span></div>
+            <div class="kv"><span class="k">1Y Return</span><span class="v pos">+61.4%</span></div>
+            <div class="kv"><span class="k">Trend</span><span class="v pos">Strong Uptrend (HH+HL)</span></div>
+            <div class="kv"><span class="k">vs All MAs</span><span class="v pos">Above SMA20/50/100/200</span></div>
+            <div class="kv"><span class="k">RSI (14)</span><span class="v" style="color:var(--accent)">~70–75 (ATH zone, watch)</span></div>
+            <div class="kv"><span class="k">Volume</span><span class="v pos">249.7K — Confirmed breakout</span></div>
+            <div class="kv"><span class="k">Pattern</span><span class="v pos">ATH Breakout — no overhead supply</span></div>
+            <div class="kv"><span class="k">Previous ATH → Support</span><span class="v pos">~₹4,690 zone</span></div>
+          </div>
+        </div>
+        <div class="alert alert-success" style="margin-top:12px">
+          <strong>🎯 Catalysts &amp; News</strong>
+          Q4 FY26 RECORD EBITDA ₹502 Cr. Chile copper mine: $32.9M order (18-month execution). Mining capex globally recovering. Dividend ₹16/share. Cement grinding media demand strong in India. Caution: Analyst forecast earnings growth ~5.6%/yr — momentum trade, not deep value.
+        </div>
+        <div class="trade-grid">
+          <h4>⚡ Trade Setup — Execute at Jun 23 Open</h4>
+          <div class="trade-levels">
+            <div class="trade-level entry-col"><div class="tl-label">ENTRY ZONE</div><div class="tl-val">₹4,800–₹4,980</div></div>
+            <div class="trade-level sl-col"><div class="tl-label">STOP LOSS</div><div class="tl-val">₹4,520</div></div>
+            <div class="trade-level t1-col"><div class="tl-label">TARGET 1 (30%)</div><div class="tl-val">₹5,200</div></div>
+            <div class="trade-level t2-col"><div class="tl-label">TARGET 2 (30%)</div><div class="tl-val">₹5,500</div></div>
+            <div class="trade-level t3-col"><div class="tl-label">TARGET 3 (40% trail)</div><div class="tl-val">₹5,900</div></div>
+          </div>
+          <div class="rr-row">
+            <div class="rr-item"><div class="label">Downside</div><div class="val neg">-6.6%</div></div>
+            <div class="rr-item"><div class="label">T1 Upside</div><div class="val pos">+7.2%</div></div>
+            <div class="rr-item"><div class="label">T2 Upside</div><div class="val pos">+12.5%</div></div>
+            <div class="rr-item"><div class="label">T3 Upside</div><div class="val pos">+21.7%</div></div>
+            <div class="rr-item"><div class="label">R:R</div><div class="val pos">1 : 3.3 ✅</div></div>
+            <div class="rr-item"><div class="label">Shares (₹30K)</div><div class="val" style="color:var(--accent)">6 shares</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RADICO -->
+    <div class="hero-card rank3">
+      <div class="hero-header">
+        <div>
+          <div style="font-size:11px;color:var(--bronze);font-weight:700;text-transform:uppercase;letter-spacing:1px">🥉 Rank #3 · Food, Beverages &amp; Tobacco / Premium Spirits</div>
+          <div class="hero-name">RADICO &nbsp;<span class="badge badge-ath">🚀 ATH BREAKOUT</span></div>
+          <div class="hero-sub">Radico Khaitan Ltd · NSE: RADICO · Dividend ₹9 on Jul 24, 2026</div>
+        </div>
+        <div class="hero-price">
+          <div class="hero-cmp">₹3,778.60</div>
+          <div class="hero-chg pos">+₹9.40 &nbsp;(+0.25%)</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:4px">Volume: 340.8K · FII: 22.8%</div>
+        </div>
+      </div>
+      <div class="hero-body">
+        <div class="hero-scores">
+          <div class="score-box"><div class="label">Technical</div><div class="val pos">82</div></div>
+          <div class="score-box"><div class="label">Fundamental</div><div class="val pos">80</div></div>
+          <div class="score-box"><div class="label">Catalyst</div><div class="val pos">78</div></div>
+          <div class="score-box"><div class="label">Risk</div><div class="val pos">76</div></div>
+        </div>
+        <div class="hero-sections">
+          <div class="hero-section">
+            <h4>📊 Fundamentals (Q4 FY26 / FY26)</h4>
+            <div class="kv"><span class="k">Q4 Revenue</span><span class="v pos">₹1,503.7 Cr (+15.3% YoY)</span></div>
+            <div class="kv"><span class="k">Q4 EBITDA</span><span class="v pos">₹286.3 Cr (+64.0%!)</span></div>
+            <div class="kv"><span class="k">FY26 Revenue</span><span class="v pos">₹6,050 Cr (+24.7%)</span></div>
+            <div class="kv"><span class="k">FY26 PAT</span><span class="v pos">₹600.3 Cr (+75.9%!)</span></div>
+            <div class="kv"><span class="k">EBITDA Margin</span><span class="v pos">16.8% (↑ from 13.8%)</span></div>
+            <div class="kv"><span class="k">ROE</span><span class="v pos">15.54%</span></div>
+            <div class="kv"><span class="k">Promoter</span><span class="v">40.2%</span></div>
+            <div class="kv"><span class="k">FII Holding</span><span class="v pos">22.8% (Institutional confidence)</span></div>
+            <div class="kv"><span class="k">Prestige+ Revenue</span><span class="v pos">70.3% of IMFL revenue</span></div>
+            <div class="kv"><span class="k">Dividend (Jul 24)</span><span class="v pos">₹9/share — imminent catalyst</span></div>
+          </div>
+          <div class="hero-section">
+            <h4>📈 Technical Analysis</h4>
+            <div class="kv"><span class="k">52W High (New Today)</span><span class="v pos">₹3,778.60</span></div>
+            <div class="kv"><span class="k">52W Low</span><span class="v neg">₹2,500.00</span></div>
+            <div class="kv"><span class="k">1Y Return</span><span class="v pos">+51.1%</span></div>
+            <div class="kv"><span class="k">Trend</span><span class="v pos">Steady institutional uptrend</span></div>
+            <div class="kv"><span class="k">RSI (14)</span><span class="v pos">~62–68 (Ideal healthy range!)</span></div>
+            <div class="kv"><span class="k">Today's Candle</span><span class="v pos">Inside Day — controlled ATH breakout</span></div>
+            <div class="kv"><span class="k">Note</span><span class="v pos">Quiet breakout = NOT overextended</span></div>
+            <div class="kv"><span class="k">Key Support</span><span class="v" style="color:var(--accent)">₹3,530 (critical SL zone)</span></div>
+          </div>
+        </div>
+        <div class="alert alert-success" style="margin-top:12px">
+          <strong>🎯 Catalysts &amp; News</strong>
+          PAT nearly doubled FY26 (₹600 Cr). Premium spirits: Prestige+ volume +28.5%. Dividend ₹9/share record date ~Jul 24 = imminent near-term catalyst. FII holding 22.8% = institutional quality. India premium IMFL market growing 15% CAGR. Budget-friendly category — no import dependency.
+        </div>
+        <div class="trade-grid">
+          <h4>⚡ Trade Setup — Execute at Jun 23 Open</h4>
+          <div class="trade-levels">
+            <div class="trade-level entry-col"><div class="tl-label">ENTRY ZONE</div><div class="tl-val">₹3,750–₹3,850</div></div>
+            <div class="trade-level sl-col"><div class="tl-label">STOP LOSS</div><div class="tl-val">₹3,530</div></div>
+            <div class="trade-level t1-col"><div class="tl-label">TARGET 1 (30%)</div><div class="tl-val">₹4,050</div></div>
+            <div class="trade-level t2-col"><div class="tl-label">TARGET 2 (30%)</div><div class="tl-val">₹4,350</div></div>
+            <div class="trade-level t3-col"><div class="tl-label">TARGET 3 (40% trail)</div><div class="tl-val">₹4,800</div></div>
+          </div>
+          <div class="rr-row">
+            <div class="rr-item"><div class="label">Downside</div><div class="val neg">-7.1%</div></div>
+            <div class="rr-item"><div class="label">T1 Upside</div><div class="val pos">+6.6%</div></div>
+            <div class="rr-item"><div class="label">T2 Upside</div><div class="val pos">+14.5%</div></div>
+            <div class="rr-item"><div class="label">T3 Upside</div><div class="val pos">+26.3%</div></div>
+            <div class="rr-item"><div class="label">R:R</div><div class="val pos">1 : 3.7 ✅</div></div>
+            <div class="rr-item"><div class="label">Shares (₹30K)</div><div class="val" style="color:var(--accent)">7 shares</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SCHNEIDER -->
+    <div class="hero-card rank4">
+      <div class="hero-header">
+        <div>
+          <div style="font-size:11px;color:var(--blue);font-weight:700;text-transform:uppercase;letter-spacing:1px">🔵 Rank #4 · General Industrials / Power Infrastructure</div>
+          <div class="hero-name">SCHNEIDER &nbsp;<span style="font-size:13px;color:var(--accent)">Near ATH · Power Supercycle</span></div>
+          <div class="hero-sub">Schneider Electric Infrastructure Ltd · NSE: SCHNEIDER · ROE: 31.8%</div>
+        </div>
+        <div class="hero-price">
+          <div class="hero-cmp">₹1,395.50</div>
+          <div class="hero-chg pos">+₹64.10 &nbsp;(+4.81%)</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:4px">Volume: 862.8K — Very High!</div>
+        </div>
+      </div>
+      <div class="hero-body">
+        <div class="hero-scores">
+          <div class="score-box"><div class="label">Technical</div><div class="val pos">84</div></div>
+          <div class="score-box"><div class="label">Fundamental</div><div class="val" style="color:var(--accent)">62</div></div>
+          <div class="score-box"><div class="label">Catalyst</div><div class="val pos">80</div></div>
+          <div class="score-box"><div class="label">Risk</div><div class="val" style="color:var(--accent)">65</div></div>
+        </div>
+        <div class="hero-sections">
+          <div class="hero-section">
+            <h4>📊 Fundamentals (Q4 FY26 / FY26)</h4>
+            <div class="kv"><span class="k">Q4 Revenue</span><span class="v">₹590 Cr (+0.5% YoY)</span></div>
+            <div class="kv"><span class="k">Q4 PAT</span><span class="v neg">₹22 Cr (-59.8% YoY ⚠️)</span></div>
+            <div class="kv"><span class="k">FY26 Revenue</span><span class="v pos">₹2,891 Cr (+9.6%)</span></div>
+            <div class="kv"><span class="k">FY26 PAT</span><span class="v">₹213 Cr</span></div>
+            <div class="kv"><span class="k">FY26 EBITDA</span><span class="v neg">₹389 Cr (-4.6% ⚠️)</span></div>
+            <div class="kv"><span class="k">Order Backlog Growth</span><span class="v pos">+50% YoY (robust!)</span></div>
+            <div class="kv"><span class="k">Orders FY26</span><span class="v pos">+27.4% YoY</span></div>
+            <div class="kv"><span class="k">ROE</span><span class="v pos">31.81% (high quality)</span></div>
+            <div class="kv"><span class="k">Market Cap</span><span class="v">₹31,834 Cr</span></div>
+          </div>
+          <div class="hero-section">
+            <h4>📈 Technical Analysis</h4>
+            <div class="kv"><span class="k">52W High</span><span class="v pos">₹1,417.80 (-1.6% away!)</span></div>
+            <div class="kv"><span class="k">52W Low</span><span class="v neg">₹571.85</span></div>
+            <div class="kv"><span class="k">1Y Return</span><span class="v pos">+143.3%</span></div>
+            <div class="kv"><span class="k">Trend</span><span class="v pos">Very strong institutional uptrend</span></div>
+            <div class="kv"><span class="k">RSI (14)</span><span class="v" style="color:var(--accent)">~70 (watch ATH break)</span></div>
+            <div class="kv"><span class="k">Volume Today</span><span class="v pos">862.8K — Massive accumulation!</span></div>
+            <div class="kv"><span class="k">Pattern</span><span class="v pos">Pre-ATH tension — coiling spring</span></div>
+            <div class="kv"><span class="k">Key Resistance</span><span class="v" style="color:var(--accent)">₹1,417.80 = ATH breakout level</span></div>
+          </div>
+        </div>
+        <div class="alert alert-warn" style="margin-top:12px">
+          <strong>⚠️ Watch: Q4 PAT Dip -59.8% YoY</strong>
+          While the order book surges, Q4 profit realisation lagged sharply. Could be timing (large project margin recognition in next quarters). The 50% order backlog increase provides comfort. Watch Q1 FY27 results for confirmation.
+        </div>
+        <div class="alert alert-success" style="margin-top:8px">
+          <strong>🎯 Catalyst: India Power Infra Supercycle</strong>
+          ₹11L Cr India power capex pipeline. Grid expansion, EV charging, renewable integration. Schneider Electric (global parent) tailwind. Order backlog +50% = 12+ month revenue lock-in.
+        </div>
+        <div class="trade-grid">
+          <h4>⚡ Trade Setup — Execute at Jun 23 Open</h4>
+          <div class="trade-levels">
+            <div class="trade-level entry-col"><div class="tl-label">ENTRY ZONE</div><div class="tl-val">₹1,370–₹1,418</div></div>
+            <div class="trade-level sl-col"><div class="tl-label">STOP LOSS</div><div class="tl-val">₹1,280</div></div>
+            <div class="trade-level t1-col"><div class="tl-label">TARGET 1 (30%)</div><div class="tl-val">₹1,500</div></div>
+            <div class="trade-level t2-col"><div class="tl-label">TARGET 2 (30%)</div><div class="tl-val">₹1,650</div></div>
+            <div class="trade-level t3-col"><div class="tl-label">TARGET 3 (40% trail)</div><div class="tl-val">₹1,800</div></div>
+          </div>
+          <div class="rr-row">
+            <div class="rr-item"><div class="label">Downside</div><div class="val neg">-8.2%</div></div>
+            <div class="rr-item"><div class="label">T1 Upside</div><div class="val pos">+7.5%</div></div>
+            <div class="rr-item"><div class="label">T2 Upside</div><div class="val pos">+16.1%</div></div>
+            <div class="rr-item"><div class="label">T3 Upside</div><div class="val pos">+29.0%</div></div>
+            <div class="rr-item"><div class="label">R:R</div><div class="val pos">1 : 3.5 ✅</div></div>
+            <div class="rr-item"><div class="label">Shares (₹24K)</div><div class="val" style="color:var(--accent)">17 shares</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="section" id="portfolio">
+  <div class="section-title">5. Portfolio Allocation</div>
+  <div class="alert alert-warn">
+    <strong>⚠️ MTF Cost</strong>
+    ₹84,000 MTF @ 0.05%/day = ₹42/day · 1 week = ₹294 · 4 weeks = ₹1,176 · 8 weeks = ₹2,352. Keep ₹6,000–8,000 cash buffer outside portfolio. All 4 picks are MTF-eligible (none on ASM).
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Rank</th><th>Stock</th><th>Alloc%</th><th>Exposure</th><th>Shares</th><th>Approx Cost</th><th>Own Capital</th><th>MTF (70%)</th><th>Stop Loss</th><th>Max Loss (₹)</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="rank-1">🥇</span></td>
+          <td><span class="ticker">VENUSPIPES</span><br><div class="alloc-bar alloc-1" style="width:180px;margin-top:4px"></div></td>
+          <td><span style="color:var(--gold);font-weight:700;font-size:16px">30%</span></td>
+          <td style="color:var(--accent);font-weight:700">₹36,000</td>
+          <td><b>21</b></td>
+          <td>₹35,143</td>
+          <td class="pos">₹10,800</td>
+          <td style="color:var(--blue)">₹25,200</td>
+          <td class="neg">₹1,545</td>
+          <td class="neg"><b>₹2,694</b></td>
+        </tr>
+        <tr>
+          <td><span class="rank-2">🥈</span></td>
+          <td><span class="ticker">AIAENG</span><br><div class="alloc-bar alloc-2" style="width:150px;margin-top:4px"></div></td>
+          <td><span style="color:var(--silver);font-weight:700;font-size:16px">25%</span></td>
+          <td style="color:var(--accent);font-weight:700">₹30,000</td>
+          <td><b>6</b></td>
+          <td>₹29,088</td>
+          <td class="pos">₹9,000</td>
+          <td style="color:var(--blue)">₹21,000</td>
+          <td class="neg">₹4,520</td>
+          <td class="neg"><b>₹1,968</b></td>
+        </tr>
+        <tr>
+          <td><span class="rank-3">🥉</span></td>
+          <td><span class="ticker">RADICO</span><br><div class="alloc-bar alloc-3" style="width:150px;margin-top:4px"></div></td>
+          <td><span style="color:var(--bronze);font-weight:700;font-size:16px">25%</span></td>
+          <td style="color:var(--accent);font-weight:700">₹30,000</td>
+          <td><b>7</b></td>
+          <td>₹26,450</td>
+          <td class="pos">₹9,000</td>
+          <td style="color:var(--blue)">₹21,000</td>
+          <td class="neg">₹3,530</td>
+          <td class="neg"><b>₹1,737</b></td>
+        </tr>
+        <tr>
+          <td><span class="rank-4">🔵</span></td>
+          <td><span class="ticker">SCHNEIDER</span><br><div class="alloc-bar alloc-4" style="width:120px;margin-top:4px"></div></td>
+          <td><span style="color:var(--blue);font-weight:700;font-size:16px">20%</span></td>
+          <td style="color:var(--accent);font-weight:700">₹24,000</td>
+          <td><b>17</b></td>
+          <td>₹23,723</td>
+          <td class="pos">₹7,200</td>
+          <td style="color:var(--blue)">₹16,800</td>
+          <td class="neg">₹1,280</td>
+          <td class="neg"><b>₹1,955</b></td>
+        </tr>
+        <tr style="background:var(--card2)">
+          <td colspan="3"><b>PORTFOLIO TOTALS</b></td>
+          <td style="color:var(--accent);font-weight:700">₹1,20,000</td>
+          <td>—</td>
+          <td style="color:var(--accent);font-weight:700">₹1,14,404</td>
+          <td class="pos" style="font-weight:700">₹36,000</td>
+          <td style="color:var(--blue);font-weight:700">₹84,000</td>
+          <td>—</td>
+          <td class="neg" style="font-weight:700">₹8,354 (23.2% of OC)</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="market-grid" style="margin-top:12px">
+    <div class="market-card"><div class="market-label">Max Portfolio Loss (all SLs)</div><div class="market-val neg">₹8,354</div><div class="market-chg neg">23.2% of own capital</div></div>
+    <div class="market-card"><div class="market-label">MTF Interest (1 week)</div><div class="market-val" style="color:var(--accent)">₹294</div><div class="market-chg neu">₹42/day × 7 days</div></div>
+    <div class="market-card"><div class="market-label">MTF Interest (4 weeks)</div><div class="market-val" style="color:var(--accent)">₹1,176</div><div class="market-chg neu">Monthly MTF cost</div></div>
+    <div class="market-card"><div class="market-label">Portfolio Weighted Beta</div><div class="market-val" style="color:var(--accent)">~1.18</div><div class="market-chg neu">Slight above-market</div></div>
+    <div class="market-card"><div class="market-label">Sector Diversification</div><div class="market-val pos">4 Sectors</div><div class="market-chg pos">Zero concentration</div></div>
+    <div class="market-card"><div class="market-label">Cash Buffer (recommended)</div><div class="market-val" style="color:var(--accent)">₹6K–8K</div><div class="market-chg neu">For MTF margin calls</div></div>
+  </div>
+</div>
+
+<div class="section" id="stress">
+  <div class="section-title">6. Stress Testing — Portfolio Scenarios</div>
+  <div class="alert alert-info">
+    Portfolio weighted beta ~1.18. MTF margin call triggers when marked-to-market loss erodes own capital cushion significantly. In extreme scenarios (&gt;28% portfolio decline), Zerodha may force-liquidate MTF positions. Maintain ₹6,000–8,000 buffer outside portfolio.
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Scenario</th><th>Nifty Move</th><th>Portfolio Move</th><th>P&amp;L (₹)</th><th>MTF Call?</th><th>Mitigation Action</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Normal pullback</td><td class="neg">-3%</td><td class="neg">~-3.5%</td><td class="neg">-₹4,200</td><td class="stress-ok">No</td><td>Hold; reassess only if SLs breach</td></tr>
+        <tr><td>Sharp correction</td><td class="neg">-5%</td><td class="neg">~-5.9%</td><td class="neg">-₹7,080</td><td class="stress-warn">Possible</td><td>Trail SLs; reduce VENUSPIPES first (highest beta)</td></tr>
+        <tr><td>VIX spike (&gt;22)</td><td class="neg">+30% wider swings</td><td class="neg">~-8.0%</td><td class="neg">-₹9,600</td><td class="stress-warn">Likely</td><td>Exit SCHNEIDER first; hold RADICO (defensive sector)</td></tr>
+        <tr><td>Sector rotation out</td><td class="neu">Mixed</td><td class="neg">~-4.0%</td><td class="neg">-₹4,800</td><td class="stress-ok">No</td><td>RADICO + AIAENG likely resilient vs sector rotation</td></tr>
+        <tr><td><b>All SLs triggered</b></td><td class="neg">Worst case</td><td class="neg">SLs hit</td><td class="neg"><b>-₹8,354</b></td><td class="stress-warn">Near threshold</td><td>Execute SLs without emotion; this is pre-planned risk</td></tr>
+        <tr><td style="color:var(--red);font-weight:700">Black Swan (Nifty -10%)</td><td class="neg" style="font-weight:700">-10%</td><td class="neg" style="font-weight:700">~-11.8%</td><td class="neg" style="font-weight:700">-₹14,160</td><td class="stress-danger">Force-Liquidated</td><td>Exit ALL MTF positions immediately; accept loss</td></tr>
+        <tr><td>RADICO Ex-Dividend (Jul 24)</td><td class="neu">—</td><td class="neg">-₹9/share gap</td><td class="neg">-₹63</td><td class="stress-ok">No</td><td>Nominal; dividend income offsets gap-down loss</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="section" id="rejected">
+  <div class="section-title">7. Rejected Stocks — Full Rationale</div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Stock</th><th>CMP</th><th>Rejection</th><th>Primary Reason</th><th>Secondary Reason</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="ticker">GOCLCORP</span></td>
+          <td class="pos">₹445.30 +1.78%</td>
+          <td><span class="badge badge-avoid">★ HARD REJECT</span></td>
+          <td>Core business revenue: ₹2.33 Cr in Q4 FY26. ROCE = -1.11%. The PAT is entirely from discontinued operations and other income — not an operating business. Holding a stock with no revenue is speculation, not investing.</td>
+          <td>Hinduja merger with National Power Corp approved — price driven purely by restructuring narrative. Post-merger clarity needed before any consideration.</td>
+        </tr>
+        <tr>
+          <td><span class="ticker">VINDHYATEL</span> <span class="badge badge-asm">ASM</span></td>
+          <td class="neg">₹2,340.90 -1.40%</td>
+          <td><span class="badge badge-avoid">★ HARD REJECT</span></td>
+          <td>Textbook shooting star at new 52W High. Hit ₹2,484.90 intraday (+6% from prev close), then crashed -5.8% from intraday high to close at ₹2,340.90. This is a classic exhaustion/distribution candle. Do NOT buy into reversals at highs.</td>
+          <td>Triple whammy: ASM (no MTF) + credit rating downgrade by CARE + Q4 revenue declining YoY + ROE only 5.94%. Four simultaneous red flags.</td>
+        </tr>
+        <tr>
+          <td><span class="ticker">HFCL</span> <span class="badge badge-asm">ASM</span></td>
+          <td class="neg">₹209.46 -0.07%</td>
+          <td><span class="badge badge-avoid">AVOID (Swing)</span></td>
+          <td>Gapped up to ₹219 open (+4.5%), hit 52W High ₹220.09 (= Upper Circuit Limit), then reversed to close ₹209.46 (-0.07% vs prev close). Volume 46.1M = ENORMOUS — classic distribution day, not accumulation. Buyers who chased the gap will be trapped. Shooting star at UC limit.</td>
+          <td>ASM = no MTF. ROE 0.67%, ROCE 3.95% despite ₹4,949 Cr revenue — terrible capital efficiency. Long-term story (₹21,200 Cr order book, USD 1.1B OFC deal) remains intact but this was NOT the right entry candle.</td>
+        </tr>
+        <tr>
+          <td><span class="ticker">SIGMAADV</span> <span class="badge badge-asm">ASM</span></td>
+          <td class="pos">₹551.30 +5.00%</td>
+          <td><span class="badge badge-avoid">AVOID (ASM/Valuation)</span></td>
+          <td>ASM — Zerodha MTF blocked. Market cap ₹9,253 Cr vs FY26 revenue ₹491 Cr = 18.8x P/S ratio. Even with 500%+ growth, the valuation pricing in perfection and beyond. Loss-making on operating basis before FY25 acquisitions inflated revenue.</td>
+          <td>Only for cash-only high-risk momentum traders. +497% in 1 year makes this momentum-only, not value. If trading: tight SL at ₹490, target ₹600–650. Not appropriate for this MTF swing portfolio framework.</td>
+        </tr>
+        <tr>
+          <td><span class="ticker">WELSPUNLIV</span></td>
+          <td class="neg">₹161.75 -0.30%</td>
+          <td><span class="badge badge-watch">PULLBACK ONLY</span></td>
+          <td>FY26 EBITDA fell 40.6% YoY, PAT fell 68% YoY. Fundamental deterioration is real. At ₹161.75, the risk/reward is not compelling enough for a swing entry given the weakness.</td>
+          <td>HOWEVER: Buyback at ₹175 (8% premium) provides floor support. Dividend ₹0.10 on Jul 10. Buy at ₹148–155 for R:R ≥ 1:3 with target ₹175 (buyback price). Potential turnaround play for FY27 if EBITDA margins recover to 12%+.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="section" id="decision">
+  <div class="section-title">8. Decision Framework</div>
+  <div class="decision-grid">
+    <div class="decision-card" style="border-top:3px solid var(--green)">
+      <div class="decision-header" style="color:var(--green)">✅ BUY NOW — Execute Jun 23 Open</div>
+      <div class="decision-item">
+        <div class="di-ticker" style="color:var(--gold)">VENUSPIPES</div>
+        <div class="di-reason">ATH breakout with 1M volume (institutional). Nuvama target ₹2,000–₹2,260. DC cooling + power sector order momentum. Best R:R in basket at 1:4.2. #1 priority.</div>
+      </div>
+      <div class="decision-item">
+        <div class="di-ticker" style="color:var(--silver)">AIAENG</div>
+        <div class="di-reason">ATH breakout — record EBITDA, debt-free, 58.5% promoter, Chile mining win. No overhead supply. Enter within 3% of ₹4,848. SL below ₹4,520.</div>
+      </div>
+      <div class="decision-item">
+        <div class="di-ticker" style="color:var(--bronze)">RADICO</div>
+        <div class="di-reason">Quiet ATH breakout (not overextended, RSI ~65). Best fundamentals: PAT +76%, EBITDA margin expanding, FII 22.8%. Dividend ₹9 on Jul 24 = near-term catalyst. Buy and hold through dividend.</div>
+      </div>
+      <div class="decision-item">
+        <div class="di-ticker" style="color:var(--blue)">SCHNEIDER</div>
+        <div class="di-reason">Near ATH on massive 862.8K volume. India power capex ₹11L Cr supercycle. Order backlog +50% YoY. Enter at ₹1,370–₹1,418. If breaks ₹1,417.80 ATH with volume — add aggressively.</div>
+      </div>
+    </div>
+    <div class="decision-card" style="border-top:3px solid var(--accent)">
+      <div class="decision-header" style="color:var(--accent)">⏳ BUY ON PULLBACK — Not Today</div>
+      <div class="decision-item">
+        <div class="di-ticker">WELSPUNLIV</div>
+        <div class="di-reason">Buy only at ₹148–₹155 (7% below CMP) for R:R 1:3+ with target ₹175 (buyback). Dividend Jul 10. Turnaround confirmed when EBITDA margin crosses 12%.</div>
+      </div>
+      <div class="decision-item">
+        <div class="di-ticker">SIGMAADV</div>
+        <div class="di-reason">Cash-only aggressive traders only. Pullback to ₹490–510 with tight SL ₹465. Target ₹600–650. NOT suitable for MTF framework. Maximum 1–2% of capital.</div>
+      </div>
+    </div>
+    <div class="decision-card" style="border-top:3px solid var(--red)">
+      <div class="decision-header" style="color:var(--red)">🚫 AVOID — Do Not Trade</div>
+      <div class="decision-item">
+        <div class="di-ticker">GOCLCORP</div>
+        <div class="di-reason">HARD REJECT. Core revenue ₹2.33 Cr, ROCE negative. Not a business — it's a restructuring shell. Avoid until 2+ quarters of genuine operating revenue post-merger.</div>
+      </div>
+      <div class="decision-item">
+        <div class="di-ticker">VINDHYATEL</div>
+        <div class="di-reason">HARD REJECT. Worst setup: shooting star + ASM + credit downgrade + declining revenue. The combination of all 4 red flags makes this a trap for latecomers.</div>
+      </div>
+      <div class="decision-item">
+        <div class="di-ticker">HFCL</div>
+        <div class="di-reason">ASM (no MTF) + distribution day shooting star. Business story remains strong long-term but today was NOT the entry. Wait for clean technical setup — flag formation or base breakout post-consolidation.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section" id="final">
+  <div class="section-title">9. Final Recommendation Table</div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Stock</th><th>CMP (₹)</th><th>Entry Zone (₹)</th><th>Stop Loss (₹)</th><th>T1 ₹</th><th>T2 ₹</th><th>T3 ₹</th><th>Down%</th><th>T3 Up%</th><th>R:R</th><th>Allocation</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="ticker" style="color:var(--gold)">VENUSPIPES 🥇</span></td>
+          <td style="color:var(--accent);font-weight:700">1,673.50</td>
+          <td style="color:var(--accent)">1,668 – 1,720</td>
+          <td class="neg" style="font-weight:700">1,545</td>
+          <td class="pos">1,880</td><td class="pos">2,000</td><td class="pos" style="font-weight:700">2,260</td>
+          <td class="neg">-7.9%</td><td class="pos">+33.3%</td>
+          <td class="pos" style="font-weight:700">1 : 4.2</td>
+          <td style="color:var(--gold)">₹36,000 (30%)</td>
+        </tr>
+        <tr>
+          <td><span class="ticker" style="color:var(--silver)">AIAENG 🥈</span></td>
+          <td style="color:var(--accent);font-weight:700">4,848.00</td>
+          <td style="color:var(--accent)">4,800 – 4,980</td>
+          <td class="neg" style="font-weight:700">4,520</td>
+          <td class="pos">5,200</td><td class="pos">5,500</td><td class="pos" style="font-weight:700">5,900</td>
+          <td class="neg">-6.6%</td><td class="pos">+21.7%</td>
+          <td class="pos" style="font-weight:700">1 : 3.3</td>
+          <td style="color:var(--silver)">₹30,000 (25%)</td>
+        </tr>
+        <tr>
+          <td><span class="ticker" style="color:var(--bronze)">RADICO 🥉</span></td>
+          <td style="color:var(--accent);font-weight:700">3,778.60</td>
+          <td style="color:var(--accent)">3,750 – 3,850</td>
+          <td class="neg" style="font-weight:700">3,530</td>
+          <td class="pos">4,050</td><td class="pos">4,350</td><td class="pos" style="font-weight:700">4,800</td>
+          <td class="neg">-7.1%</td><td class="pos">+26.3%</td>
+          <td class="pos" style="font-weight:700">1 : 3.7</td>
+          <td style="color:var(--bronze)">₹30,000 (25%)</td>
+        </tr>
+        <tr>
+          <td><span class="ticker" style="color:var(--blue)">SCHNEIDER 🔵</span></td>
+          <td style="color:var(--accent);font-weight:700">1,395.50</td>
+          <td style="color:var(--accent)">1,370 – 1,418</td>
+          <td class="neg" style="font-weight:700">1,280</td>
+          <td class="pos">1,500</td><td class="pos">1,650</td><td class="pos" style="font-weight:700">1,800</td>
+          <td class="neg">-8.2%</td><td class="pos">+29.0%</td>
+          <td class="pos" style="font-weight:700">1 : 3.5</td>
+          <td style="color:var(--blue)">₹24,000 (20%)</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <p style="font-size:11px;color:var(--muted);margin-top:8px;">R:R calculated using entry mid-point. T1 = book 30% · T2 = book another 30% · T3 = trail remaining 40% with trailing SL. Fills at open on Jun 23 may differ from CMP.</p>
+</div>
+
+<div class="section" id="checklist">
+  <div class="section-title">10. Execution Checklist — June 23, 2026 Market Open</div>
+  <div class="checklist">
+    <div class="check-item">
+      <div class="check-num">1</div>
+      <div class="check-text">
+        <strong>Pre-Open Check (8:45–9:00 AM)</strong>
+        <span>Check Gift Nifty / SGX Nifty. If gap-up &gt;1.5% → wait for 9:30 AM (first 15 min) before entry. If gap-down &gt;1.5% → tighten entry zones to lower end or skip day entirely.</span>
+      </div>
+    </div>
+    <div class="check-item">
+      <div class="check-num">2</div>
+      <div class="check-text">
+        <strong>Priority 1 — VENUSPIPES (21 shares)</strong>
+        <span>Enter ₹1,668–₹1,720. Set SL order at ₹1,545 immediately on fill. Set T1 price alert at ₹1,880. Book 6–7 shares at T1, 6–7 at T2 (₹2,000), trail 7 to T3 (₹2,260).</span>
+      </div>
+    </div>
+    <div class="check-item">
+      <div class="check-num">3</div>
+      <div class="check-text">
+        <strong>Priority 2 — RADICO (7 shares)</strong>
+        <span>Enter ₹3,750–₹3,850. SL at ₹3,530. Book 2 shares at T1 (₹4,050), 2 shares at T2 (₹4,350), trail 3 shares to T3. Note: Dividend ₹9 ex-date ~Jul 24. Hold or exit 1 day before ex-date per strategy.</span>
+      </div>
+    </div>
+    <div class="check-item">
+      <div class="check-num">4</div>
+      <div class="check-text">
+        <strong>Priority 3 — AIAENG (6 shares)</strong>
+        <span>Enter ₹4,800–₹4,980. SL at ₹4,520. If opens above ₹5,050 significantly → SKIP for the day, wait for pullback. Book 2 shares at T1 (₹5,200), 2 at T2 (₹5,500), trail 2 to T3 (₹5,900).</span>
+      </div>
+    </div>
+    <div class="check-item">
+      <div class="check-num">5</div>
+      <div class="check-text">
+        <strong>Priority 4 — SCHNEIDER (17 shares)</strong>
+        <span>Enter ₹1,370–₹1,418. If SCHNEIDER breaks above ₹1,417.80 ATH with volume &gt;800K = aggressive entry. SL ₹1,280. Book 5 at T1 (₹1,500), 5 at T2 (₹1,650), trail 7 to T3 (₹1,800).</span>
+      </div>
+    </div>
+    <div class="check-item">
+      <div class="check-num">6</div>
+      <div class="check-text">
+        <strong>Zerodha MTF Setup</strong>
+        <span>Confirm MTF enabled for VENUSPIPES, AIAENG, RADICO, SCHNEIDER on Kite. Ensure ₹36,000 own capital in account. Park ₹6,000–8,000 separately as margin buffer. Do NOT use all capital in one go — stagger entries over 15-20 minutes.</span>
+      </div>
+    </div>
+    <div class="check-item">
+      <div class="check-num">7</div>
+      <div class="check-text">
+        <strong>DO NOT TRADE: HFCL · SIGMAADV · VINDHYATEL · GOCLCORP · WELSPUNLIV</strong>
+        <span>HFCL/SIGMAADV/VINDHYATEL = ASM (MTF blocked). GOCLCORP = fundamental hard reject. WELSPUNLIV = wait for pullback to ₹148. No exceptions — stick to the top 4 only.</span>
+      </div>
+    </div>
+    <div class="check-item">
+      <div class="check-num">8</div>
+      <div class="check-text">
+        <strong>Set Kite Alerts After Entry</strong>
+        <span>SL alerts: VENUSPIPES ₹1,545 | AIAENG ₹4,520 | RADICO ₹3,530 | SCHNEIDER ₹1,280. Target alerts: All at T1 levels. VIX alert: If India VIX crosses 18 → review and tighten all SLs.</span>
+      </div>
+    </div>
+    <div class="check-item">
+      <div class="check-num">9</div>
+      <div class="check-text">
+        <strong>Weekly Monday Review</strong>
+        <span>Check: 1) Any stock &gt;10% in profit → trail SL to entry. 2) MTF interest accrual check. 3) If Nifty &lt;23,500 → exit all MTF positions. 4) Update SLs to higher lows as stock trends up.</span>
+      </div>
+    </div>
+    <div class="check-item">
+      <div class="check-num">10</div>
+      <div class="check-text">
+        <strong>RADICO Dividend Alert — ~July 24, 2026</strong>
+        <span>RADICO ex-dividend ₹9/share around Jul 24. Option A: Exit 1 day before ex-date if target not reached. Option B: Hold through dividend + receive ₹63 dividend on 7 shares. Adjust SL to below ex-div adjusted price.</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="footer">
+  <div style="font-weight:700;color:var(--accent);font-size:13px;margin-bottom:8px;">⚠️ IMPORTANT DISCLAIMER</div>
+  This report is prepared for informational and educational purposes only. It does not constitute investment advice, a solicitation, or a recommendation to buy or sell any security. Stock market investments are subject to market risk; losses can exceed initial investment especially when using MTF (margin leverage). Past performance is not indicative of future returns. All price data sourced from Trendlyne.com (NSE) as of June 22, 2026. Trade setups are based on technical and fundamental analysis and carry no guarantee of performance. MTF/leverage amplifies both gains and losses. Always consult a SEBI-registered investment advisor before making investment decisions. The author may or may not hold positions in stocks mentioned. This is NOT a SEBI-registered research report.
+  <div style="margin-top:10px;color:var(--border)">NSE Swing Trade Report · June 22, 2026 · Zerodha MTF Framework · 1–8 Week Holding Period</div>
+</div>
+
+</div>
+</body>
+</html>

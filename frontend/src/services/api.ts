@@ -90,6 +90,7 @@ export interface PortfolioHolding {
   composite_score?: number | null;
   ml_label?: string | null;
   supertrend_dir?: string | null;
+  risk_contribution_pct?: number | null;
 }
 
 export interface ReplacementCandidate {
@@ -294,6 +295,26 @@ export interface ScreenerRow {
   is_bb_squeeze?: boolean | null;
   tqs?: number | null;
   weinstein_stage?: number | null;
+  // New indicators
+  hilega_milega_signal?: number | null;
+  rsi_divergence?: number | null;
+  macd_divergence?: number | null;
+  zlema_21?: number | null;
+  price_vs_zlema21?: string | null;
+  is_boring_candle?: boolean | null;
+  is_explosive_candle?: boolean | null;
+  cpr_daily_pivot?: number | null;
+  cpr_daily_tc?: number | null;
+  cpr_daily_bc?: number | null;
+  cpr_daily_narrow?: boolean | null;
+  cpr_weekly_pivot?: number | null;
+  cpr_weekly_tc?: number | null;
+  cpr_weekly_bc?: number | null;
+  psy_20?: number | null;
+  avwap?: number | null;
+  avwap_upper_1sd?: number | null;
+  avwap_lower_1sd?: number | null;
+  price_vs_avwap?: string | null;
   // Fundamentals
   market_cap?: number | null;
   enterprise_value?: number | null;
@@ -318,6 +339,67 @@ export interface ScreenerRow {
   free_cashflow?: number | null;
   sector?: string | null;
   industry?: string | null;
+}
+
+// ── Swing Picks ───────────────────────────────────────────────────────────────
+
+export interface SwingPick {
+  symbol: string;
+  company_name: string;
+  close_price: number;
+  atr_14: number | null;
+  tqs: number | null;
+  weinstein_stage: number | null;
+  volume_breakout_ratio: number | null;
+  cmf_20: number | null;
+  rsi_14: number | null;
+  supertrend_dir: string | null;
+  avg_traded_value_cr: number | null;
+  stop_loss: number | null;
+  target_1: number | null;
+  target_2: number | null;
+  rr_ratio: number | null;
+  position_size_shares: number | null;
+  entry_zone_low: number | null;
+  entry_zone_high: number | null;
+  category: 'BUY' | 'WATCHLIST' | 'ELIMINATED';
+  elimination_reason: string | null;
+  resistance_ceiling: boolean;
+  resistance_price: number | null;
+  macd_histogram: number | null;
+  macd_histogram_slope: number | null;
+  composite_score: number | null;
+  support_score: number | null;
+  support_touch_count: number | null;
+  support_slope_pct: number | null;
+  is_news_play: boolean;
+  intermediate_resistance: boolean;
+  intermediate_resistance_price: number | null;
+  notional_capped: boolean;
+}
+
+export interface SwingPicksConfig {
+  min_tqs: number;
+  min_volume_ratio: number;
+  min_atv_cr: number;
+  min_rr_buy: number;
+  min_rr_watchlist: number;
+  stop_atr_mult: number;
+  entry_atr_low: number;
+  entry_atr_high: number;
+  min_res_strength: number;
+  risk_per_trade: number;
+}
+
+export interface SwingPicksParams extends Partial<SwingPicksConfig> {}
+
+export interface SwingPicksResponse {
+  run_at: string;
+  config: SwingPicksConfig;
+  summary: { total_screened: number; buy_count: number; watchlist_count: number; eliminated_count: number };
+  buy_picks: SwingPick[];
+  watchlist: SwingPick[];
+  eliminated: SwingPick[];
 }
 
 // ── Strategy Screener ─────────────────────────────────────────────────────────
@@ -429,54 +511,6 @@ export interface EodImportJob {
   error_message: string | null;
 }
 
-// ── ML Training (VajraML2) ────────────────────────────────────────────────────
-export interface ML2FoldMetric {
-  fold: number;
-  ic_ptp: number;
-  tp_prec: number;
-  hit_5d: number;
-  ls_pnl: number;
-}
-
-export interface ML2TrainingRun {
-  id: number;
-  version: string;
-  status: 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
-  num_folds: number | null;
-  dataset_rows: number | null;
-  date_range_start: string | null;
-  date_range_end: string | null;
-  mean_ic_ptp: number | null;
-  fold_metrics: ML2FoldMetric[] | null;
-  error_message: string | null;
-  started_at: string;
-  completed_at: string | null;
-}
-
-export interface ML2ProgressEvent {
-  type: 'stage' | 'dataset' | 'fold_start' | 'tree' | 'fold_done'
-      | 'complete' | 'cancelled' | 'error' | 'heartbeat' | 'stream_end';
-  pct?: number;
-  message?: string;
-  rows?: number;
-  features?: number;
-  date_start?: string;
-  date_end?: string;
-  fold?: number;
-  total?: number;
-  train_rows?: number;
-  test_rows?: number;
-  tree?: number;
-  ic_ptp?: number;
-  tp_prec?: number;
-  hit_5d?: number;
-  ls_pnl?: number;
-  mean_ic_ptp?: number;
-  mean_tp_prec?: number;
-  folds?: number;
-  error?: string;
-}
-
 // ── Fundamentals ─────────────────────────────────────────────────────────────
 export interface SymbolFundamentals {
   symbol: string;
@@ -525,6 +559,127 @@ export interface NewsItem {
   published_at: string | null;
 }
 
+// ── Backtest Lab ──────────────────────────────────────────────────────────────
+export interface BacktestMetrics {
+  total_return: number;
+  cagr: number;
+  max_drawdown: number;
+  win_rate: number;
+  profit_factor: number | null;
+  sharpe_ratio: number;
+  trades: number;
+  psr?: number | null;
+}
+
+export interface BacktestTrade {
+  entry_date: string;
+  entry_price: number;
+  exit_date: string;
+  exit_price: number;
+  qty: number;
+  return_pct: number;
+  reason: string;
+}
+
+export interface BacktestRunResult {
+  run_id: number | null;
+  symbol: string;
+  signal: string;
+  bars: number;
+  metrics: BacktestMetrics;
+  trades: BacktestTrade[];
+}
+
+export interface SavedBacktestRun {
+  id: number;
+  symbol: string;
+  signal: string;
+  trades_count: number;
+  created_at: string;
+  metrics: Record<string, number>;
+  trades?: BacktestTrade[];
+}
+
+export interface BacktestRunRequest {
+  symbol: string;
+  signal: string;
+  params?: Record<string, unknown>;
+  stop_pct?: number | null;
+  target_pct?: number | null;
+  cost_bps?: number;
+  slippage_bps?: number;
+  initial_capital?: number;
+  adjusted?: boolean;
+  save?: boolean;
+}
+
+// ── Trade Journal ─────────────────────────────────────────────────────────────
+export interface JournalTrade {
+  id: number;
+  symbol: string;
+  setup: string;
+  side: string;
+  status: string;
+  entry_date: string;
+  entry_price: number;
+  qty: number;
+  stop_price: number | null;
+  target_price: number | null;
+  exit_date: string | null;
+  exit_price: number | null;
+  fees: number;
+  thesis: string | null;
+  mistake_tags: string | null;
+  pnl: number | null;
+  return_pct: number | null;
+  r_multiple: number | null;
+}
+
+export interface JournalTradeInput {
+  symbol: string;
+  entry_date: string;
+  entry_price: number;
+  qty: number;
+  setup?: string;
+  side?: string;
+  stop_price?: number | null;
+  target_price?: number | null;
+  thesis?: string | null;
+}
+
+export interface SetupStats {
+  setup: string;
+  trades: number;
+  wins: number;
+  win_rate: number;
+  total_pnl: number;
+  avg_pnl: number;
+  avg_r: number;
+  expectancy_r: number;
+}
+
+// ── Background jobs ─────────────────────────────────────────────────────────────
+export interface Job {
+  id: number;
+  kind: string;
+  status: 'PENDING' | 'RUNNING' | 'SUCCESS' | 'FAILED' | 'CANCELLED';
+  progress_current: number;
+  progress_total: number;
+  cancel_requested: boolean;
+  error: string | null;
+  created_at: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+}
+
+// ── Cross-sectional ranking ─────────────────────────────────────────────────────
+export interface RankRow {
+  symbol: string;
+  composite_z: number;
+  percentile: number | null;
+  factors: Record<string, number | null>;
+}
+
 export const apiService = {
   // 1. Symbols endpoints
   async getAllSymbols(activeOnly = true): Promise<SymbolDetail[]> {
@@ -540,6 +695,50 @@ export const apiService = {
   },
 
   /** Backend-computed trade plan + multi-factor bias (single source of truth). */
+  async getSwingPicks(params?: SwingPicksParams): Promise<SwingPicksResponse> {
+    const q = new URLSearchParams();
+    if (params) {
+      for (const [k, v] of Object.entries(params)) {
+        if (v !== undefined) q.append(k, String(v));
+      }
+    }
+    const response = await fetch(`${BASE_URL}/swing-picks?${q.toString()}`);
+    if (!response.ok) throw new Error('Swing picks pipeline failed');
+    return response.json();
+  },
+
+  async qualifyStocks(symbols: string[], params?: SwingPicksParams): Promise<SwingPicksResponse> {
+    const q = new URLSearchParams();
+    if (params) {
+      for (const [k, v] of Object.entries(params)) {
+        if (v !== undefined) q.append(k, String(v));
+      }
+    }
+    const response = await fetch(`${BASE_URL}/swing-picks/qualify?${q.toString()}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ symbols }),
+    });
+    if (!response.ok) throw new Error('Qualify failed');
+    return response.json();
+  },
+
+  async getSwingNotes(): Promise<Record<string, string>> {
+    try {
+      const response = await fetch(`${BASE_URL}/swing-picks/notes`);
+      if (!response.ok) return {};
+      return response.json();
+    } catch { return {}; }
+  },
+
+  async saveSwingNote(symbol: string, note: string): Promise<void> {
+    await fetch(`${BASE_URL}/swing-picks/notes/${encodeURIComponent(symbol)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ note }),
+    });
+  },
+
   async getTradePlan(symbol: string): Promise<TradePlan | null> {
     try {
       const response = await fetch(`${BASE_URL}/symbols/${encodeURIComponent(symbol)}/trade-plan`);
@@ -678,6 +877,16 @@ export const apiService = {
     only_bb_squeeze?: boolean;
     min_tqs?: number;
     only_weinstein_stage2?: boolean;
+    only_hilega_buy?: boolean;
+    only_rsi_bullish_div?: boolean;
+    only_macd_bullish_div?: boolean;
+    only_boring_candle?: boolean;
+    only_explosive_candle?: boolean;
+    min_psy_20?: number;
+    max_psy_20?: number;
+    price_above_avwap?: boolean;
+    price_above_zlema21?: boolean;
+    only_cpr_narrow?: boolean;
     limit?: number;
   }): Promise<ScreenerRow[]> {
     const response = await fetch(`${BASE_URL}/screeners/run`, {
@@ -715,6 +924,16 @@ export const apiService = {
         only_bb_squeeze: filters.only_bb_squeeze ?? false,
         min_tqs: filters.min_tqs ?? null,
         only_weinstein_stage2: filters.only_weinstein_stage2 ?? false,
+        only_hilega_buy: filters.only_hilega_buy ?? false,
+        only_rsi_bullish_div: filters.only_rsi_bullish_div ?? false,
+        only_macd_bullish_div: filters.only_macd_bullish_div ?? false,
+        only_boring_candle: filters.only_boring_candle ?? false,
+        only_explosive_candle: filters.only_explosive_candle ?? false,
+        min_psy_20: filters.min_psy_20 ?? null,
+        max_psy_20: filters.max_psy_20 ?? null,
+        price_above_avwap: filters.price_above_avwap ?? null,
+        price_above_zlema21: filters.price_above_zlema21 ?? null,
+        only_cpr_narrow: filters.only_cpr_narrow ?? false,
         limit: filters.limit ?? 100
       })
     });
@@ -849,6 +1068,12 @@ export const apiService = {
   async cancelSync(): Promise<{ status: string; message: string }> {
     const response = await fetch(`${BASE_URL}/sync/cancel`, { method: 'POST' });
     if (!response.ok) throw new Error('Failed to cancel active sync jobs');
+    return response.json();
+  },
+
+  async bootstrapSymbols(): Promise<{ message: string }> {
+    const response = await fetch(`${BASE_URL}/sync/bootstrap-symbols`, { method: 'POST' });
+    if (!response.ok) throw new Error('Failed to trigger symbol bootstrap');
     return response.json();
   },
 
@@ -1019,5 +1244,147 @@ export const apiService = {
   async deleteEodJob(jobId: string): Promise<void> {
     const r = await fetch(`${BASE_URL}/eod/jobs/${jobId}`, { method: 'DELETE' });
     if (!r.ok) throw new Error('Failed to delete EOD job');
+  },
+
+  // ── Backtest Lab ──────────────────────────────────────────────────────────
+  async getBacktestSignals(): Promise<string[]> {
+    const r = await fetch(`${BASE_URL}/backtest/signals`);
+    if (!r.ok) throw new Error('Failed to load signals');
+    return (await r.json()).signals;
+  },
+
+  async runBacktest(body: BacktestRunRequest): Promise<BacktestRunResult> {
+    const r = await fetch(`${BASE_URL}/backtest/run`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!r.ok) {
+      const e = await r.json().catch(() => ({} as { detail?: string }));
+      throw new Error(e.detail || 'Backtest failed');
+    }
+    return r.json();
+  },
+
+  async listBacktestRuns(symbol?: string): Promise<SavedBacktestRun[]> {
+    const q = symbol ? `?symbol=${encodeURIComponent(symbol)}` : '';
+    const r = await fetch(`${BASE_URL}/backtest/runs${q}`);
+    if (!r.ok) throw new Error('Failed to list backtest runs');
+    return r.json();
+  },
+
+  async getBacktestRun(id: number): Promise<SavedBacktestRun> {
+    const r = await fetch(`${BASE_URL}/backtest/runs/${id}`);
+    if (!r.ok) throw new Error('Backtest run not found');
+    return r.json();
+  },
+
+  async backfillColumnar(full = false): Promise<{ symbols_mirrored: number; rows: number }> {
+    const r = await fetch(`${BASE_URL}/backtest/backfill?full=${full}`, { method: 'POST' });
+    if (!r.ok) throw new Error('Backfill failed');
+    return r.json();
+  },
+
+  // ── Trade Journal ──────────────────────────────────────────────────────────
+  async logTrade(body: JournalTradeInput): Promise<JournalTrade> {
+    const r = await fetch(`${BASE_URL}/journal/trades`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    });
+    if (!r.ok) throw new Error('Failed to log trade');
+    return r.json();
+  },
+
+  async closeTrade(id: number, exit_date: string, exit_price: number, mistake_tags?: string): Promise<JournalTrade> {
+    const r = await fetch(`${BASE_URL}/journal/trades/${id}/close`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ exit_date, exit_price, mistake_tags }),
+    });
+    if (!r.ok) throw new Error('Failed to close trade');
+    return r.json();
+  },
+
+  async listTrades(symbol?: string, status?: string): Promise<JournalTrade[]> {
+    const q = new URLSearchParams();
+    if (symbol) q.append('symbol', symbol);
+    if (status) q.append('status', status);
+    const r = await fetch(`${BASE_URL}/journal/trades?${q.toString()}`);
+    if (!r.ok) throw new Error('Failed to list trades');
+    return r.json();
+  },
+
+  async deleteTrade(id: number): Promise<void> {
+    const r = await fetch(`${BASE_URL}/journal/trades/${id}`, { method: 'DELETE' });
+    if (!r.ok) throw new Error('Failed to delete trade');
+  },
+
+  async journalReview(): Promise<SetupStats[]> {
+    const r = await fetch(`${BASE_URL}/journal/review`);
+    if (!r.ok) throw new Error('Failed to load review');
+    return r.json();
+  },
+
+  // ── Background jobs ──────────────────────────────────────────────────────────
+  async enqueueJob(kind: string, params: Record<string, unknown> = {}): Promise<Job> {
+    const r = await fetch(`${BASE_URL}/jobs`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ kind, params }),
+    });
+    if (!r.ok) throw new Error('Failed to enqueue job');
+    return r.json();
+  },
+
+  async getJob(id: number): Promise<Job> {
+    const r = await fetch(`${BASE_URL}/jobs/${id}`);
+    if (!r.ok) throw new Error('Job not found');
+    return r.json();
+  },
+
+  // ── Cross-sectional ranking ──────────────────────────────────────────────────
+  async getRanking(limit = 100): Promise<RankRow[]> {
+    const r = await fetch(`${BASE_URL}/ranking?limit=${limit}`);
+    if (!r.ok) throw new Error('Failed to load ranking');
+    return r.json();
+  },
+
+  async getRankingFactors(): Promise<{ factors: string[]; weights: Record<string, number> }> {
+    const r = await fetch(`${BASE_URL}/ranking/factors`);
+    if (!r.ok) throw new Error('Failed to load ranking factors');
+    return r.json();
+  },
+
+  async rankByFactors(symbols: string[]): Promise<RankRow[]> {
+    const r = await fetch(`${BASE_URL}/ranking/by-factors`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ symbols }),
+    });
+    if (!r.ok) throw new Error('Failed to rank by factors');
+    return r.json();
+  },
+
+  // ── Screener presets ─────────────────────────────────────────────────────────
+  async getPresets(): Promise<{ name: string; description: string }[]> {
+    const r = await fetch(`${BASE_URL}/presets`);
+    if (!r.ok) throw new Error('Failed to load presets');
+    return r.json();
+  },
+
+  async runPreset(name: string): Promise<{ preset: string; count: number; rows: Record<string, unknown>[] }> {
+    const r = await fetch(`${BASE_URL}/presets/${encodeURIComponent(name)}`);
+    if (!r.ok) throw new Error('Failed to run preset');
+    return r.json();
+  },
+
+  // ── Backup / restore ─────────────────────────────────────────────────────────
+  async exportBackup(): Promise<Record<string, unknown>> {
+    const r = await fetch(`${BASE_URL}/backup/export`);
+    if (!r.ok) throw new Error('Failed to export backup');
+    return r.json();
+  },
+
+  async importBackup(data: Record<string, unknown>): Promise<Record<string, number>> {
+    const r = await fetch(`${BASE_URL}/backup/import`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data),
+    });
+    if (!r.ok) throw new Error('Failed to import backup');
+    return r.json();
   },
 };

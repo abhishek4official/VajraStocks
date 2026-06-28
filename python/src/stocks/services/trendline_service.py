@@ -13,6 +13,7 @@ Algorithm summary:
 
 import datetime
 import math
+import time
 
 from loguru import logger
 from sqlalchemy import select
@@ -262,18 +263,33 @@ class TrendlineService:
         # Process one symbol at a time — each call fetches its own prices and commits.
         # This keeps transactions small and avoids MSSQL LocalDB pipe-closing timeouts
         # that occur with large bulk IN-clause loads.
+        _PIPE_ERRORS = ("08S01", "Communication link failure", "pipe")
         count = 0
         for sym in active:
-            try:
-                self.refresh_for_symbol(sym.id, sym.symbol)
-                self.db.commit()
-                count += 1
-            except Exception as e:
+            for attempt in range(1, 4):
                 try:
-                    self.db.rollback()
-                except Exception:
-                    pass
-                logger.error(f"Trendline refresh failed for {sym.symbol}: {e}")
+                    self.refresh_for_symbol(sym.id, sym.symbol)
+                    self.db.commit()
+                    count += 1
+                    break
+                except Exception as e:
+                    try:
+                        self.db.rollback()
+                    except Exception:
+                        pass
+                    err_str = str(e)
+                    is_pipe = any(k in err_str for k in _PIPE_ERRORS)
+                    if is_pipe and attempt < 3:
+                        logger.warning(f"Trendline pipe error for {sym.symbol} (attempt {attempt}/3) — retrying in 3s")
+                        time.sleep(3)
+                        # Expire all objects so SQLAlchemy re-fetches on next access
+                        try:
+                            self.db.expire_all()
+                        except Exception:
+                            pass
+                    else:
+                        logger.error(f"Trendline refresh failed for {sym.symbol}: {e}")
+                        break
 
         logger.info(f"Trendlines computed for {count}/{len(active)} symbols.")
         return count

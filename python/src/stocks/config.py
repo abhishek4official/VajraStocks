@@ -25,6 +25,11 @@ class DatabaseConfig(BaseModel):
     pool_recycle: int = 1800
 
 
+class StorageConfig(BaseModel):
+    # Columnar analytical data plane (DuckDB + partitioned Parquet); see V2.0 spec §17/§18.
+    columnar_data_dir: str = "data/columnar"
+
+
 class DownloaderConfig(BaseModel):
     history_years: int = 3
     batch_size: int = 50
@@ -65,6 +70,7 @@ class AIConfig(BaseModel):
 class Config(BaseModel):
     app: AppConfig = Field(default_factory=AppConfig)
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
+    storage: StorageConfig = Field(default_factory=StorageConfig)
     downloader: DownloaderConfig = Field(default_factory=DownloaderConfig)
     symbols: SymbolsConfig = Field(default_factory=SymbolsConfig)
     validation: ValidationConfig = Field(default_factory=ValidationConfig)
@@ -81,7 +87,7 @@ class Config(BaseModel):
             # Phase 1: no config.yaml required — use defaults (SQLite)
             return cls()
 
-        with open(config_path, encoding="utf-8") as f:
+        with config_path.open(encoding="utf-8") as f:
             data = yaml.safe_load(f) or {}
 
         return cls(**data)

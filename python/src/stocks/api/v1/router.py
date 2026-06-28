@@ -6,18 +6,24 @@ from stocks.api.v1.endpoints import (
     agents,
     alerts,
     announcements,
+    backtest,
+    backup,
     charts,
     conversations,
     eod,
     fundamentals,
     indicators,
-    ml2_training,
+    jobs,
+    journal,
     news,
     portfolio,
+    presets,
+    ranking,
     screening,
     settings,
     setup,
     strategies,
+    swing_picks,
     symbols,
     sync,
     trendlines,
@@ -40,10 +46,16 @@ api_router.include_router(settings.router)
 api_router.include_router(setup.router)
 api_router.include_router(portfolio.router)
 api_router.include_router(alerts.router)
-api_router.include_router(ml2_training.router)
 api_router.include_router(watchlists.router)
 api_router.include_router(fundamentals.router)
 api_router.include_router(announcements.router)
 api_router.include_router(news.router)
 api_router.include_router(trendlines.router)
+api_router.include_router(swing_picks.router)
 api_router.include_router(eod.router)
+api_router.include_router(backtest.router)
+api_router.include_router(journal.router)
+api_router.include_router(jobs.router)
+api_router.include_router(ranking.router)
+api_router.include_router(presets.router)
+api_router.include_router(backup.router)

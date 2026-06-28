@@ -53,15 +53,6 @@ class Symbol(Base):
     indicators: Mapped[list["DailyIndicator"]] = relationship(
         "DailyIndicator", back_populates="symbol_obj", cascade="all, delete-orphan"
     )
-    heikin_ashi: Mapped[list["DailyHeikinAshi"]] = relationship(
-        "DailyHeikinAshi", back_populates="symbol_obj", cascade="all, delete-orphan"
-    )
-    renko_bricks: Mapped[list["RenkoBrick"]] = relationship(
-        "RenkoBrick", back_populates="symbol_obj", cascade="all, delete-orphan"
-    )
-    line_break_lines: Mapped[list["LineBreakLine"]] = relationship(
-        "LineBreakLine", back_populates="symbol_obj", cascade="all, delete-orphan"
-    )
     screening_snapshot: Mapped[Optional["ScreeningSnapshot"]] = relationship(
         "ScreeningSnapshot", back_populates="symbol_obj", uselist=False, cascade="all, delete-orphan"
     )
@@ -202,82 +193,19 @@ class DailyIndicator(Base):
     stochrsi_bullish_xover: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     stochrsi_bearish_xover: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
 
+    # Zero Lag EMA (21)
+    zlema_21: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    # Hilega-Milega: 21-WMA of RSI and 3-EMA of that WMA
+    hm_rsi_wma21: Mapped[float | None] = mapped_column(Float, nullable=True)
+    hm_rsi_ema3: Mapped[float | None] = mapped_column(Float, nullable=True)
+
     # Relationships
     symbol_obj: Mapped["Symbol"] = relationship("Symbol", back_populates="indicators")
 
     __table_args__ = (
         UniqueConstraint("symbol_id", "trading_date", "granularity", name="UQ_Indicator_Symbol_Date"),
         Index("ix_indicators_symbol_date", "symbol_id", "trading_date"),
-    )
-
-
-class DailyHeikinAshi(Base):
-    """Model representing historical daily Heikin-Ashi candles."""
-
-    __tablename__ = "daily_heikin_ashi"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    symbol_id: Mapped[int] = mapped_column(Integer, ForeignKey("symbols.id", ondelete="CASCADE"), nullable=False)
-    trading_date: Mapped[datetime.date] = mapped_column(Date, nullable=False)
-    granularity: Mapped[str] = mapped_column(String(10), nullable=False, default="1d")
-    open: Mapped[float] = mapped_column(Numeric(12, 4), nullable=False)
-    high: Mapped[float] = mapped_column(Numeric(12, 4), nullable=False)
-    low: Mapped[float] = mapped_column(Numeric(12, 4), nullable=False)
-    close: Mapped[float] = mapped_column(Numeric(12, 4), nullable=False)
-
-    # Relationships
-    symbol_obj: Mapped["Symbol"] = relationship("Symbol", back_populates="heikin_ashi")
-
-    __table_args__ = (
-        UniqueConstraint("symbol_id", "trading_date", "granularity", name="UQ_HA_Symbol_Date"),
-        Index("ix_ha_symbol_date", "symbol_id", "trading_date"),
-    )
-
-
-class RenkoBrick(Base):
-    """Model representing path-dependent, asynchronous Renko bricks."""
-
-    __tablename__ = "renko_bricks"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    symbol_id: Mapped[int] = mapped_column(Integer, ForeignKey("symbols.id", ondelete="CASCADE"), nullable=False)
-    brick_index: Mapped[int] = mapped_column(Integer, nullable=False)
-    start_date: Mapped[datetime.date] = mapped_column(Date, nullable=False)
-    end_date: Mapped[datetime.date] = mapped_column(Date, nullable=False)
-    open: Mapped[float] = mapped_column(Numeric(12, 4), nullable=False)
-    close: Mapped[float] = mapped_column(Numeric(12, 4), nullable=False)
-    direction: Mapped[str] = mapped_column(String(10), nullable=False)  # 'UP', 'DOWN'
-    brick_size: Mapped[float] = mapped_column(Numeric(12, 4), nullable=False)
-
-    # Relationships
-    symbol_obj: Mapped["Symbol"] = relationship("Symbol", back_populates="renko_bricks")
-
-    __table_args__ = (
-        UniqueConstraint("symbol_id", "brick_index", name="UQ_Renko_Symbol_Index"),
-        Index("ix_renko_symbol_index", "symbol_id", "brick_index"),
-    )
-
-
-class LineBreakLine(Base):
-    """Model representing path-dependent, asynchronous Line Break lines."""
-
-    __tablename__ = "line_break_lines"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    symbol_id: Mapped[int] = mapped_column(Integer, ForeignKey("symbols.id", ondelete="CASCADE"), nullable=False)
-    line_index: Mapped[int] = mapped_column(Integer, nullable=False)
-    start_date: Mapped[datetime.date] = mapped_column(Date, nullable=False)
-    end_date: Mapped[datetime.date] = mapped_column(Date, nullable=False)
-    open: Mapped[float] = mapped_column(Numeric(12, 4), nullable=False)
-    close: Mapped[float] = mapped_column(Numeric(12, 4), nullable=False)
-    direction: Mapped[str] = mapped_column(String(10), nullable=False)  # 'UP', 'DOWN'
-
-    # Relationships
-    symbol_obj: Mapped["Symbol"] = relationship("Symbol", back_populates="line_break_lines")
-
-    __table_args__ = (
-        UniqueConstraint("symbol_id", "line_index", name="UQ_LineBreak_Symbol_Index"),
-        Index("ix_line_break_symbol_index", "symbol_id", "line_index"),
     )
 
 
@@ -367,13 +295,6 @@ class ScreeningSnapshot(Base):
     stochrsi_bullish_xover_days_ago: Mapped[int | None] = mapped_column(Integer, nullable=True)
     stochrsi_bearish_xover_days_ago: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
-    # VajraML2 Prediction (triple-barrier classifier, written by V2 post-sync hook)
-    ml2_p_tp: Mapped[float | None] = mapped_column(Float, nullable=True)
-    ml2_p_sl: Mapped[float | None] = mapped_column(Float, nullable=True)
-    ml2_ev_score: Mapped[float | None] = mapped_column(Float, nullable=True)
-    ml2_rank: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    ml2_signal: Mapped[str | None] = mapped_column(String(20), nullable=True)
-
     # Crossover recency — trading days since last crossover event (None = not seen within 20-day window)
     days_since_price_sma20_bull: Mapped[int | None] = mapped_column(Integer, nullable=True)
     days_since_price_sma50_bull: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -405,6 +326,46 @@ class ScreeningSnapshot(Base):
     # Weinstein Stage (1-4): based on price vs rising/flat/falling SMA200
     weinstein_stage: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
+    # ── New Indicators ────────────────────────────────────────────────────────
+
+    # Hilega-Milega: days since RSI crossed above WMA-21 (NULL when RSI is below WMA)
+    hilega_milega_signal: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    # RSI & MACD divergence: days since bullish divergence swing low formed (NULL = no bullish divergence)
+    rsi_divergence: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    macd_divergence: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    # Zero Lag EMA (21) value and price position relative to it
+    zlema_21: Mapped[float | None] = mapped_column(Float, nullable=True)
+    price_vs_zlema21: Mapped[str | None] = mapped_column(String(5), nullable=True)       # ABOVE / BELOW
+
+    # Supply & Demand candle patterns
+    is_boring_candle: Mapped[bool | None] = mapped_column(Boolean, nullable=True)        # wicks > body
+    is_explosive_candle: Mapped[bool | None] = mapped_column(Boolean, nullable=True)     # ≥1.5× size of prior boring candle
+
+    # Central Pivot Range — Daily (from previous day's H/L/C)
+    cpr_daily_pivot: Mapped[float | None] = mapped_column(Float, nullable=True)
+    cpr_daily_tc: Mapped[float | None] = mapped_column(Float, nullable=True)
+    cpr_daily_bc: Mapped[float | None] = mapped_column(Float, nullable=True)
+    cpr_daily_narrow: Mapped[bool | None] = mapped_column(Boolean, nullable=True)        # CPR range < 0.5% of price → trend day likely
+
+    # Central Pivot Range — Weekly (from previous week's H/L/C)
+    cpr_weekly_pivot: Mapped[float | None] = mapped_column(Float, nullable=True)
+    cpr_weekly_tc: Mapped[float | None] = mapped_column(Float, nullable=True)
+    cpr_weekly_bc: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    # Psychological Line (20-period): % of last 20 days where close > prev close
+    psy_20: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    # Anchored VWAP (anchored to most recent gap-up candle within ~90 trading days)
+    avwap: Mapped[float | None] = mapped_column(Float, nullable=True)
+    avwap_upper_1sd: Mapped[float | None] = mapped_column(Float, nullable=True)
+    avwap_lower_1sd: Mapped[float | None] = mapped_column(Float, nullable=True)
+    price_vs_avwap: Mapped[str | None] = mapped_column(String(5), nullable=True)         # ABOVE / BELOW
+
+    # JSON long-tail: secondary indicator values for point-in-time analysis / future plugin indicators
+    features_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+
     updated_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now())
 
     # Relationships
@@ -433,25 +394,6 @@ class MLTrainingRun(Base):
     date_range_start: Mapped[datetime.date | None] = mapped_column(Date, nullable=True)
     date_range_end:   Mapped[datetime.date | None] = mapped_column(Date, nullable=True)
     mean_ic:          Mapped[float | None]         = mapped_column(Float, nullable=True)
-    fold_metrics:     Mapped[str | None]           = mapped_column(Text, nullable=True)   # JSON array
-    error_message:    Mapped[str | None]           = mapped_column(Text, nullable=True)
-    started_at:       Mapped[datetime.datetime]    = mapped_column(DateTime, default=func.now())
-    completed_at:     Mapped[datetime.datetime | None] = mapped_column(DateTime, nullable=True)
-
-
-class ML2TrainingRun(Base):
-    """Persists each VajraML2 (triple-barrier classifier) training run."""
-
-    __tablename__ = "ml2_training_runs"
-
-    id:               Mapped[int]                  = mapped_column(Integer, primary_key=True, autoincrement=True)
-    version:          Mapped[str]                  = mapped_column(String(30), nullable=False)
-    status:           Mapped[str]                  = mapped_column(String(20), nullable=False, default="RUNNING")
-    num_folds:        Mapped[int | None]           = mapped_column(Integer, nullable=True)
-    dataset_rows:     Mapped[int | None]           = mapped_column(Integer, nullable=True)
-    date_range_start: Mapped[datetime.date | None] = mapped_column(Date, nullable=True)
-    date_range_end:   Mapped[datetime.date | None] = mapped_column(Date, nullable=True)
-    mean_ic_ptp:      Mapped[float | None]         = mapped_column(Float, nullable=True)
     fold_metrics:     Mapped[str | None]           = mapped_column(Text, nullable=True)   # JSON array
     error_message:    Mapped[str | None]           = mapped_column(Text, nullable=True)
     started_at:       Mapped[datetime.datetime]    = mapped_column(DateTime, default=func.now())
@@ -850,3 +792,141 @@ class EodStagingData(Base):
     __table_args__ = (
         Index("ix_eod_staging_job_date", "job_id", "file_date"),
     )
+
+
+class SwingPickNote(Base):
+    """User-authored catalyst notes for swing pick symbols, persisted in the DB."""
+
+    __tablename__ = "swing_pick_notes"
+
+    symbol: Mapped[str] = mapped_column(String(50), primary_key=True)
+    catalyst_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime, default=func.now(), onupdate=func.now()
+    )
+
+
+# ── Backtest domain (V2.0 spec M2) — stored, reproducible results, no fabricated metrics ──
+
+
+class BacktestRun(Base):
+    """A single backtest execution: its parameters, computed metrics, and trade audit trail."""
+
+    __tablename__ = "backtests"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    symbol: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    signal: Mapped[str] = mapped_column(String(100), nullable=False)
+    params_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    start_date: Mapped[datetime.date | None] = mapped_column(Date, nullable=True)
+    end_date: Mapped[datetime.date | None] = mapped_column(Date, nullable=True)
+    trades_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    equity_curve_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=func.now())
+
+    metrics: Mapped[list["BacktestMetric"]] = relationship(
+        "BacktestMetric", back_populates="run", cascade="all, delete-orphan"
+    )
+    trades: Mapped[list["BacktestTrade"]] = relationship(
+        "BacktestTrade", back_populates="run", cascade="all, delete-orphan"
+    )
+
+
+class BacktestMetric(Base):
+    """One named, computed performance metric for a backtest run (e.g. sharpe_ratio)."""
+
+    __tablename__ = "backtest_metrics"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    backtest_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("backtests.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    metric: Mapped[str] = mapped_column(String(50), nullable=False)
+    value: Mapped[float] = mapped_column(Float, nullable=False)
+
+    run: Mapped["BacktestRun"] = relationship("BacktestRun", back_populates="metrics")
+
+    __table_args__ = (UniqueConstraint("backtest_id", "metric", name="UQ_Backtest_Metric"),)
+
+
+class BacktestTrade(Base):
+    """A single simulated trade produced by a backtest run (audit trail)."""
+
+    __tablename__ = "backtest_trades"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    backtest_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("backtests.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    entry_date: Mapped[datetime.date] = mapped_column(Date, nullable=False)
+    entry_price: Mapped[float] = mapped_column(Float, nullable=False)
+    exit_date: Mapped[datetime.date] = mapped_column(Date, nullable=False)
+    exit_price: Mapped[float] = mapped_column(Float, nullable=False)
+    qty: Mapped[float] = mapped_column(Float, nullable=False)
+    return_pct: Mapped[float] = mapped_column(Float, nullable=False)
+    reason: Mapped[str] = mapped_column(String(20), nullable=False)
+
+    run: Mapped["BacktestRun"] = relationship("BacktestRun", back_populates="trades")
+
+
+# ── Trade Journal domain (V2.0 spec M3) — the product's memory of decisions ──
+
+
+class JournalTrade(Base):
+    """A logged trade: planned entry/stop/target, actual entry/exit, thesis, and review.
+
+    One row per trade (single entry/exit). Realized P&L, return, and R-multiple are computed
+    on read from these fields by services.journal.analytics — never stored fabricated.
+    """
+
+    __tablename__ = "journal_trades"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    symbol: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    setup: Mapped[str] = mapped_column(String(60), nullable=False, default="", index=True)
+    side: Mapped[str] = mapped_column(String(10), nullable=False, default="LONG")  # LONG / SHORT
+    status: Mapped[str] = mapped_column(String(10), nullable=False, default="OPEN", index=True)  # OPEN / CLOSED
+
+    # Entry (required) + plan
+    entry_date: Mapped[datetime.date] = mapped_column(Date, nullable=False)
+    entry_price: Mapped[float] = mapped_column(Float, nullable=False)
+    qty: Mapped[float] = mapped_column(Float, nullable=False)
+    stop_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    target_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    # Exit (null while open)
+    exit_date: Mapped[datetime.date | None] = mapped_column(Date, nullable=True)
+    exit_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    fees: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+
+    # Journaling
+    thesis: Mapped[str | None] = mapped_column(Text, nullable=True)
+    mistake_tags: Mapped[str | None] = mapped_column(Text, nullable=True)  # comma-separated
+
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=func.now())
+    updated_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now())
+
+
+# ── Background job queue (V2.0 spec M1) — long work off the request thread ──
+
+
+class Job(Base):
+    """A queued background job (sync / recompute / backtest / backfill …).
+
+    DB-backed so it works across SQLite/MSSQL/PG with progress, cancel, and retry.
+    """
+
+    __tablename__ = "jobs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    kind: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="PENDING", index=True)
+    params_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    result_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    progress_current: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    progress_total: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    cancel_requested: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=func.now(), index=True)
+    started_at: Mapped[datetime.datetime | None] = mapped_column(DateTime, nullable=True)
+    finished_at: Mapped[datetime.datetime | None] = mapped_column(DateTime, nullable=True)

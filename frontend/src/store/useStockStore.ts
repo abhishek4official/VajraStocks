@@ -53,6 +53,16 @@ interface ScreenerFilters {
   only_bb_squeeze?: boolean;
   min_tqs?: number;
   only_weinstein_stage2?: boolean;
+  only_hilega_buy?: boolean;
+  only_rsi_bullish_div?: boolean;
+  only_macd_bullish_div?: boolean;
+  only_boring_candle?: boolean;
+  only_explosive_candle?: boolean;
+  min_psy_20?: number;
+  max_psy_20?: number;
+  price_above_avwap?: boolean;
+  price_above_zlema21?: boolean;
+  only_cpr_narrow?: boolean;
   limit?: number;
 }
 
@@ -80,7 +90,6 @@ export interface WatchlistAlert {
   createdAt: string;
 }
 
-type TabId = 'explorer' | 'screener' | 'strategy' | 'sync' | 'ai-research' | 'portfolio' | 'watchlist' | 'compare' | 'settings' | 'about' | 'ml2-training';
 type ChartTimeframe = '1W' | '1M' | '3M' | '6M' | '1Y' | 'MAX';
 
 // ─── Store shape ──────────────────────────────────────────────────────────────
@@ -89,7 +98,6 @@ interface StockState {
   symbols: SymbolDetail[];
   activeSymbol: string | null;
   activeSymbolDetail: SymbolDetail | null;
-  activeTab: TabId;
   chartType: 'candles' | 'heikin-ashi' | 'renko' | 'line-break';
   chartTimeframe: ChartTimeframe;
   chartOverlays: Set<ChartOverlay>;
@@ -137,7 +145,6 @@ interface StockState {
   error: string | null;
 
   // Actions
-  setActiveTab: (tab: TabId) => void;
   setChartType: (type: 'candles' | 'heikin-ashi' | 'renko' | 'line-break') => void;
   setChartTimeframe: (tf: ChartTimeframe) => void;
   toggleChartOverlay: (overlay: ChartOverlay) => void;
@@ -166,6 +173,12 @@ interface StockState {
   addAlert: (symbol: string, type: AlertType, threshold: number) => void;
   removeAlert: (id: string) => void;
   checkAlerts: () => void;
+
+  // Qualify queue (Screener → Picks)
+  qualifyQueue: string[];
+  addToQualifyQueue: (symbol: string) => void;
+  removeFromQualifyQueue: (symbol: string) => void;
+  clearQualifyQueue: () => void;
 
   // Async
   fetchSymbols: (activeOnly?: boolean) => Promise<void>;
@@ -211,12 +224,6 @@ function saveAlerts(a: WatchlistAlert[]) {
   localStorage.setItem(ALERTS_KEY, JSON.stringify(a));
 }
 
-
-function getInitialTab(): TabId {
-  const path = window.location.pathname.replace(/^\/+/, '').split('/')[0];
-  const valid: TabId[] = ['explorer', 'screener', 'strategy', 'sync', 'ai-research', 'portfolio', 'watchlist', 'compare', 'settings', 'about', 'ml2-training'];
-  return valid.includes(path as TabId) ? (path as TabId) : 'explorer';
-}
 
 const SCREENER_FILTERS_KEY = 'vajra_screener_filters';
 
@@ -310,7 +317,6 @@ export const useStockStore = create<StockState>((set, get) => ({
   symbols: [],
   activeSymbol: null,
   activeSymbolDetail: null,
-  activeTab: getInitialTab(),
   chartType: loadChartPrefs().chartType,
   chartTimeframe: loadChartPrefs().chartTimeframe,
   chartOverlays: new Set<ChartOverlay>(loadChartPrefs().chartOverlays as ChartOverlay[]),
@@ -347,15 +353,17 @@ export const useStockStore = create<StockState>((set, get) => ({
   isSyncing: false,
   error: null,
 
+  qualifyQueue: [],
+  addToQualifyQueue: (symbol) => set(s => ({
+    qualifyQueue: s.qualifyQueue.includes(symbol) ? s.qualifyQueue : [...s.qualifyQueue, symbol],
+  })),
+  removeFromQualifyQueue: (symbol) => set(s => ({
+    qualifyQueue: s.qualifyQueue.filter(x => x !== symbol),
+  })),
+  clearQualifyQueue: () => set({ qualifyQueue: [] }),
+
   // ── Basic setters ──────────────────────────────────────────────────────────
 
-  setActiveTab: (activeTab) => {
-    set({ activeTab });
-    const cleanPath = `/${activeTab === 'explorer' ? '' : activeTab}`;
-    if (window.location.pathname !== cleanPath) {
-      window.history.pushState(null, '', cleanPath);
-    }
-  },
   setChartType: (chartType) => { set({ chartType }); saveChartPrefs({ chartType }); },
   setChartTimeframe: (chartTimeframe) => { set({ chartTimeframe }); saveChartPrefs({ chartTimeframe }); },
   toggleChartOverlay: (overlay) => {

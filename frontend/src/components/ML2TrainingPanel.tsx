@@ -4,7 +4,19 @@ import {
   Clock, Cpu, History, Play, RefreshCw, StopCircle,
 } from 'lucide-react';
 import { API_BASE } from '../lib/apiBase';
-import type { ML2FoldMetric, ML2ProgressEvent, ML2TrainingRun } from '../services/api';
+interface ML2FoldMetric { fold: number; ic_ptp: number; tp_prec: number; hit_5d: number; ls_pnl: number; }
+interface ML2TrainingRun {
+  id?: string | number; status: string; version: string; started_at: string; completed_at?: string;
+  num_folds?: number; dataset_rows?: number; date_range_start?: string; date_range_end?: string;
+  mean_ic_ptp?: number; fold_metrics?: ML2FoldMetric[];
+}
+interface ML2ProgressEvent {
+  type: string; pct?: number; message?: string; error?: string;
+  rows?: number; features?: number; date_start?: string; date_end?: string;
+  fold?: number; total?: number; train_rows?: number; test_rows?: number; tree?: number;
+  ic_ptp?: number; tp_prec?: number; hit_5d?: number; ls_pnl?: number;
+  mean_ic_ptp?: number; mean_tp_prec?: number; folds?: number;
+}
 
 const BASE = API_BASE;
 

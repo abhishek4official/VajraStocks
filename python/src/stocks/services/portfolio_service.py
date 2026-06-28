@@ -22,6 +22,7 @@ from stocks.services.quant.portfolio_risk import (
     compute_diversification_score,
     compute_hhi,
     compute_portfolio_beta,
+    compute_risk_contributions,
     compute_var_cvar,
 )
 from stocks.services.settings_service import SettingsService
@@ -329,6 +330,7 @@ class PortfolioService:
             holdings.append(
                 {
                     "instrument": r.instrument,
+                    "symbol_id": r.symbol_id,
                     "qty": r.qty,
                     "avg_cost": round(float(r.avg_cost), 2),
                     "ltp": round(ltp, 2),
@@ -360,7 +362,7 @@ class PortfolioService:
                     "position_size_shares": position_size_shares,
                     "stop_type": stop_type,
                     "composite_score": round(float(snap.composite_score), 1) if snap and snap.composite_score is not None else None,
-                    "ml_label": snap.ml2_signal if snap else None,
+                    "ml_label": getattr(snap, "ml_label", None) if snap else None,
                     "supertrend_dir": snap_st_dir,
                 }
             )
@@ -464,6 +466,19 @@ class PortfolioService:
                 )
                 hhi_result = compute_hhi(weights)
                 var_cvar = compute_var_cvar(self.db, holdings, weights, total_current)
+
+                # Per-holding contribution to portfolio risk (% of portfolio variance).
+                weights_by_id = {
+                    h["symbol_id"]: h["current_val"] / total_current
+                    for h in holdings
+                    if h.get("symbol_id") and total_current > 0
+                }
+                rc = compute_risk_contributions(self.db, weights_by_id)
+                for h in holdings:
+                    h["risk_contribution_pct"] = (
+                        round(rc[h["symbol_id"]] * 100.0, 2)
+                        if h.get("symbol_id") in rc else None
+                    )
         except Exception as e:
             logger.warning(f"Portfolio risk calculation failed (non-fatal): {e}")
 
@@ -549,8 +564,9 @@ class PortfolioService:
                 score += 0.5  # highest conviction bonus
             if sn.composite_score is not None:
                 score += float(sn.composite_score) * 0.5  # pre-computed multi-factor blend
-            if sn.ml2_ev_score is not None:
-                score += float(sn.ml2_ev_score) * 1.0  # VajraML signal
+            _ml_pred = getattr(sn, "ml_prediction", None)
+            if _ml_pred is not None:
+                score += float(_ml_pred) * 1.0  # VajraML signal
             return score
 
         ranked = sorted(rows, key=_momentum_score, reverse=True)[:limit]
@@ -572,6 +588,8 @@ class PortfolioService:
 
         out = []
         for sn in ranked:
+            if sn.close_price is None:
+                continue
             close = round(float(sn.close_price), 2)
             atr_pct = round(float(sn.atr_pct), 2) if sn.atr_pct is not None else None
 
@@ -654,7 +672,7 @@ class PortfolioService:
                     "obv_trend": getattr(sn, "obv_trend", None),
                     "supertrend_dir": getattr(sn, "supertrend_dir", None),
                     "composite_score": round(float(sn.composite_score), 3) if sn.composite_score is not None else None,
-                    "ml_prediction": round(float(sn.ml2_ev_score), 3) if sn.ml2_ev_score is not None else None,
+                    "ml_prediction": round(float(getattr(sn, "ml_prediction", None)), 3) if getattr(sn, "ml_prediction", None) is not None else None,
                 }
             )
         return out

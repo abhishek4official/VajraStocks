@@ -70,6 +70,12 @@ async def check_and_run_sync(db_manager) -> None:
                         session.close()
                 except Exception as ae:
                     logger.warning(f"Scheduler: Alert evaluation failed (non-fatal): {ae}")
+                # Mirror the freshly-synced price series into the columnar BarStore
+                try:
+                    from stocks.data.backfill import sync_columnar_store
+                    sync_columnar_store(db_manager, cfg)
+                except Exception as ce:
+                    logger.warning(f"Scheduler: Columnar backfill failed (non-fatal): {ce}")
                 # Weekly ML retraining on Sunday
                 if datetime.datetime.now().weekday() == 6:
                     _maybe_retrain_ml(db_manager)
