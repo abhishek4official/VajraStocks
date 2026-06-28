@@ -50,6 +50,15 @@ Write-Host "      Backend bundled -> dist/VajraStocks/" -ForegroundColor Green
 
 # ── 3. Electron installer ─────────────────────────────────────────────────────
 Write-Host "`n[3/3] Building Electron installer..." -ForegroundColor Yellow
+
+# Kill any running VajraStocks instance — it holds app.asar open and blocks the build.
+$running = Get-Process -Name "VajraStocks" -ErrorAction SilentlyContinue
+if ($running) {
+    Write-Host "      Stopping running VajraStocks instance..." -ForegroundColor Gray
+    $running | Stop-Process -Force
+    Start-Sleep -Seconds 1
+}
+
 Set-Location "$Root\electron"
 
 if (-not (Test-Path "node_modules")) {
