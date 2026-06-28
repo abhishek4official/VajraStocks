@@ -69,29 +69,58 @@ def _load_connection_string() -> str:
          then at python/config/config.yaml (dev fallback).
       3. SQLite default for a completely fresh install with no config yet.
 
-    No silent DB fallback — if initialize() fails the error propagates and the
-    server refuses to start with a clear log message.
+    INSTALLER DESIGN — relative SQLite paths:
+      config.yaml stores  sqlite:///data/vajra.db  (relative, no hardcoded user path).
+      This function converts that to an absolute path anchored at the directory that
+      contains config.yaml, so the DB always lives next to the config regardless of
+      which directory the server process was launched from.
+      Example: %APPDATA%\\VajraStocks\\config.yaml  →  DB at
+               %APPDATA%\\VajraStocks\\data\\vajra.db
+      The installer only needs to ship config.yaml — the data/ dir is created on
+      first run.  Do NOT change this to store an absolute user-specific path in
+      config.yaml; that would break installs for other users.
     """
-    # 1. Hard env-var override
+    def _resolve_sqlite(cs: str, config_dir: Path) -> str:
+        """If cs is a relative sqlite:/// URL, anchor it to config_dir."""
+        if not cs.startswith("sqlite:///"):
+            return cs
+        raw = cs[len("sqlite:///"):]
+        # Already absolute (starts with drive letter on Windows or / on Unix)
+        if Path(raw).is_absolute():
+            return cs
+        abs_path = (config_dir / raw).resolve()
+        abs_path.parent.mkdir(parents=True, exist_ok=True)
+        resolved = f"sqlite:///{abs_path.as_posix()}"
+        logger.debug(f"Resolved relative SQLite path to: {abs_path}")
+        return resolved
+
+    # 1. Hard env-var override — used by Docker / CI / frozen launcher
     env_cs = os.getenv("VAJRA_DB_URL")
     if env_cs:
         logger.debug("Connection string from VAJRA_DB_URL env var.")
         return env_cs
 
-    # 2. config.yaml
+    # 2. config.yaml — relative SQLite paths are anchored to the config's directory
     if _CONFIG_YAML.exists():
         try:
             with open(_CONFIG_YAML, encoding="utf-8") as f:
                 data = yaml.safe_load(f) or {}
             cs = data.get("database", {}).get("connection_string", "")
             if cs:
-                logger.debug(f"Connection string from config.yaml: {cs[:60]}…")
+                cs = _resolve_sqlite(cs, _CONFIG_YAML.parent)
+                logger.debug(f"Connection string from config.yaml: {cs[:80]}…")
                 return cs
         except Exception as exc:
             logger.warning(f"Could not read config.yaml: {exc}")
 
-    # 3. Default SQLite
-    logger.debug("Using default SQLite connection string.")
+    # 3. Default — fresh install with no config yet; anchor to AppData if available
+    user_dir = _get_user_appdata_dir()
+    if user_dir:
+        default_db = user_dir / "data" / "vajra.db"
+        default_db.parent.mkdir(parents=True, exist_ok=True)
+        logger.debug(f"No config.yaml found — using default DB at {default_db}")
+        return f"sqlite:///{default_db.as_posix()}"
+    logger.debug("Using fallback relative SQLite connection string.")
     return "sqlite:///data/vajra.db"
 
 
@@ -272,13 +301,12 @@ def _seed_default_symbols(db_manager) -> None:
 def _run_pending_migrations(connection_string: str) -> None:
     """Runs `alembic upgrade head` programmatically so the schema is always current.
 
-    Pre-Alembic DBs (tables exist but no alembic_version row) are stamped with
-    the current head so future startups skip migrations cleanly.
+    Pre-Alembic DBs (tables present, no alembic_version) are detected via a
+    raw sqlite3 check and stamped at head so future startups are incremental-only.
     """
     try:
         from alembic import command
         from alembic.config import Config as AlembicConfig
-        from sqlalchemy import create_engine, inspect, text
 
         env_ini = os.environ.get("VAJRA_ALEMBIC_INI")
         if env_ini:
@@ -293,21 +321,25 @@ def _run_pending_migrations(connection_string: str) -> None:
         alembic_cfg = AlembicConfig(str(alembic_ini))
         alembic_cfg.set_main_option("sqlalchemy.url", connection_string)
 
-        # Detect a pre-Alembic DB: core tables exist but alembic_version doesn't.
-        # Stamping tells Alembic "this DB is already at head" so it won't try to
-        # re-run the initial CREATE TABLE migrations.
-        _engine = create_engine(connection_string, connect_args={"check_same_thread": False})
-        try:
-            _insp = inspect(_engine)
-            has_symbols = _insp.has_table("symbols")
-            has_version = _insp.has_table("alembic_version")
-            if has_symbols and not has_version:
-                logger.info("Pre-Alembic DB detected (tables exist, no alembic_version). Stamping with head.")
-                command.stamp(alembic_cfg, "head")
-                logger.info("DB stamped at head — future startups will run incremental migrations only.")
-                return
-        finally:
-            _engine.dispose()
+        # Use raw sqlite3 to check for pre-Alembic state — avoids any SQLAlchemy
+        # engine/pool interaction during startup before the main engine is ready.
+        if connection_string.startswith("sqlite"):
+            import sqlite3
+            # Extract file path from sqlite:///path or sqlite+pysqlite:///path
+            db_path = connection_string.split("///", 1)[-1]
+            if db_path and db_path != ":memory:":
+                try:
+                    con = sqlite3.connect(db_path, timeout=10)
+                    cur = con.cursor()
+                    tables = {r[0] for r in cur.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+                    con.close()
+                    if "symbols" in tables and "alembic_version" not in tables:
+                        logger.info("Pre-Alembic DB detected — stamping at head (no migrations will run).")
+                        command.stamp(alembic_cfg, "head")
+                        logger.info("DB stamped. Future startups will apply only new migrations.")
+                        return
+                except Exception as probe_exc:
+                    logger.debug(f"Pre-Alembic probe failed (non-fatal): {probe_exc}")
 
         command.upgrade(alembic_cfg, "head")
         logger.info("Database migrations applied (alembic upgrade head).")
