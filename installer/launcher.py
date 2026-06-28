@@ -137,6 +137,15 @@ def main() -> None:
                     db_url = _cs.strip()
         except Exception:
             pass                     # any parse error → keep SQLite default
+
+        # Guard: if config gave a relative sqlite path, resolve it against
+        # the data dir — relative paths resolve against CWD which is the
+        # bundle root inside Program Files (read-only) on a packaged install.
+        if db_url.startswith("sqlite:///"):
+            raw = db_url[len("sqlite:///"):]
+            if raw and raw != ":memory:" and not Path(raw).is_absolute():
+                db_url = f"sqlite:///{data / Path(raw).name}"
+
         os.environ["VAJRA_DB_URL"] = db_url
 
     # ── Alembic ini — read-only, lives in the bundle (no writes needed)

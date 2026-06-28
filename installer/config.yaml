@@ -9,9 +9,11 @@ app:
   name: VajraStocks
 
 database:
-  # Absolute path is injected by the launcher via VAJRA_DB_URL env var.
-  # This value is only used if VAJRA_DB_URL is not set (e.g. running from source).
-  connection_string: "sqlite:///data/vajra.db"
+  # Leave blank — launcher.py sets VAJRA_DB_URL to an absolute path inside
+  # %APPDATA%/VajraStocks/data/ before the server starts. Setting a relative
+  # path here resolves against the bundle root (Program Files) which is
+  # read-only and causes a PermissionError on first launch.
+  connection_string: ""
   provider: sqlite
   pool_size: 5
   max_overflow: 10
