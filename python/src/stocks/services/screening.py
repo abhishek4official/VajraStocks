@@ -1104,6 +1104,29 @@ class ScreeningService:
                 for sid, rows in weekly_rows_by_symbol.items()
             }
 
+            # ── Bulk compute Renko and Three-Line-Break directions
+            # Reuses the weekly price data (ascending date order, close only).
+            # Full-history computation would be ideal but ~1.5 years is enough to
+            # capture the current regime for a screener direction signal.
+            import pandas as _pd
+            from stocks.services.market_structure import MarketStructureEngine as _MSE
+            _mse_bulk = _MSE(self.config)
+            renko_dir_by_symbol: dict[int, str | None] = {}
+            lb_dir_by_symbol: dict[int, str | None] = {}
+            for _sid, _rows in weekly_rows_by_symbol.items():
+                if len(_rows) < 10:
+                    continue
+                try:
+                    _df = _pd.DataFrame(_rows, columns=["trading_date", "close"])
+                    _df.set_index(_pd.to_datetime(_df["trading_date"]), inplace=True)
+                    _bricks = _mse_bulk.generate_renko_bricks(_df)
+                    renko_dir_by_symbol[_sid] = _bricks[-1]["direction"] if _bricks else None
+                    _lines = _mse_bulk.generate_line_breaks(_df)
+                    lb_dir_by_symbol[_sid] = _lines[-1]["direction"] if _lines else None
+                except Exception as _e:
+                    logger.debug(f"Renko/TLB direction compute failed for symbol_id={_sid}: {_e}")
+            logger.debug(f"Renko/TLB direction computed for {len(renko_dir_by_symbol)} symbols.")
+
             # ── Process each symbol using only pre-fetched data (no per-symbol DB queries)
             refreshed_count = 0
             for sym in active_symbols:
@@ -1119,8 +1142,8 @@ class ScreeningService:
                                 "avwap_prices": avwap_prices_by_symbol.get(sym.id, []),
                                 "rs_oldest":        rs_oldest_by_symbol.get(sym.id),
                                 "ha_direction":     (existing_snapshots.get(sym.id) or None) and existing_snapshots[sym.id].ha_direction,
-                                "renko_direction":  (existing_snapshots.get(sym.id) or None) and existing_snapshots[sym.id].renko_direction,
-                                "lb_direction":     (existing_snapshots.get(sym.id) or None) and existing_snapshots[sym.id].line_break_direction,
+                                "renko_direction":  renko_dir_by_symbol.get(sym.id),
+                                "lb_direction":     lb_dir_by_symbol.get(sym.id),
                                 "ind_rows":         indicators_by_symbol.get(sym.id, []),
                                 "snapshot":         existing_snapshots.get(sym.id),
                                 "weekly_trend": weekly_trend_by_symbol.get(sym.id),
