@@ -2,22 +2,27 @@
 
 const { app, BrowserWindow, shell, Menu, Tray, nativeImage } = require('electron');
 const path = require('path');
-const { spawn } = require('child_process');
+const { spawn, execSync } = require('child_process');
 const net = require('net');
 const http = require('http');
 
 // ── Configuration ─────────────────────────────────────────────────────────────
 
 const PREFERRED_PORT = 8000;
-const HEALTH_TIMEOUT_MS = 60_000;   // wait up to 60 s for backend
+const HEALTH_TIMEOUT_MS = 60_000;
 const HEALTH_POLL_MS    = 500;
 
 // ── State ─────────────────────────────────────────────────────────────────────
 
-let mainWindow = null;
+let mainWindow  = null;
 let backendProcess = null;
 let backendPort = PREFERRED_PORT;
-let tray = null;
+let tray        = null;
+let isQuitting  = false;   // set to true only when user explicitly chooses Quit
+
+// Brand icon — used for window, taskbar and tray
+const iconPath = path.join(__dirname, 'build', 'icon.png');
+const appIcon  = nativeImage.createFromPath(iconPath);
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -29,7 +34,6 @@ function findFreePort(preferred) {
       server.close(() => resolve(port));
     });
     server.on('error', () => {
-      // preferred port taken — let OS pick one
       const s2 = net.createServer();
       s2.listen(0, '127.0.0.1', () => {
         const { port } = s2.address();
@@ -62,24 +66,23 @@ function getBackendExe() {
     const exe = process.platform === 'win32' ? 'VajraStocks.exe' : 'VajraStocks';
     return path.join(process.resourcesPath, 'backend', exe);
   }
-  // Dev mode — assume backend is already running externally
-  return null;
+  return null; // dev mode — backend assumed already running
 }
 
 // ── Backend lifecycle ─────────────────────────────────────────────────────────
 
 function startBackend(port) {
   const exe = getBackendExe();
-  if (!exe) return; // dev mode
+  if (!exe) return;
 
   backendProcess = spawn(exe, [], {
     env: {
       ...process.env,
       VAJRA_PORT: String(port),
-      VAJRA_ELECTRON: '1',          // tells launcher.py to skip webbrowser.open()
+      VAJRA_ELECTRON: '1',
     },
     detached: false,
-    windowsHide: true,              // no console window
+    windowsHide: true,
   });
 
   backendProcess.on('error', (err) => {
@@ -93,10 +96,62 @@ function startBackend(port) {
 }
 
 function stopBackend() {
-  if (backendProcess) {
-    try { backendProcess.kill('SIGTERM'); } catch (_) {}
-    backendProcess = null;
+  if (!backendProcess) return;
+  const pid = backendProcess.pid;
+  backendProcess = null;
+  try {
+    // taskkill /F /T kills the process AND all its children (uvicorn workers etc.)
+    // SIGTERM alone is not reliable on Windows for Python processes.
+    if (process.platform === 'win32' && pid) {
+      execSync(`taskkill /F /T /PID ${pid}`, { stdio: 'ignore' });
+    } else {
+      process.kill(pid, 'SIGTERM');
+    }
+  } catch (_) {}
+}
+
+// ── System tray ───────────────────────────────────────────────────────────────
+
+function createTray() {
+  // Fall back to an empty image if the icon file is missing
+  const icon = appIcon.isEmpty()
+    ? nativeImage.createEmpty()
+    : appIcon.resize({ width: 16, height: 16 });
+
+  tray = new Tray(icon);
+  tray.setToolTip('VajraStocks — running in background');
+
+  const menu = Menu.buildFromTemplate([
+    {
+      label: 'Open VajraStocks',
+      click: () => showWindow(),
+    },
+    { type: 'separator' },
+    {
+      label: 'Quit',
+      click: () => quitApp(),
+    },
+  ]);
+
+  tray.setContextMenu(menu);
+  tray.on('double-click', () => showWindow());
+}
+
+function showWindow() {
+  if (!mainWindow) {
+    createWindow();
+    mainWindow.loadURL(`http://127.0.0.1:${backendPort}`);
+  } else {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.show();
+    mainWindow.focus();
   }
+}
+
+function quitApp() {
+  isQuitting = true;
+  stopBackend();
+  app.quit();
 }
 
 // ── Window ────────────────────────────────────────────────────────────────────
@@ -108,7 +163,7 @@ function createWindow() {
     minWidth: 1024,
     minHeight: 700,
     title: 'VajraStocks',
-    // icon set after app ready via nativeImage
+    icon: appIcon,
     backgroundColor: '#0f1117',
     show: false,
     webPreferences: {
@@ -118,14 +173,11 @@ function createWindow() {
     },
   });
 
-  // Remove default menu bar (keep only system tray)
   Menu.setApplicationMenu(null);
 
-  // Show loading screen immediately
   mainWindow.loadFile(path.join(__dirname, 'loading.html'));
   mainWindow.once('ready-to-show', () => mainWindow.show());
 
-  // Open external links in the OS browser, not inside the app
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (!url.startsWith(`http://127.0.0.1:${backendPort}`)) {
       shell.openExternal(url);
@@ -134,51 +186,60 @@ function createWindow() {
     return { action: 'allow' };
   });
 
+  // Close button → hide to tray, don't quit
+  mainWindow.on('close', (e) => {
+    if (!isQuitting) {
+      e.preventDefault();
+      mainWindow.hide();
+      if (tray) tray.displayBalloon({
+        iconType: 'info',
+        title: 'VajraStocks',
+        content: 'Running in background. Right-click the tray icon to quit.',
+      });
+    }
+  });
+
   mainWindow.on('closed', () => { mainWindow = null; });
 }
 
 // ── App boot sequence ─────────────────────────────────────────────────────────
 
 app.whenReady().then(async () => {
-  // Find a free port first so we own it
+  if (process.platform === 'darwin' && app.dock && !appIcon.isEmpty()) {
+    app.dock.setIcon(appIcon);
+  }
+
   backendPort = await findFreePort(PREFERRED_PORT);
 
+  createTray();
   createWindow();
   startBackend(backendPort);
 
   try {
     await waitForBackend(backendPort);
-    if (mainWindow) {
-      mainWindow.loadURL(`http://127.0.0.1:${backendPort}`);
-    }
+    if (mainWindow) mainWindow.loadURL(`http://127.0.0.1:${backendPort}`);
   } catch (err) {
     console.error('Backend failed to start:', err);
-    if (mainWindow) {
-      mainWindow.loadFile(path.join(__dirname, 'error.html'));
-    }
+    if (mainWindow) mainWindow.loadFile(path.join(__dirname, 'error.html'));
   }
 });
 
+// With tray support the app must NOT quit when all windows are closed —
+// the window is just hidden and the backend keeps running for scheduled jobs.
 app.on('window-all-closed', () => {
-  stopBackend();
-  if (process.platform !== 'darwin') app.quit();
+  if (process.platform === 'darwin') app.quit();
+  // Windows/Linux: stay alive in tray (do nothing)
 });
 
 app.on('activate', () => {
-  if (mainWindow === null) createWindow();
+  // macOS dock click
+  if (mainWindow === null) showWindow();
 });
 
-app.on('before-quit', stopBackend);
-
-// Prevent multiple instances
+// Prevent multiple instances — focus existing window instead
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
   app.quit();
 } else {
-  app.on('second-instance', () => {
-    if (mainWindow) {
-      if (mainWindow.isMinimized()) mainWindow.restore();
-      mainWindow.focus();
-    }
-  });
+  app.on('second-instance', () => showWindow());
 }
