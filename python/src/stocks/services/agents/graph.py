@@ -58,9 +58,15 @@ def _route_from_scan(state: VajraState) -> str:
 # ─── Graph construction ───────────────────────────────────────────────────────
 
 def _make_checkpointer() -> SqliteSaver:
-    """Return a SqliteSaver backed by data/vajra_graph.db (beside the main DB)."""
-    checkpoint_path = Path("data/vajra_graph.db")
-    checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
+    """Return a SqliteSaver backed by vajra_graph.db in the user-writable data dir.
+
+    Uses VAJRA_DATA_DIR when set (launcher.py points it to %APPDATA%/VajraStocks/data)
+    so it never tries to write inside Program Files in a packaged install.
+    """
+    import os
+    data_dir = Path(os.environ.get("VAJRA_DATA_DIR", "data"))
+    data_dir.mkdir(parents=True, exist_ok=True)
+    checkpoint_path = data_dir / "vajra_graph.db"
     conn = sqlite3.connect(str(checkpoint_path), check_same_thread=False)
     return SqliteSaver(conn)
 

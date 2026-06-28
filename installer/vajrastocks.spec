@@ -127,7 +127,7 @@ a = Analysis(
         # ── ODBC ─────────────────────────────────────────────────────────────
         "pyodbc",
     ],
-    excludes=["tkinter", "test", "unittest", "_pytest"],
+    excludes=["tkinter"],
     noarchive=False,
 )
 
