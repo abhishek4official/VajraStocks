@@ -43,19 +43,9 @@
       "category": "Finance"
     },
     "extraResources": [
-      {
-        "from": "../dist/VajraStocks",
-        "to": "backend",
-        "filter": ["**/*"]
-      }
+      { "from": "../dist/VajraStocks", "to": "backend", "filter": ["**/*"] }
     ],
-    "files": [
-      "main.js",
-      "loading.html",
-      "error.html"
-    ],
-    "directories": {
-      "output": "../release"
-    }
+    "files": ["main.js", "loading.html", "error.html"],
+    "directories": { "output": "../release" }
   }
 }

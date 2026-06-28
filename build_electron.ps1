@@ -3,13 +3,10 @@
 #
 # Steps:
 #   1. Build React frontend  (npm run build  in frontend/)
-#   2. Bundle Python backend (pyinstaller    in python/)
+#   2. Bundle Python backend (pyinstaller from python/.venv)
 #   3. Package Electron app  (electron-builder in electron/)
 #
 # Output: release/VajraStocks-Setup.exe
-#
-# Requirements (must be on PATH):
-#   node / npm, python / uv, pyinstaller (via uv run)
 # ─────────────────────────────────────────────────────────────────────────────
 
 param(
@@ -19,9 +16,18 @@ param(
 $ErrorActionPreference = "Stop"
 $Root = $PSScriptRoot
 
+function Invoke-Native {
+    param([string]$Description, [scriptblock]$Command)
+    Write-Host "      > $Description" -ForegroundColor Gray
+    & $Command
+    if ($LASTEXITCODE -ne 0) {
+        throw "FAILED: $Description (exit code $LASTEXITCODE)"
+    }
+}
+
 # ── Resolve version ───────────────────────────────────────────────────────────
 if (-not $Version) {
-    $pkg = Get-Content "$Root\frontend\package.json" | ConvertFrom-Json
+    $pkg = Get-Content "$Root\frontend\package.json" -Raw | ConvertFrom-Json
     $Version = $pkg.version
 }
 Write-Host "`n=== VajraStocks Electron build v$Version ===" -ForegroundColor Cyan
@@ -29,32 +35,45 @@ Write-Host "`n=== VajraStocks Electron build v$Version ===" -ForegroundColor Cya
 # ── 1. Frontend ───────────────────────────────────────────────────────────────
 Write-Host "`n[1/3] Building frontend..." -ForegroundColor Yellow
 Set-Location "$Root\frontend"
-npm ci --prefer-offline
-npm run build
+Invoke-Native "npm ci"       { npm ci --prefer-offline }
+Invoke-Native "vite build"   { npm run build }
 Write-Host "      Frontend built -> frontend/dist/" -ForegroundColor Green
 
 # ── 2. Python backend (PyInstaller) ──────────────────────────────────────────
 Write-Host "`n[2/3] Bundling Python backend..." -ForegroundColor Yellow
 Set-Location "$Root\python"
-uv run pyinstaller ../installer/vajrastocks.spec --noconfirm
+
+# Use pyinstaller from the local venv — more reliable than `uv run pyinstaller`
+# when pyinstaller is installed as a direct package rather than a uv tool.
+$PyInstaller = "$Root\python\.venv\Scripts\pyinstaller.exe"
+if (-not (Test-Path $PyInstaller)) {
+    # Fallback: try uv run in case pyinstaller is registered as a uv tool
+    $PyInstaller = "pyinstaller"
+}
+
+Invoke-Native "pyinstaller" { & $PyInstaller ..\installer\vajrastocks.spec --noconfirm }
 Write-Host "      Backend bundled -> dist/VajraStocks/" -ForegroundColor Green
 
 # ── 3. Electron installer ─────────────────────────────────────────────────────
 Write-Host "`n[3/3] Building Electron installer..." -ForegroundColor Yellow
 Set-Location "$Root\electron"
 
-# Install electron deps if node_modules missing
 if (-not (Test-Path "node_modules")) {
-    npm install
+    Invoke-Native "npm install" { npm install }
 }
 
-# Inject version into electron package.json
-$ePkg = Get-Content "package.json" | ConvertFrom-Json
+# Stamp the version into electron/package.json using UTF-8 WITHOUT BOM.
+# PowerShell 5.1's Set-Content -Encoding utf8 writes a BOM that breaks
+# app-builder.exe's JSON parser.
+$ePkgPath = "$Root\electron\package.json"
+$ePkg = Get-Content $ePkgPath -Raw | ConvertFrom-Json
 $ePkg.version = $Version
-$ePkg | ConvertTo-Json -Depth 10 | Set-Content "package.json" -Encoding utf8
+$json = $ePkg | ConvertTo-Json -Depth 10
+$utf8NoBom = New-Object System.Text.UTF8Encoding $false
+[System.IO.File]::WriteAllText($ePkgPath, $json, $utf8NoBom)
 
 $env:APP_VERSION = $Version
-npm run build:win
+Invoke-Native "electron-builder" { npm run build:win }
 
 Write-Host "`n=== Done! ===" -ForegroundColor Cyan
 Write-Host "Installer: $Root\release\VajraStocks-Setup.exe" -ForegroundColor Green
