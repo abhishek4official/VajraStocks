@@ -2,7 +2,7 @@
 
 **Branch:** `feature/v2-hybrid-db` (off `feature/screener-report`)
 **Tests:** 255 passing · **Spec:** `Doc/VajraStocks_V2.0_PRD_BRD_Architecture.md`
-**Last updated:** 2026-06-26
+**Last updated:** 2026-06-28
 
 > Convention: all work is TDD (test first), committed under Abhishek (no Claude co-author).
 
@@ -28,72 +28,88 @@
 - [x] Confirmed stray ML logs already gitignored/untracked
 - [x] Integrity guard test (`test_no_fake_backtester.py`) prevents regression
 
-### M2 — Real backtest engine (CORE + single-name replay DONE)
+### Phase 4 — Navigation (COMPLETE)
+- [x] React Router v6 wired (`BrowserRouter` + `Routes`)
+- [x] 5-destination NavRail: Dashboard · Screener · Charts · Portfolio · Sync
+- [x] Deep-link URLs work; active-route highlighting
+
+### Phase 5 — God-table slimming (COMPLETE)
+- [x] Dropped `daily_heikin_ashi`, `renko_bricks`, `line_break_lines` materialized tables
+- [x] `features_json TEXT` column added to `ScreeningSnapshot` (JSON long-tail for future indicators)
+- [x] HA / Renko / LineBreak now computed **on demand** from `DailyPrice` in `charts.py`
+- [x] `screening.py` bulk loads 3/4/5 removed; direction carry-over from existing snapshot
+- [x] All 9 downstream references cleaned (`database.py`, `sync_engine.py`, `nodes.py`, `models.py`, etc.)
+
+### ScreenerPanel split (COMPLETE)
+- [x] 2,424-line `ScreenerPanel.tsx` split into 4 focused files:
+  - `ScreenerFilterBar.tsx` (165 lines) — preset menu + active filter chips
+  - `ScreenerRow.tsx` (674 lines) — pure `<tr>` renderer
+  - `ScreenerResultGrid.tsx` (1,420 lines) — sort/filter/search/export grid
+  - `ScreenerPanel.tsx` (216 lines) — slim orchestrator
+
+### Sync fixes (COMPLETE)
+- [x] Bootstrap condition changed from `if not active_symbols` → `if no equity symbols` so a DB with only index symbols (`^NSEI` etc.) still triggers the NSE CSV fetch
+- [x] NSE equity CSV URL corrected: `EQUITY_L_ACTIVE.csv` → `EQUITY_L.csv` (old path returns 404)
+- [x] Fallback path in `symbol.py` now tries both CWD-relative and package-relative paths
+- [x] `POST /sync/bootstrap-symbols` endpoint + **Refresh Symbol Registry** button in SyncPanel
+
+### M2 — Real backtest engine (CORE COMPLETE)
 - [x] `services/quant/backtest/metrics.py` — pure, reproducible cagr/max_drawdown/win_rate/profit_factor/sharpe + `compute_metrics` (verified vs hand-computed; honest 0.0/inf on degenerate input)
 - [x] `services/quant/backtest/engine.py` — `run_backtest`: no-lookahead single-name sim, intrabar stop/target (stop-first), bps costs+slippage, MTM equity curve, deterministic, empty-bars safe
-- [x] `services/quant/backtest/signals.py` — pure `sma_crossover_signals` (entries/exits)
-- [x] `services/quant/backtest/replay.py` — `run_symbol_backtest`: reads (adjusted) bars from `BarStore` → signal fn → engine. **End-to-end data-plane → backtest path works.**
+- [x] `services/quant/backtest/signals.py` — pure `sma_crossover_signals` + `ema_crossover_signals` + `breakout_signals`
+- [x] `services/quant/backtest/replay.py` — `run_symbol_backtest`: reads (adjusted) bars from `BarStore` → signal fn → engine
+- [x] `services/quant/backtest/walkforward.py` — anchored expanding-window WFA (grid-search IS, evaluate OOS)
+- [x] `services/quant/backtest/portfolio.py` — weight-based portfolio engine + `run_strategy_backtest` (real Minervini swing strategy end-to-end)
+- [x] **Backtest Lab API** — `/backtest/signals`, `/run`, `/runs`, `/runs/{id}`, `/walk-forward`, `/portfolio`, `/backfill`
+- [x] **Statistical guards** — `statistics.py`: probabilistic Sharpe (PSR) + deflated Sharpe (DSR); scipy cross-checked
+- [x] **Frontend "Backtest Lab" panel** + Backfill button. Typechecks + prod build clean.
+- [ ] Deferred to M4 (AI tool contract): real backtest node in agent graph
+- [ ] Optional: RSI setup; purged/embargoed CV; expose PSR/DSR in the `/run` response
+
+### M3 — Trade journal (COMPLETE)
+- [x] `JournalTrade` model (verified `create_all` builds it on real MSSQL, 17 cols)
+- [x] `services/journal/analytics.py` — realized_pnl / return_pct / r_multiple + `review_by_setup`
+- [x] `services/journal/repository.py` — log / close / list / delete / review
+- [x] **API** `/journal/trades` (+ `/{id}/close`, `/{id}`, DELETE), `/journal/review`
+- [x] **Frontend Journal panel** — log form, inline close, per-setup review table, computed P&L/R
+- [ ] Later: execution log (partial fills), entry chart snapshot, mistake-tag analytics
+
+### M4 — Clarity / UI (partial)
+- [x] **Cross-sectional ranking (end-to-end)** — `quant/factors.py` + `quant/ranking.py` + API + Ranking panel
+- [x] **Preset screeners (end-to-end)** — `quant/presets.py` (7 setup predicates) + API + Setups tab
+- [ ] AI copilot demoted to slide-over; numeric guardrail; `SqliteSaver` durable checkpoints
+
+### M5 — Portfolio & risk (LARGELY COMPLETE)
+- [x] **Live mark-to-market** — holdings valued at latest synced close
+- [x] **Risk metrics** — `portfolio_risk.py`: correlation clustering, beta, HHI concentration, diversification score, VaR/CVaR
+- [x] **Contribution-to-risk** — `portfolio_risk.risk_contributions` (pure) + `compute_risk_contributions` wired into `get_portfolio`; `risk_contribution_pct` per holding in API response
+- [ ] **Frontend risk_contribution_pct column** — backend done, UI column missing
+- [ ] Optional: tax lots, stress/scenario shocks
+
+### M6 — Edge / scale (partial)
+- [x] **Factor ranking primitives** — `quant/factors.py` (cross-sectional zscore/percentile/composite)
+- [x] **Raw academic factor extractors** — `quant/factor_extractors.py` (momentum 12-1, low-vol, 52wk proximity) + API + Ranking panel "Watchlist (academic factors)" mode
+- [ ] Value/quality/size factors (need fundamentals); regime object
+- [ ] Screener reads BarStore (M1/M6 data-model work — mirror written, not yet read)
+- [ ] Plugin SDK (entry-points)
+
+### M7 / M8 — Polish (partial)
+- [x] **Backup/restore** — `services/backup.py` + API + Settings panel section
+- [ ] OS notifications for alerts; auto-update channel
+- [ ] VaR / scenario / stress / attribution
+- [ ] Unify `VajraML` + `VajraML2` → one module
+- [ ] Freeze then remove MSSQL/PostgreSQL support
 
 ---
 
-## ⏳ PENDING
+## ⏳ PENDING (ordered by priority)
 
-### M2 — backtest engine (backend COMPLETE)
-- [x] **#1 Single-name setup replay** — `run_symbol_backtest` wired to `BarStore` (adjusted bars)
-- [x] Setups + **named signal registry** — `sma_crossover`, Donchian `breakout`; run by name or callable
-- [x] **Persist results** — `backtests`/`backtest_metrics`/`backtest_trades` + `BacktestRepository`; reproducibility-on-record test (stored == fresh re-run). *(Tables auto-create via `create_all`; dedicated alembic migration is a nice-to-have.)*
-- [x] **Backtest Lab API** — `/backtest/signals`, `/run`, `/runs`, `/runs/{id}`, `/walk-forward`; `get_bar_store` dep
-- [x] **Walk-forward** — `walkforward.py` anchored expanding-window WFA (grid-search IS, evaluate OOS) + API
-- [x] **#2 Portfolio backtest** — `portfolio.py` weight-based engine + `run_strategy_backtest` adapter + `POST /backtest/portfolio`; **real Minervini swing strategy** runs end-to-end (integration test)
-- [x] **Frontend "Backtest Lab" panel** + **Backfill** (`POST /backtest/backfill`, CLI `backfill-columnar`, panel button). Typechecks + prod build clean.
-- [x] **EMA crossover** setup (registered + API + panel) — setups now: sma / ema / breakout
-- [x] **Statistical guards** — `statistics.py`: probabilistic + deflated Sharpe (multiple-testing / overfitting), scipy cross-checked
-- [ ] **Deferred to M4 (AI tool contract):** real backtest node in the agent graph — better as a typed copilot tool than a fixed graph node
-- [ ] Optional: RSI setup; purged/embargoed CV; expose PSR/DSR in the `/run` response
-- [ ] Make the screener actually **read** `BarStore` (M1/M6 data-model work; mirror written, not yet read)
-
-### M1 — rest of Foundation
-- [x] **Job worker (DB-backed)** — `Job` model + `JobRunner` (enqueue/run_next/cancel/retry/progress) + threaded `JobWorker` (off-request-thread, started in lifespan) + handler registry. API `/jobs` (enqueue/list/get/cancel/retry). `columnar_backfill` handler makes the minutes-long backfill a cancellable job with progress. *(DB-backed so it works on MSSQL, not just SQLite.)*
-- [x] **Backfill runs through the worker from the UI** — "Backfill data" enqueues a `columnar_backfill` job and polls progress; serialized on the worker so it can't collide with a sync (the concurrent-op contention that crashed a test instance).
-- [ ] **Migrate the EOD sync onto the worker** — deferred. NOTE: the startup stall is mostly **DB contention** (sync hammering the shared DB), which a worker thread doesn't eliminate; the worker's real win is serialization/visibility/cancel. Migrating sync gives control + prevents concurrent-op contention, but is riskier to do blind on the production daily-sync path. Follow-up.
-- [ ] **Incremental indicator recompute** (only new bars)
-- [ ] **Kill the 96-col god-table**: slim typed snapshot + JSON long-tail (`features_json`)
-
-### M3 — Memory (DONE — core loop)
-- [x] **Trade journal** — `JournalTrade` model (verified `create_all` builds it on real MSSQL, 17 cols)
-- [x] `services/journal/analytics.py` — pure realized_pnl / return_pct / r_multiple + `review_by_setup` (win rate, expectancy-in-R, R distribution)
-- [x] `services/journal/repository.py` — log / close / list / delete / review
-- [x] **API** `/journal/trades` (+ `/{id}/close`, `/{id}`, DELETE), `/journal/review`
-- [x] **Frontend Journal panel** — log form, inline close, per-setup review table, computed P&L/R. Typechecks + prod build clean.
-- [ ] Later: separate execution log (partial fills), entry chart snapshot, mistake-tag analytics
-
-### M4 — Clarity / UI (partial)
-- [x] **Cross-sectional ranking (end-to-end)** — `quant/factors.py` (pure zscore/percentile/composite_z) + `quant/ranking.py` + API `GET /ranking` + **Ranking tab/panel** (universe ordered by composite z, per-factor z columns, percentile). The relative-strength view the screener lacked.
-- [x] **Preset screeners (end-to-end)** — `quant/presets.py` (7 pure setup predicates: stage2_uptrend, pullback_20ema, nr7_coil, bb_squeeze, momentum_leader, oversold_reversal, macd_fresh_bull) + API `GET /presets` (+ `/{name}`) + **Setups tab** (preset chips → matching-symbols table). The "8-10 setups vs 40 sliders" the spec wanted.
-- [ ] Router IA (5 destinations, down from 11 tabs), code-split lazy routes
-- [ ] AI copilot demoted to slide-over; numeric guardrail; `SqliteSaver` durable checkpoints
-- [ ] Split mega-components (ScreenerPanel 2,802 LOC, etc.)
-
-### M5 — Portfolio & risk (ALREADY LARGELY IMPLEMENTED — discovered 2026-06-27)
-- [x] **Live mark-to-market** — `get_portfolio` values holdings at the latest synced close (`snap.close_price`), not stale CSV LTP
-- [x] **Risk metrics wired** — `portfolio_risk.py`: correlation clustering, portfolio beta, HHI concentration, diversification score, VaR/CVaR — called from `get_portfolio`, exposed via `GET /api/v1/portfolio`
-- [x] **Contribution-to-risk** — `portfolio_risk.risk_contributions` (pure) + `compute_risk_contributions` (cov from returns); `get_portfolio` attaches `risk_contribution_pct` per holding. *(Frontend column: TODO.)*
-- [ ] Genuinely missing (optional): tax lots, stress/scenario shocks
-- NOTE: spec drafts understated this — described as a CSV snapshot but it's a full risk dashboard.
-
-### M6 — Edge / scale (partial)
-- [x] **Factor ranking primitives** — `quant/factors.py` (cross-sectional zscore/percentile/composite). Reused by M4 ranking.
-- [x] **Raw academic factor extractors (end-to-end)** — `quant/factor_extractors.py` (momentum 12-1, low-volatility, 52wk high_proximity) + `quant/factor_ranking.py` (`rank_symbols_by_factors` over BarStore) + API `POST /ranking/by-factors` + **Ranking panel "Watchlist (academic factors)" mode** (pick a watchlist → ranked by true factors). *(Universe-wide scan still bounded by symbol list — fine for watchlists.)*
-- [ ] Value/quality/size factors (need fundamentals) + first-class regime object
-- [ ] Drop derived-bar tables (HA/Renko/LineBreak) → compute on demand
-- [ ] Drop wide snapshot columns after cutover; plugin SDK (entry-points)
-
-### M7 / M8 — Polish (partial)
-- [x] **Backup/restore (end-to-end)** — `services/backup.py` export/import of journal trades + watchlists + pick notes (versioned, idempotent, DB-agnostic incl. MSSQL) + API `/backup/export`+`/import` + **Backup & Restore section in Settings** (download JSON / import file). Price data excluded (re-syncable).
-- [ ] OS notifications for alerts; auto-update channel
-- [ ] VaR / scenario / stress / attribution
-- [ ] Unify the two ML stacks (`VajraML` + `VajraML2`) → one module
-- [ ] Freeze then remove MSSQL/PostgreSQL support
+1. **Full sync to completion** — production DB has 0 equity prices; run Refresh Symbol Registry → Trigger Crawl Sync and let it finish (takes 20–30 min cold start)
+2. **M5: contribution-to-risk frontend column** — add `risk_contribution_pct` to portfolio holdings table; backend already computes it
+3. **M1: incremental indicator recompute** — only recompute indicators for new bars, not full 300-day window every sync
+4. **M4: AI copilot** — demote to slide-over, numeric guardrail, `SqliteSaver` durable checkpoints
+5. **M1: Migrate EOD sync onto job worker** — deferred; worker exists, sync not yet enqueued through it
+6. **`features_json` population** — column on `ScreeningSnapshot` exists but nothing writes to it
 
 ---
 
@@ -101,11 +117,8 @@
 - [ ] `scheduler.py` — 10 pre-existing ruff errors (`datetime.timezone.utc` → `datetime.UTC`); `ruff --fix` clears 9
 - [ ] `nodes.py` / `agents.py` — pre-existing ruff debt (try/except/pass → contextlib.suppress, etc.)
 
-## Recommended resume point
-**M2 #1** — single-name setup replay wired to `BarStore`. It makes the data plane + engine immediately useful (the swing trader's "has this setup worked on this stock?"), then tackle **#2** (swing.py portfolio + walk-forward) for the quant.
-
 ---
+
 ## RESOLVED (2026-06-27): backtest SAVE on MSSQL
-- Compute/run is correct (real metrics verified on RELIANCE). Only `save=true` fails on **MSSQL LocalDB** (the app's real DB via `%APPDATA%/VajraStocks/config.yaml`), not on SQLite dev DB.
-- Error: `Invalid column name 'backtest_id'/'metric'/'value'` — the `backtest_metrics`/`backtest_trades` tables exist in MSSQL with a **stale/mismatched schema**; `create_all` skips tables that already exist by name.
-- **Resolved:** the MSSQL `backtest_metrics`/`backtest_trades` had a pre-existing *draft* schema (`run_id`/`metric_name`/`quantity`…) that `create_all` skipped. Dropped & rebuilt the 3 tables → columns now match the models; a full adjusted+save run on RELIANCE succeeds on MSSQL. No code change (models were correct). LESSON: `create_all` only creates absent-by-name tables — it won't fix a name collision with a stale schema.
+- Compute/run is correct. Only `save=true` failed on MSSQL LocalDB — `backtest_metrics`/`backtest_trades` had a stale draft schema that `create_all` skipped.
+- **Fixed:** dropped & rebuilt the 3 tables; columns now match models. LESSON: `create_all` only creates absent-by-name tables — won't fix a name collision with a stale schema.
