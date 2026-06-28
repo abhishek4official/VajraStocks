@@ -59,6 +59,15 @@ if ($running) {
     Start-Sleep -Seconds 1
 }
 
+# Remove the previous unpacked build. VS Code's file watcher keeps app.asar
+# locked if the release/ folder is open in Explorer — deleting it first frees
+# the handle before electron-builder tries to overwrite the directory.
+$unpacked = "$Root\release\win-unpacked"
+if (Test-Path $unpacked) {
+    Write-Host "      Removing stale release\win-unpacked..." -ForegroundColor Gray
+    Remove-Item $unpacked -Recurse -Force -ErrorAction SilentlyContinue
+}
+
 Set-Location "$Root\electron"
 
 if (-not (Test-Path "node_modules")) {
