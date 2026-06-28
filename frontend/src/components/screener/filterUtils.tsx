@@ -1,5 +1,6 @@
 import React from 'react';
-import { ColFilters, COL_FILTERS_KEY, DEFAULT_COL_FILTERS } from './constants';
+import type { ColFilters } from './constants';
+import { COL_FILTERS_KEY, DEFAULT_COL_FILTERS } from './constants';
 
 // ── Text / numeric client-side matchers ──────────────────────────────────────
 export const matchTextFilter = (val: string | null | undefined, filterStr: string): boolean => {

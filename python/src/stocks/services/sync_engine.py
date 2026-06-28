@@ -153,10 +153,13 @@ class SyncEngine:
         err_summary_list = []
 
         try:
-            # 2. Bootstrap Symbol Universe if database is empty
+            # 2. Bootstrap Symbol Universe if no equity symbols exist yet.
+            # Check for equities (non-index) specifically — a DB with only index symbols
+            # (^NSEI, ^NSEBANK, etc.) must still fetch the NSE equity CSV.
             active_symbols = db_service.get_active_symbols()
-            if not active_symbols:
-                logger.info("Database is empty. Bootstrapping symbol universe from active equities list...")
+            equity_symbols = [s for s in active_symbols if not s.symbol.startswith("^")]
+            if not equity_symbols:
+                logger.info("No equity symbols found. Bootstrapping symbol universe from active equities list...")
                 parsed_nse_symbols = symbol_service.fetch_active_symbols_from_nse()
                 symbol_service.sync_symbols(parsed_nse_symbols)
                 # Re-query active symbols

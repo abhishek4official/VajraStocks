@@ -296,6 +296,31 @@ def get_symbols_sync_status(status_filter: str | None = None, db: Session = Depe
     ]
 
 
+@router.post("/bootstrap-symbols")
+def bootstrap_symbols(request: Request, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    """Fetches the latest active equities list from NSE and syncs the symbol registry."""
+    def _run(req: Request):
+        from loguru import logger
+        from stocks.services.symbol import SymbolService
+        cfg = get_config(req)
+        db_manager = req.app.state.db_manager
+        session = db_manager.get_session()
+        try:
+            svc = SymbolService(cfg, session)
+            logger.info("bootstrap-symbols: fetching active equities from NSE...")
+            parsed = svc.fetch_active_symbols_from_nse()
+            count = svc.sync_symbols(parsed)
+            idx = svc.ensure_indices_registered()
+            logger.info(f"bootstrap-symbols: {count} equity symbols synced, {idx} index symbols registered.")
+        except Exception as e:
+            logger.error(f"bootstrap-symbols failed: {e}")
+        finally:
+            session.close()
+
+    background_tasks.add_task(_run, request)
+    return {"message": "Symbol registry refresh triggered in the background."}
+
+
 @router.post("/cancel")
 def cancel_active_sync_jobs(request: Request, db: Session = Depends(get_db)):
     """Cancels any currently running sync or recalculation jobs."""

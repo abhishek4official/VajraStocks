@@ -1070,6 +1070,12 @@ export const apiService = {
     return response.json();
   },
 
+  async bootstrapSymbols(): Promise<{ message: string }> {
+    const response = await fetch(`${BASE_URL}/sync/bootstrap-symbols`, { method: 'POST' });
+    if (!response.ok) throw new Error('Failed to trigger symbol bootstrap');
+    return response.json();
+  },
+
   // 7. Alerts
   async getAlerts(status?: string, limit = 100): Promise<StockAlert[]> {
     const params = new URLSearchParams();
