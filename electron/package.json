@@ -1,47 +1,66 @@
 {
-  "name": "vajrastocks-electron",
-  "version": "2.1.0",
-  "description": "Electron desktop shell for VajraStocks",
-  "author": "Abhishek Kumar",
-  "main": "main.js",
-  "scripts": {
-    "start": "electron .",
-    "build:win": "electron-builder --win",
-    "build:mac": "electron-builder --mac",
-    "build:linux": "electron-builder --linux"
-  },
-  "devDependencies": {
-    "electron": "^32.0.0",
-    "electron-builder": "^25.0.0"
-  },
-  "build": {
-    "appId": "com.abhishek.vajrastocks",
-    "productName": "VajraStocks",
-    "copyright": "Copyright 2026 Abhishek Kumar",
-    "asar": true,
-    "win": {
-      "target": [{ "target": "nsis", "arch": ["x64"] }]
-    },
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true,
-      "createStartMenuShortcut": true,
-      "shortcutName": "VajraStocks",
-      "deleteAppDataOnUninstall": false
-    },
-    "mac": {
-      "target": "dmg",
-      "category": "public.app-category.finance"
-    },
-    "linux": {
-      "target": "AppImage",
-      "category": "Finance"
-    },
-    "extraResources": [
-      { "from": "../python/dist/VajraStocks", "to": "backend", "filter": ["**/*"] }
-    ],
-    "files": ["main.js", "loading.html", "error.html"],
-    "directories": { "output": "../release" }
-  }
+    "name":  "vajrastocks-electron",
+    "version":  "2.1.0",
+    "description":  "Electron desktop shell for VajraStocks",
+    "author":  "Abhishek Kumar",
+    "main":  "main.js",
+    "scripts":  {
+                    "start":  "electron .",
+                    "build:win":  "electron-builder --win",
+                    "build:mac":  "electron-builder --mac",
+                    "build:linux":  "electron-builder --linux"
+                },
+    "devDependencies":  {
+                            "electron":  "^32.0.0",
+                            "electron-builder":  "^25.0.0"
+                        },
+    "build":  {
+                  "appId":  "com.abhishek.vajrastocks",
+                  "productName":  "VajraStocks",
+                  "copyright":  "Copyright 2026 Abhishek Kumar",
+                  "asar":  true,
+                  "win":  {
+                              "target":  [
+                                             {
+                                                 "target":  "nsis",
+                                                 "arch":  [
+                                                              "x64"
+                                                          ]
+                                             }
+                                         ]
+                          },
+                  "nsis":  {
+                               "oneClick":  false,
+                               "allowToChangeInstallationDirectory":  true,
+                               "createDesktopShortcut":  true,
+                               "createStartMenuShortcut":  true,
+                               "shortcutName":  "VajraStocks",
+                               "deleteAppDataOnUninstall":  false
+                           },
+                  "mac":  {
+                              "target":  "dmg",
+                              "category":  "public.app-category.finance"
+                          },
+                  "linux":  {
+                                "target":  "AppImage",
+                                "category":  "Finance"
+                            },
+                  "extraResources":  [
+                                         {
+                                             "from":  "../python/dist/VajraStocks",
+                                             "to":  "backend",
+                                             "filter":  [
+                                                            "**/*"
+                                                        ]
+                                         }
+                                     ],
+                  "files":  [
+                                "main.js",
+                                "loading.html",
+                                "error.html"
+                            ],
+                  "directories":  {
+                                      "output":  "ELECTRON_OUTPUT_DIR_PLACEHOLDER"
+                                  }
+              }
 }
