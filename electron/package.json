@@ -1,0 +1,74 @@
+{
+    "name":  "vajrastocks-electron",
+    "version":  "2.1.0",
+    "description":  "Electron desktop shell for VajraStocks",
+    "author":  "Abhishek Kumar",
+    "main":  "main.js",
+    "scripts":  {
+                    "start":  "electron .",
+                    "build:win":  "electron-builder --win",
+                    "build:mac":  "electron-builder --mac",
+                    "build:linux":  "electron-builder --linux"
+                },
+    "devDependencies":  {
+                            "electron":  "^32.0.0",
+                            "electron-builder":  "^25.0.0"
+                        },
+    "build":  {
+                  "appId":  "com.abhishek.vajrastocks",
+                  "productName":  "VajraStocks",
+                  "copyright":  "Copyright 2026 Abhishek Kumar",
+                  "asar":  true,
+                  "win":  {
+                              "icon":  "build/icon.ico",
+                              "target":  [
+                                             {
+                                                 "target":  "nsis",
+                                                 "arch":  [
+                                                              "x64"
+                                                          ]
+                                             }
+                                         ]
+                          },
+                  "nsis":  {
+                               "installerIcon":  "build/icon.ico",
+                               "uninstallerIcon":  "build/icon.ico",
+                               "installerHeaderIcon":  "build/icon.ico",
+                               "oneClick":  false,
+                               "allowToChangeInstallationDirectory":  true,
+                               "createDesktopShortcut":  true,
+                               "createStartMenuShortcut":  true,
+                               "shortcutName":  "VajraStocks",
+                               "deleteAppDataOnUninstall":  false,
+                               "include":  "../installer/windows/nsis-extra.nsh"
+                           },
+                  "mac":  {
+                              "icon":  "build/icon.icns",
+                              "target":  "dmg",
+                              "category":  "public.app-category.finance"
+                          },
+                  "linux":  {
+                                "icon":  "build/icon.png",
+                                "target":  "AppImage",
+                                "category":  "Finance"
+                            },
+                  "extraResources":  [
+                                         {
+                                             "from":  "../python/dist/VajraStocks",
+                                             "to":  "backend",
+                                             "filter":  [
+                                                            "**/*"
+                                                        ]
+                                         }
+                                     ],
+                  "files":  [
+                                "main.js",
+                                "loading.html",
+                                "error.html",
+                                "build/icon.png"
+                            ],
+                  "directories":  {
+                                      "output":  "ELECTRON_OUTPUT_DIR_PLACEHOLDER"
+                                  }
+              }
+}

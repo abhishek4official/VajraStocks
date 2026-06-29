@@ -137,6 +137,15 @@ def main() -> None:
                     db_url = _cs.strip()
         except Exception:
             pass                     # any parse error → keep SQLite default
+
+        # Guard: if config gave a relative sqlite path, resolve it against
+        # the data dir — relative paths resolve against CWD which is the
+        # bundle root inside Program Files (read-only) on a packaged install.
+        if db_url.startswith("sqlite:///"):
+            raw = db_url[len("sqlite:///"):]
+            if raw and raw != ":memory:" and not Path(raw).is_absolute():
+                db_url = f"sqlite:///{data / Path(raw).name}"
+
         os.environ["VAJRA_DB_URL"] = db_url
 
     # ── Alembic ini — read-only, lives in the bundle (no writes needed)
@@ -154,13 +163,18 @@ def main() -> None:
     os.chdir(bundle)
 
     host = "127.0.0.1"
-    port = _find_free_port(8000)
+    # When launched by the Electron shell it passes VAJRA_PORT so both sides
+    # agree on the port without a file-based handshake.
+    _env_port = os.environ.get("VAJRA_PORT", "").strip()
+    port = int(_env_port) if _env_port.isdigit() else _find_free_port(8000)
 
-    threading.Thread(
-        target=_open_browser_when_ready,
-        args=(host, port),
-        daemon=True,
-    ).start()
+    # Skip webbrowser.open() when the Electron shell manages the window.
+    if not os.environ.get("VAJRA_ELECTRON"):
+        threading.Thread(
+            target=_open_browser_when_ready,
+            args=(host, port),
+            daemon=True,
+        ).start()
 
     import uvicorn
     uvicorn.run(

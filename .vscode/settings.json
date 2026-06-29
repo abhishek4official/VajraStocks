@@ -1,0 +1,13 @@
+{
+  "files.watcherExclude": {
+    "**/release/**": true,
+    "**/python/dist/**": true,
+    "**/python/.venv/**": true,
+    "**/electron/node_modules/**": true,
+    "**/frontend/node_modules/**": true
+  },
+  "files.exclude": {
+    "**/release/**": true,
+    "**/python/dist/**": true
+  }
+}

@@ -1,7 +1,7 @@
 name: Release — Build & Publish Installers
 
 # Triggers:
-#   • Push of a version tag  v*.*.*  (e.g. v1.0.0)
+#   • Push of a version tag  v*.*.*  (e.g. v2.1.0)
 #   • Manual dispatch with an explicit version input
 on:
   push:
@@ -10,9 +10,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release version (e.g. 1.2.3 — no leading v)'
+        description: 'Release version (e.g. 2.1.0 — no leading v)'
         required: true
-        default: '1.0.0'
+        default: '2.1.0'
 
 env:
   PYTHON_VERSION: '3.12'
@@ -34,11 +34,7 @@ jobs:
             echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
           fi
 
-  # ── Shared build steps (used as YAML anchor) ──────────────────────────────
-  # Frontend + backend are built together inside each platform job so the
-  # final PyInstaller bundle contains everything in one pass.
-
-  # ── 2. Windows — frontend + PyInstaller + Inno Setup ─────────────────────
+  # ── 2. Windows — frontend + PyInstaller + Electron (NSIS) ────────────────
   build-windows:
     name: Build Windows Installer
     needs: version
@@ -53,7 +49,7 @@ jobs:
       - name: Update version in source files
         run: python python/scripts/update_version.py ${{ needs.version.outputs.version }}
 
-      # ── Frontend ────────────────────────────────────────────────────────────
+      # ── Frontend ─────────────────────────────────────────────────────────
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -64,43 +60,49 @@ jobs:
           npm install
           npm run build
 
-      # ── Backend ─────────────────────────────────────────────────────────────
+      # ── Backend ──────────────────────────────────────────────────────────
       - uses: astral-sh/setup-uv@v5
         with:
           version: latest
           enable-cache: true
           cache-dependency-glob: python/uv.lock
 
-      - name: Install backend deps
+      - name: Install backend deps (including PyInstaller dev dep)
         working-directory: python
-        run: uv sync --frozen
+        run: uv sync --frozen --all-groups
 
-      - name: Install PyInstaller
+      # ── PyInstaller bundle ───────────────────────────────────────────────
+      # Output goes to python/dist/VajraStocks/ — this is what
+      # electron/package.json extraResources points to.
+      - name: Bundle backend with PyInstaller
         working-directory: python
-        run: uv pip install "pyinstaller>=6.14.0"
+        run: uv run pyinstaller ..\installer\vajrastocks.spec --noconfirm
 
-      # ── Bundle ───────────────────────────────────────────────────────────────
-      - name: Bundle with PyInstaller
-        working-directory: python
-        run: uv run pyinstaller ..\installer\vajrastocks.spec --distpath ..\dist --workpath ..\build
+      # ── Electron installer ───────────────────────────────────────────────
+      - name: Install Electron dependencies
+        working-directory: electron
+        run: npm install
 
-      # ── Installer ────────────────────────────────────────────────────────────
-      - name: Install Inno Setup
+      - name: Build Electron installer (NSIS)
         shell: pwsh
-        run: |
-          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
-          if (-not (Test-Path $iscc)) {
-            choco install -y innosetup --no-progress
-          }
-
-      - name: Build Windows installer
-        shell: pwsh
+        working-directory: electron
         env:
           APP_VERSION: ${{ needs.version.outputs.version }}
         run: |
-          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
-          & $iscc /Q installer\windows\setup.iss
+          # Stamp version + output dir (UTF-8 no-BOM — PowerShell 5.1 safe)
+          $pkg  = Get-Content package.json -Raw | ConvertFrom-Json
+          $pkg.version = "$env:APP_VERSION"
+          $pkg.build.directories.output = "..\release"
+          $json = $pkg | ConvertTo-Json -Depth 10
+          [System.IO.File]::WriteAllText("$PWD\package.json", $json, (New-Object System.Text.UTF8Encoding $false))
+          npx electron-builder --win --x64
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Rename installer to stable filename
+        shell: pwsh
+        run: |
+          $f = Get-ChildItem release -Filter "VajraStocks Setup*.exe" | Select-Object -First 1
+          if ($f) { Rename-Item $f.FullName "VajraStocks-Setup.exe" }
 
       - uses: actions/upload-artifact@v4
         with:
@@ -123,7 +125,7 @@ jobs:
       - name: Update version in source files
         run: python python/scripts/update_version.py ${{ needs.version.outputs.version }}
 
-      # ── Frontend ────────────────────────────────────────────────────────────
+      # ── Frontend ─────────────────────────────────────────────────────────
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -134,7 +136,7 @@ jobs:
           npm install
           npm run build
 
-      # ── Backend ─────────────────────────────────────────────────────────────
+      # ── Backend ──────────────────────────────────────────────────────────
       - uses: astral-sh/setup-uv@v5
         with:
           version: latest
@@ -147,20 +149,15 @@ jobs:
           sudo apt-get install -y unixodbc-dev rpm patchelf imagemagick fuse
           sudo apt-get install -y libfuse2 2>/dev/null || sudo apt-get install -y libfuse2t64
 
-      - name: Install backend deps
+      - name: Install backend deps (including PyInstaller dev dep)
         working-directory: python
-        run: uv sync --frozen
+        run: uv sync --frozen --all-groups
 
-      - name: Install PyInstaller
+      - name: Bundle backend with PyInstaller
         working-directory: python
-        run: uv pip install "pyinstaller>=6.14.0"
+        run: uv run pyinstaller ../installer/vajrastocks.spec --noconfirm
 
-      # ── Bundle ───────────────────────────────────────────────────────────────
-      - name: Bundle with PyInstaller
-        working-directory: python
-        run: uv run pyinstaller ../installer/vajrastocks.spec --distpath ../dist --workpath ../build
-
-      # ── Packages ─────────────────────────────────────────────────────────────
+      # ── Packages ─────────────────────────────────────────────────────────
       - name: Build .deb
         run: bash installer/linux/build-deb.sh ${{ needs.version.outputs.version }}
 
@@ -194,7 +191,7 @@ jobs:
       - name: Update version in source files
         run: python python/scripts/update_version.py ${{ needs.version.outputs.version }}
 
-      # ── Frontend ────────────────────────────────────────────────────────────
+      # ── Frontend ─────────────────────────────────────────────────────────
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -205,7 +202,7 @@ jobs:
           npm install
           npm run build
 
-      # ── Backend ─────────────────────────────────────────────────────────────
+      # ── Backend ──────────────────────────────────────────────────────────
       - uses: astral-sh/setup-uv@v5
         with:
           version: latest
@@ -221,36 +218,27 @@ jobs:
           MACOS_CERTIFICATE_PWD: ${{ secrets.MACOS_CERTIFICATE_PWD }}
         run: |
           if [[ -z "$MACOS_CERTIFICATE_BASE64" ]]; then
-            echo "MACOS_CERTIFICATE_BASE64 is empty. Skipping codesign certificate setup."
+            echo "No certificate — skipping codesign setup."
             exit 0
           fi
-
           CERTIFICATE_PATH=$RUNNER_TEMP/build_certificate.p12
           KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
           KEYCHAIN_PASSWORD=$(openssl rand -base64 12)
-
           echo -n "$MACOS_CERTIFICATE_BASE64" | base64 --decode -o $CERTIFICATE_PATH
-
           security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
           security default-keychain -s $KEYCHAIN_PATH
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
-
           security import $CERTIFICATE_PATH -k $KEYCHAIN_PATH -P "$MACOS_CERTIFICATE_PWD" -A -t cert -f pkcs12
           security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
           security list-keychains -d user -s $KEYCHAIN_PATH
 
-      - name: Install backend deps
+      - name: Install backend deps (including PyInstaller dev dep)
         working-directory: python
-        run: uv sync --frozen
+        run: uv sync --frozen --all-groups
 
-      - name: Install PyInstaller
+      - name: Bundle backend with PyInstaller
         working-directory: python
-        run: uv pip install "pyinstaller>=6.14.0"
-
-      # ── Bundle ───────────────────────────────────────────────────────────────
-      - name: Bundle with PyInstaller
-        working-directory: python
-        run: uv run pyinstaller ../installer/vajrastocks.spec --distpath ../dist --workpath ../build
+        run: uv run pyinstaller ../installer/vajrastocks.spec --noconfirm
 
       - name: Build macOS DMG
         env:
@@ -262,8 +250,7 @@ jobs:
 
       - name: Clean up keychain
         if: always()
-        run: |
-          security delete-keychain $RUNNER_TEMP/app-signing.keychain-db 2>/dev/null || true
+        run: security delete-keychain $RUNNER_TEMP/app-signing.keychain-db 2>/dev/null || true
 
       - uses: actions/upload-artifact@v4
         with:
@@ -303,15 +290,12 @@ jobs:
           PREV_TAG=$(git tag --sort=-version:refname \
             | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
             | sed -n '2p' || true)
-
           if [[ -n "${PREV_TAG}" ]]; then
             git log "${PREV_TAG}..HEAD" --pretty=format:"- %s (%h)" \
               | head -40 > /tmp/commits.txt
           else
-            git log --pretty=format:"- %s (%h)" \
-              | head -40 > /tmp/commits.txt
+            git log --pretty=format:"- %s (%h)" | head -40 > /tmp/commits.txt
           fi
-
           python3 installer/gen_release_notes.py "${VERSION}" /tmp/commits.txt
 
       - name: Generate checksums
@@ -329,13 +313,6 @@ jobs:
           body_path: release/ReleaseNotes.md
           draft: false
           prerelease: false
-          # Always move the /releases/latest pointer to this release so that the
-          # stable download URLs never change:
-          #   https://github.com/abhishek4official/VajraStocks/releases/latest/download/VajraStocks-Setup.exe
-          #   https://github.com/abhishek4official/VajraStocks/releases/latest/download/VajraStocks.dmg
-          #   https://github.com/abhishek4official/VajraStocks/releases/latest/download/VajraStocks.deb
-          #   https://github.com/abhishek4official/VajraStocks/releases/latest/download/VajraStocks.AppImage
-          #   https://github.com/abhishek4official/VajraStocks/releases/latest/download/VajraStocks.rpm
           make_latest: true
           files: |
             release/VajraStocks-Setup.exe

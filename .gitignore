@@ -286,3 +286,21 @@ VajraML2/models/
 VajraML2/*.log
 
 
+# ==========================================
+# Electron / Desktop build artifacts
+# ==========================================
+
+# electron-builder output (installers, unpacked app)
+release/
+release-beta/
+
+# PyInstaller bundle (lives inside python/)
+python/dist/
+
+# electron-builder intermediate cache
+electron/.cache/
+
+# electron-builder effective config dump
+release/builder-effective-config.yaml
+
+

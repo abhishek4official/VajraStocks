@@ -1299,7 +1299,7 @@ wheels = [
 
 [[package]]
 name = "stocks"
-version = "1.5.0"
+version = "2.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "aiosqlite" },
@@ -1334,6 +1334,7 @@ dependencies = [
 [package.dev-dependencies]
 dev = [
     { name = "httpx" },
+    { name = "pyinstaller" },
     { name = "pytest" },
     { name = "ruff" },
 ]
@@ -1375,6 +1376,7 @@ requires-dist = [
 [package.metadata.requires-dev]
 dev = [
     { name = "httpx", specifier = ">=0.28.1" },
+    { name = "pyinstaller", specifier = ">=6.20.0" },
     { name = "pytest", specifier = ">=9.0.3" },
     { name = "ruff", specifier = ">=0.15.15" },
 ]

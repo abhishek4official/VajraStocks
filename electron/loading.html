@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VajraStocks — Starting</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #0f1117;
+      color: #e2e8f0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      overflow: hidden;
+      user-select: none;
+      -webkit-app-region: drag;
+    }
+
+    .card {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .logo-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .icon {
+      width: 40px;
+      height: 40px;
+      background: rgba(168, 85, 247, 0.15);
+      border: 1px solid rgba(168, 85, 247, 0.3);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .icon svg { width: 22px; height: 22px; color: #a855f7; }
+
+    .brand {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .brand-name {
+      font-size: 22px;
+      font-weight: 900;
+      letter-spacing: -0.5px;
+      color: #e2e8f0;
+      line-height: 1;
+    }
+
+    .brand-badge {
+      display: inline-block;
+      background: rgba(168, 85, 247, 0.2);
+      color: #a855f7;
+      font-size: 9px;
+      font-weight: 700;
+      font-family: 'Courier New', monospace;
+      padding: 1px 6px;
+      border-radius: 4px;
+      margin-top: 3px;
+      letter-spacing: 0.5px;
+    }
+
+    .subtitle {
+      font-size: 11px;
+      color: #475569;
+      letter-spacing: 0.3px;
+    }
+
+    .status {
+      font-size: 11px;
+      color: #64748b;
+      margin-top: 4px;
+    }
+
+    .spinner-wrap {
+      position: relative;
+      width: 32px;
+      height: 32px;
+      margin-top: 8px;
+    }
+
+    .spinner {
+      width: 32px;
+      height: 32px;
+      border: 2px solid #1e293b;
+      border-top: 2px solid #a855f7;
+      border-radius: 50%;
+      animation: spin 0.9s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .dots::after {
+      content: '';
+      animation: dots 1.5s steps(4, end) infinite;
+    }
+
+    @keyframes dots {
+      0%   { content: ''; }
+      25%  { content: '.'; }
+      50%  { content: '..'; }
+      75%  { content: '...'; }
+      100% { content: ''; }
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo-row">
+      <div class="icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/>
+          <polyline points="16 7 22 7 22 13"/>
+        </svg>
+      </div>
+      <div class="brand">
+        <span class="brand-name">VAJRA <span style="color:#a855f7">STOCKS</span></span>
+        <span class="brand-badge">NSE QUANTITATIVE ANALYSIS</span>
+      </div>
+    </div>
+
+    <div class="subtitle">Starting analysis engine<span class="dots"></span></div>
+
+    <div class="spinner-wrap">
+      <div class="spinner"></div>
+    </div>
+
+    <div class="status" id="status">Initialising backend</div>
+  </div>
+
+  <script>
+    const messages = [
+      'Initialising backend',
+      'Loading market data engine',
+      'Connecting to database',
+      'Running pending migrations',
+      'Warming up indicator cache',
+      'Almost ready',
+    ];
+    let i = 0;
+    const el = document.getElementById('status');
+    setInterval(() => {
+      i = (i + 1) % messages.length;
+      el.textContent = messages[i];
+    }, 2800);
+  </script>
+</body>
+</html>

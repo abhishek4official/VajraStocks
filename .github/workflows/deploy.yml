@@ -2,7 +2,7 @@ name: Continuous Integration & Deployment Pipeline
 
 on:
   push:
-    branches: [ main, master, Reartecture ]
+    branches: [ main, master ]
   pull_request:
     branches: [ main, master ]
   workflow_dispatch:
@@ -26,6 +26,9 @@ jobs:
 
       - name: Install Frontend Dependencies
         working-directory: frontend
+        # npm install instead of npm ci: the lock file is generated on Windows
+        # which skips Linux-specific optional packages (@emnapi etc.), causing
+        # npm ci to fail on the Linux runner with "Missing from lock file".
         run: npm install
 
       - name: Build Production Frontend Bundle
