@@ -57,7 +57,7 @@ jobs:
       - name: Build frontend
         working-directory: frontend
         run: |
-          npm ci
+          npm install
           npm run build
 
       # ── Backend ──────────────────────────────────────────────────────────
@@ -81,7 +81,7 @@ jobs:
       # ── Electron installer ───────────────────────────────────────────────
       - name: Install Electron dependencies
         working-directory: electron
-        run: npm ci
+        run: npm install
 
       - name: Build Electron installer (NSIS)
         shell: pwsh
@@ -133,7 +133,7 @@ jobs:
       - name: Build frontend
         working-directory: frontend
         run: |
-          npm ci
+          npm install
           npm run build
 
       # ── Backend ──────────────────────────────────────────────────────────
@@ -199,7 +199,7 @@ jobs:
       - name: Build frontend
         working-directory: frontend
         run: |
-          npm ci
+          npm install
           npm run build
 
       # ── Backend ──────────────────────────────────────────────────────────

@@ -26,7 +26,10 @@ jobs:
 
       - name: Install Frontend Dependencies
         working-directory: frontend
-        run: npm ci
+        # npm install instead of npm ci: the lock file is generated on Windows
+        # which skips Linux-specific optional packages (@emnapi etc.), causing
+        # npm ci to fail on the Linux runner with "Missing from lock file".
+        run: npm install
 
       - name: Build Production Frontend Bundle
         working-directory: frontend
