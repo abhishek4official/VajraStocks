@@ -2,10 +2,11 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStockStore } from '../store/useStockStore';
 import { apiService, type SwingPick, type SwingPicksResponse, type SwingPicksParams } from '../services/api';
+import { StockChartWorkspace } from './StockChartWorkspace';
 import {
   Zap, RefreshCw, AlertTriangle, Eye, Target, SlidersHorizontal,
   ChevronDown, ChevronUp, ShieldAlert, FlaskConical, XIcon, RotateCcw,
-  HelpCircle, ListOrdered,
+  HelpCircle, ListOrdered, BarChart2,
 } from 'lucide-react';
 
 // ─── Default config ───────────────────────────────────────────────────────────
@@ -141,9 +142,10 @@ interface CardProps {
   onNote: (sym: string, note: string) => void;
   today: Date;
   onView: (sym: string) => void;
+  onChart: (sym: string) => void;
 }
 
-const PickCard: React.FC<CardProps> = ({ pick, notes, onNote, today, onView }) => {
+const PickCard: React.FC<CardProps> = ({ pick, notes, onNote, today, onView, onChart }) => {
   const [showProjection, setShowProjection] = useState(false);
   const [editNote, setEditNote] = useState(false);
   const [noteText, setNoteText] = useState(notes[pick.symbol] ?? '');
@@ -387,11 +389,18 @@ const PickCard: React.FC<CardProps> = ({ pick, notes, onNote, today, onView }) =
           Target Reach Day
           {showProjection ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
         </button>
-        <button onClick={() => onView(pick.symbol)}
-          className="flex items-center gap-1 text-[10px] text-text-muted hover:text-text-main transition">
-          <Eye className="w-3 h-3" />
-          View in Explorer
-        </button>
+        <div className="flex items-center gap-3">
+          <button onClick={() => onChart(pick.symbol)}
+            className="flex items-center gap-1 text-[10px] text-text-muted hover:text-accent-primary transition">
+            <BarChart2 className="w-3 h-3" />
+            Chart
+          </button>
+          <button onClick={() => onView(pick.symbol)}
+            className="flex items-center gap-1 text-[10px] text-text-muted hover:text-text-main transition">
+            <Eye className="w-3 h-3" />
+            Explorer
+          </button>
+        </div>
       </div>
 
       {showProjection && pick.category !== 'ELIMINATED' && (
@@ -685,6 +694,7 @@ export const SwingPicksPanel: React.FC = () => {
   const [showConfig, setShowConfig] = useState(false);
   const [showHelp, setShowHelp]     = useState(false);
   const [config, setConfig]     = useState<Required<SwingPicksParams>>({ ...DEFAULTS });
+  const [modalSymbol, setModalSymbol] = useState<string | null>(null);
 
   const today = new Date();
 
@@ -710,6 +720,11 @@ export const SwingPicksPanel: React.FC = () => {
   const handleView = async (symbol: string) => {
     await setSelectedSymbol(`${symbol}.NS`);
     navigate('/research/explorer');
+  };
+
+  const handleOpenChart = async (symbol: string) => {
+    await setSelectedSymbol(`${symbol}.NS`);
+    setModalSymbol(symbol);
   };
 
   const runPipeline = useCallback(async () => {
@@ -1003,7 +1018,7 @@ export const SwingPicksPanel: React.FC = () => {
                 </div>
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                   {data.buy_picks.map(p => (
-                    <PickCard key={p.symbol} pick={p} notes={notes} onNote={saveNote} today={today} onView={handleView} />
+                    <PickCard key={p.symbol} pick={p} notes={notes} onNote={saveNote} today={today} onView={handleView} onChart={handleOpenChart} />
                   ))}
                 </div>
               </section>
@@ -1020,7 +1035,7 @@ export const SwingPicksPanel: React.FC = () => {
                 </div>
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                   {data.watchlist.map(p => (
-                    <PickCard key={p.symbol} pick={p} notes={notes} onNote={saveNote} today={today} onView={handleView} />
+                    <PickCard key={p.symbol} pick={p} notes={notes} onNote={saveNote} today={today} onView={handleView} onChart={handleOpenChart} />
                   ))}
                 </div>
               </section>
@@ -1037,7 +1052,7 @@ export const SwingPicksPanel: React.FC = () => {
                 </div>
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                   {data.eliminated.map(p => (
-                    <PickCard key={p.symbol} pick={p} notes={notes} onNote={saveNote} today={today} onView={handleView} />
+                    <PickCard key={p.symbol} pick={p} notes={notes} onNote={saveNote} today={today} onView={handleView} onChart={handleOpenChart} />
                   ))}
                 </div>
               </section>
@@ -1068,6 +1083,20 @@ export const SwingPicksPanel: React.FC = () => {
         </div>
 
       </div>
+
+      {/* ── Chart Modal ── */}
+      {modalSymbol && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-6xl bg-bg-surface border border-border-subtle rounded-2xl shadow-2xl flex flex-col max-h-[95vh] overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="flex-1 flex flex-col p-6 overflow-y-auto">
+              <StockChartWorkspace
+                onClose={() => setModalSymbol(null)}
+                hideWatchlistButton={true}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
