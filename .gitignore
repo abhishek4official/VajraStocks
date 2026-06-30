@@ -304,3 +304,12 @@ electron/.cache/
 release/builder-effective-config.yaml
 
 
+# ==========================================
+# Brand assets — keep tracked despite the generic
+# `public/` (Gatsby) and `**/build/` (Flutter) rules above
+# ==========================================
+!frontend/public/
+!frontend/public/**
+!electron/build/
+!electron/build/**
+
