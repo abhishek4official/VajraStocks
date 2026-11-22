@@ -1,6 +1,17 @@
 # VajraStocks
 
+[![Live Showcase](https://img.shields.io/badge/Live_Showcase-abhishek4official.github.io%2Fvajrastocks-9333ea?style=flat-square&logo=googlechrome&logoColor=white)](https://abhishek4official.github.io/vajrastocks/)
+[![Local AI Architecture](https://img.shields.io/badge/Local_AI_Architecture-abhishek4official.github.io%2Flocal--ai-0d9488?style=flat-square)](https://abhishek4official.github.io/local-ai/)
+[![llms.txt](https://img.shields.io/badge/llms.txt-Documented-emerald?style=flat-square)](https://abhishek4official.github.io/llms.txt)
+
 A local-first NSE stock analysis platform. Screens, charts, and analyses Indian equities using technical indicators, AI-powered trade plans, and a fast React UI — all running on your machine with no cloud dependency.
+
+---
+
+## 🌐 Platform Showcase & Architecture Documentation
+* **[Interactive Platform Showcase](https://abhishek4official.github.io/vajrastocks/)**: Interactive multi-chart lab (Candlestick, Heikin-Ashi, Renko ATR, Three Line Break), 12 screener presets, and one-click desktop installer downloads.
+* **[Local AI & 7-Agent DAG Architecture](https://abhishek4official.github.io/local-ai/)**: Technical deep dive into running private, zero-cloud multi-agent DAGs with Ollama, SQLite, and local LLMs.
+* **[AI Architecture & Gated Workflows](https://abhishek4official.github.io/ai-agents/)**: Overview of autonomous multi-agent pipelines and human-in-the-loop safety gates.
 
 ---
 
